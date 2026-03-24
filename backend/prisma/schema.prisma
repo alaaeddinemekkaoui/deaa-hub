@@ -1,0 +1,287 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  staff
+  viewer
+}
+
+enum StudentCycle {
+  prepa
+  engineer
+  veterinary
+  master
+  doctorate
+}
+
+enum Sex {
+  male
+  female
+}
+
+enum PrepaYear {
+  prepa_1
+  prepa_2
+}
+
+enum WorkflowStatus {
+  pending
+  in_progress
+  completed
+}
+
+enum DiplomaStatus {
+  retrieved
+  not_retrieved
+}
+
+model User {
+  id               Int            @id @default(autoincrement())
+  fullName         String
+  email            String         @unique
+  passwordHash     String
+  role             UserRole
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  activityLogs     ActivityLog[]
+  assignedWorkflows WorkflowTask[]
+}
+
+model Department {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  filieres    Filiere[]
+  teachers    Teacher[]
+
+  @@index([name])
+}
+
+model Filiere {
+  id          Int       @id @default(autoincrement())
+  name        String
+  code        String    @unique
+  departmentId Int
+  filiereType String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  department  Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  students    Student[]
+  teachers    Teacher[]
+  classes     AcademicClass[]
+
+  @@index([departmentId])
+}
+
+model Student {
+  id               Int        @id @default(autoincrement())
+  firstName        String?
+  lastName         String?
+  fullName         String
+  sex              Sex
+  cin              String     @unique
+  codeMassar       String     @unique
+  dateNaissance    DateTime
+  email            String?    @unique
+  telephone        String?
+  cycle            StudentCycle
+  prepaYear        PrepaYear?
+  prepaTrack       String?
+  entryLevel       Int?
+  filiereId        Int?
+  classId          Int?
+  bacType          String?
+  firstYearEntry   Int
+  anneeAcademique  String
+  dateInscription  DateTime   @default(now())
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  filiere          Filiere?   @relation(fields: [filiereId], references: [id], onDelete: SetNull)
+  academicClass    AcademicClass? @relation(fields: [classId], references: [id], onDelete: SetNull)
+  classHistory     StudentClassHistory[]
+  documents        Document[]
+  workflows        WorkflowTask[]
+  laureate         Laureate?
+
+  @@index([codeMassar])
+  @@index([filiereId])
+  @@index([classId])
+  @@index([cycle])
+  @@index([sex])
+  @@index([firstYearEntry])
+}
+
+model StudentClassHistory {
+  id           Int           @id @default(autoincrement())
+  studentId    Int
+  classId      Int
+  academicYear String
+  studyYear    Int
+  createdAt    DateTime      @default(now())
+  student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  academicClass AcademicClass @relation(fields: [classId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, academicYear])
+  @@index([studentId])
+  @@index([classId])
+  @@index([academicYear])
+}
+
+model Teacher {
+  id           Int          @id @default(autoincrement())
+  firstName    String
+  lastName     String
+  cin          String?      @unique
+  email        String?      @unique
+  phoneNumber  String?
+  dateInscription DateTime  @default(now())
+  departmentId Int
+  filiereId    Int?
+  roleId       Int
+  gradeId      Int
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  department   Department   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  filiere      Filiere?     @relation(fields: [filiereId], references: [id], onDelete: SetNull)
+  role         TeacherRole  @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  grade        TeacherGrade @relation(fields: [gradeId], references: [id], onDelete: Restrict)
+  taughtClasses TeacherClass[]
+
+  @@index([departmentId])
+  @@index([filiereId])
+  @@index([roleId])
+  @@index([gradeId])
+  @@index([lastName, firstName])
+}
+
+model TeacherRole {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  teachers  Teacher[]
+}
+
+model TeacherGrade {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  teachers  Teacher[]
+}
+
+model AcademicClass {
+  id          Int      @id @default(autoincrement())
+  name        String
+  year        Int
+  filiereId   Int?
+  classType   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  filiere     Filiere? @relation(fields: [filiereId], references: [id], onDelete: SetNull)
+  students    Student[]
+  teachers    TeacherClass[]
+  studentHistory StudentClassHistory[]
+
+  @@index([year])
+  @@index([filiereId])
+  @@unique([name, year])
+}
+
+model TeacherClass {
+  id        Int          @id @default(autoincrement())
+  teacherId Int
+  classId   Int
+  createdAt DateTime     @default(now())
+  teacher   Teacher      @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  class     AcademicClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, classId])
+  @@index([teacherId])
+  @@index([classId])
+}
+
+model Document {
+  id            Int       @id @default(autoincrement())
+  name          String
+  mimeType      String
+  path          String
+  studentId     Int
+  createdAt     DateTime  @default(now())
+  student       Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  laureateProof Laureate[]
+
+  @@index([studentId])
+}
+
+model WorkflowTask {
+  id           Int             @id @default(autoincrement())
+  title        String
+  description  String?
+  status       WorkflowStatus  @default(pending)
+  assignedToId Int
+  studentId    Int?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  assignedTo   User            @relation(fields: [assignedToId], references: [id], onDelete: Restrict)
+  student      Student?        @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  timeline     WorkflowTimeline[]
+
+  @@index([assignedToId])
+  @@index([studentId])
+}
+
+model WorkflowTimeline {
+  id          Int            @id @default(autoincrement())
+  taskId       Int
+  status       WorkflowStatus
+  note         String?
+  changedAt    DateTime      @default(now())
+  task         WorkflowTask  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model Room {
+  id           Int      @id @default(autoincrement())
+  name         String   @unique
+  capacity     Int
+  equipment    Json?
+  availability Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Laureate {
+  id             Int           @id @default(autoincrement())
+  studentId      Int           @unique
+  graduationYear Int
+  diplomaStatus  DiplomaStatus @default(not_retrieved)
+  proofDocumentId Int?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  student        Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  proofDocument  Document?     @relation(fields: [proofDocumentId], references: [id], onDelete: SetNull)
+
+  @@index([graduationYear])
+}
+
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  action    String
+  metadata  Json?
+  timestamp DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([timestamp])
+}
