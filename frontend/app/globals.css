@@ -1,0 +1,323 @@
+@import "tailwindcss";
+
+:root {
+  --background:          #f5f6f5;
+  --foreground:          #16201a;
+  --primary:             #1b5e3b;
+  --primary-foreground:  #f8fbf9;
+  --accent:              #b71c1c;
+  --muted:               #eef1ef;
+  --border:              #d8e2dc;
+  --panel:               #ffffff;
+  --panel-strong:        #f8faf9;
+  --sidebar:             #0e2016;
+  --sidebar-foreground:  #e8f0eb;
+  --ring:                rgba(27, 94, 59, 0.22);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  min-height: 100vh;
+  background: transparent;
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  outline: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.container-page {
+  @apply mx-auto w-full max-w-7xl px-4 py-4 md:px-6 md:py-6;
+}
+
+.card,
+.surface-card {
+  @apply rounded-2xl border p-5 shadow-sm;
+  background: #ffffff;
+}
+
+.hero-panel {
+  @apply flex flex-col gap-5 rounded-2xl border px-6 py-6 md:flex-row md:items-end md:justify-between md:px-8 md:py-7;
+  background: linear-gradient(135deg, #0e2016 0%, #1b5e3b 100%);
+  color: #eff8f3;
+  box-shadow: 0 4px 24px -8px rgba(14, 32, 22, 0.4);
+}
+
+.hero-eyebrow {
+  @apply text-xs font-semibold uppercase tracking-[0.28em];
+  color: rgba(183, 28, 28, 0.9);
+}
+
+.hero-title {
+  @apply text-3xl font-semibold tracking-tight md:text-4xl;
+}
+
+.hero-copy {
+  @apply text-sm leading-6 md:text-base;
+  color: rgba(239, 248, 243, 0.75);
+}
+
+.metric-card {
+  @apply grid gap-3 rounded-2xl border px-4 py-4 shadow-sm md:grid-cols-[auto_1fr];
+  background: #ffffff;
+}
+
+.metric-card__icon {
+  @apply inline-flex h-10 w-10 items-center justify-center rounded-xl border text-primary;
+  border-color: rgba(27, 94, 59, 0.2);
+  background: rgba(27, 94, 59, 0.07);
+}
+
+.metric-card__label {
+  @apply text-xs font-semibold uppercase tracking-[0.2em] text-slate-500;
+}
+
+.metric-card__value {
+  @apply text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl;
+}
+
+.metric-card__hint {
+  @apply text-sm text-slate-500;
+}
+
+.section-title {
+  @apply text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl;
+}
+
+.subtle {
+  @apply text-sm text-slate-500;
+}
+
+.toolbar-shell {
+  @apply flex flex-col gap-3 rounded-xl border px-4 py-3 lg:flex-row lg:items-center lg:justify-between;
+  background: #ffffff;
+}
+
+.toolbar-group {
+  @apply flex flex-1 flex-col gap-3 sm:flex-row sm:items-center;
+}
+
+.toolbar-actions {
+  @apply flex flex-wrap items-center gap-2;
+}
+
+.input,
+.select,
+.textarea {
+  @apply w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 transition placeholder:text-slate-400;
+}
+
+.input:hover,
+.select:hover,
+.textarea:hover {
+  border-color: rgba(27, 94, 59, 0.35);
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: var(--primary);
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:pointer-events-none disabled:opacity-50;
+  background: var(--primary);
+}
+
+.btn-primary:hover {
+  background: #165030;
+}
+
+.btn-destructive {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:pointer-events-none disabled:opacity-50;
+  background: var(--accent);
+  box-shadow: 0 4px 14px -6px rgba(183, 28, 28, 0.5);
+}
+
+.btn-destructive:hover {
+  background: #9b1818;
+}
+
+.btn-outline {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium text-slate-700 transition disabled:pointer-events-none disabled:opacity-50;
+  background: #ffffff;
+}
+
+.btn-outline:hover {
+  border-color: rgba(27, 94, 59, 0.3);
+  background: rgba(27, 94, 59, 0.04);
+  color: #16201a;
+}
+
+.table-wrap,
+.data-table-wrap {
+  @apply overflow-hidden rounded-2xl border;
+  background: #ffffff;
+}
+
+.table-scroll {
+  @apply overflow-x-auto;
+}
+
+.table-base {
+  @apply min-w-full border-separate border-spacing-0 text-sm;
+}
+
+.table-base thead th {
+  @apply border-b bg-slate-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.15em] text-slate-500;
+}
+
+.table-base tbody td {
+  @apply border-b border-slate-100 px-4 py-3 align-middle text-slate-700;
+}
+
+.table-base tbody tr:last-child td {
+  @apply border-b-0;
+}
+
+.table-base tbody tr:hover td {
+  background: rgba(27, 94, 59, 0.03);
+}
+
+.sidebar-link {
+  @apply flex flex-col items-start rounded-xl px-3 py-2.5 text-sm font-medium transition;
+  color: rgba(232, 240, 235, 0.75);
+}
+
+.sidebar-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.sidebar-link.active {
+  @apply bg-white text-slate-900;
+  box-shadow: 0 2px 12px -4px rgba(255, 255, 255, 0.5);
+}
+
+.topbar-badge {
+  @apply inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary;
+  border-color: rgba(27, 94, 59, 0.25);
+  background: rgba(27, 94, 59, 0.07);
+}
+
+.stat-inline {
+  @apply inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80;
+}
+
+.panel-grid {
+  @apply grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)];
+}
+
+.form-grid {
+  @apply grid gap-4 md:grid-cols-2 xl:grid-cols-3;
+}
+
+.field-stack {
+  @apply space-y-1.5;
+}
+
+.field-label {
+  @apply text-xs font-semibold uppercase tracking-[0.15em] text-slate-500;
+}
+
+.panel-header {
+  @apply flex flex-col gap-2 border-b border-slate-100 pb-4 md:flex-row md:items-end md:justify-between;
+}
+
+.panel-title {
+  @apply text-lg font-semibold text-slate-900;
+}
+
+.panel-copy {
+  @apply text-sm leading-6 text-slate-500;
+}
+
+.status-chip {
+  @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold;
+}
+
+.status-chip--ok {
+  border-color: rgba(27, 94, 59, 0.2);
+  background: rgba(27, 94, 59, 0.08);
+  color: #1b5e3b;
+}
+
+.status-chip--warn {
+  @apply border-amber-200 bg-amber-50 text-amber-700;
+}
+
+.status-chip--danger {
+  border-color: rgba(183, 28, 28, 0.2);
+  background: rgba(183, 28, 28, 0.07);
+  color: #b71c1c;
+}
+
+.status-chip--muted {
+  @apply border-slate-200 bg-slate-100 text-slate-500;
+}
+
+.empty-note {
+  @apply rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm text-slate-400;
+}
+
+.login-shell {
+  background:
+    radial-gradient(circle at top left, rgba(27, 94, 59, 0.14), transparent 26%),
+    radial-gradient(circle at bottom right, rgba(183, 28, 28, 0.12), transparent 20%),
+    linear-gradient(180deg, #edf1ee, #f6f8f6);
+}
+
+@media (max-width: 768px) {
+  .container-page {
+    @apply px-3 py-3;
+  }
+
+  .hero-panel,
+  .card,
+  .surface-card,
+  .metric-card {
+    @apply rounded-xl;
+  }
+
+  .table-base thead th,
+  .table-base tbody td {
+    @apply px-3;
+  }
+}
