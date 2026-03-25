@@ -22,6 +22,10 @@ export declare class RoomsController {
         equipment: import("@prisma/client/runtime/library").JsonValue | null;
         availability: boolean;
     } | null, null, import("@prisma/client/runtime/library").DefaultArgs>;
+    importFile(file: Express.Multer.File): Promise<{
+        imported: number;
+        errors: string[];
+    }>;
     create(dto: CreateRoomDto): import(".prisma/client").Prisma.Prisma__RoomClient<{
         id: number;
         createdAt: Date;

@@ -1,3 +1,4 @@
+import { TransferStudentsDto } from './dto/transfer-students.dto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
@@ -43,6 +44,11 @@ export declare class StudentsService {
                 filiereId: number | null;
                 classType: string | null;
             }) | null;
+            laureate: {
+                id: number;
+                graduationYear: number;
+                diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
+            } | null;
             classHistory: ({
                 academicClass: {
                     id: number;
@@ -56,8 +62,8 @@ export declare class StudentsService {
             } & {
                 id: number;
                 createdAt: Date;
-                classId: number;
                 academicYear: string;
+                classId: number;
                 studentId: number;
                 studyYear: number;
             })[];
@@ -141,8 +147,8 @@ export declare class StudentsService {
         } & {
             id: number;
             createdAt: Date;
-            classId: number;
             academicYear: string;
+            classId: number;
             studentId: number;
             studyYear: number;
         })[];
@@ -219,8 +225,8 @@ export declare class StudentsService {
         } & {
             id: number;
             createdAt: Date;
-            classId: number;
             academicYear: string;
+            classId: number;
             studentId: number;
             studyYear: number;
         })[];
@@ -297,8 +303,8 @@ export declare class StudentsService {
         } & {
             id: number;
             createdAt: Date;
-            classId: number;
             academicYear: string;
+            classId: number;
             studentId: number;
             studyYear: number;
         })[];
@@ -356,4 +362,23 @@ export declare class StudentsService {
     private upsertClassHistory;
     private ensureFiliereExists;
     private ensureClassExists;
+    findByClass(classId: number): Promise<{
+        id: number;
+        fullName: string;
+        filiere: {
+            id: number;
+            name: string;
+        } | null;
+        codeMassar: string;
+        firstYearEntry: number;
+        anneeAcademique: string;
+    }[]>;
+    transferStudents(dto: TransferStudentsDto, userId?: number): Promise<{
+        transferred: number;
+        errors: string[];
+    }>;
+    importFromBuffer(buffer: Buffer): Promise<{
+        imported: number;
+        errors: string[];
+    }>;
 }

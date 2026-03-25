@@ -3,7 +3,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { TransferStudentsDto } from './dto/transfer-students.dto';
 import { PrepaYear, Prisma, StudentCycle } from '@prisma/client';
+import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CreateStudentDto } from './dto/create-student.dto';
@@ -51,6 +53,7 @@ export class StudentsService {
               academicYear: 'desc',
             },
           },
+          laureate: { select: { id: true, graduationYear: true, diplomaStatus: true } },
         },
         skip: (pagination.page - 1) * pagination.limit,
         take: pagination.limit,
@@ -406,5 +409,150 @@ export class StudentsService {
     }
 
     return academicClass;
+  }
+
+  async findByClass(classId: number) {
+    return this.prisma.student.findMany({
+      where: { classId },
+      select: {
+        id: true,
+        fullName: true,
+        codeMassar: true,
+        anneeAcademique: true,
+        firstYearEntry: true,
+        filiere: { select: { id: true, name: true } },
+      },
+      orderBy: { fullName: 'asc' },
+    });
+  }
+
+  async transferStudents(
+    dto: TransferStudentsDto,
+    userId?: number,
+  ): Promise<{ transferred: number; errors: string[] }> {
+    const toClass = await this.prisma.academicClass.findUnique({
+      where: { id: dto.toClassId },
+      select: { id: true, name: true, filiereId: true },
+    });
+    if (!toClass) {
+      throw new NotFoundException(`Target class ${dto.toClassId} not found`);
+    }
+
+    let transferred = 0;
+    const errors: string[] = [];
+
+    for (const studentId of dto.studentIds) {
+      try {
+        const student = await this.prisma.student.findUnique({
+          where: { id: studentId },
+          select: {
+            id: true,
+            fullName: true,
+            firstYearEntry: true,
+            classId: true,
+            filiereId: true,
+            anneeAcademique: true,
+          },
+        });
+
+        if (!student) {
+          errors.push(`Student ${studentId}: not found`);
+          continue;
+        }
+
+        if (student.classId !== dto.fromClassId) {
+          errors.push(
+            `Student ${student.fullName}: not enrolled in source class`,
+          );
+          continue;
+        }
+
+        await this.prisma.student.update({
+          where: { id: studentId },
+          data: {
+            classId: dto.toClassId,
+            anneeAcademique: dto.academicYear,
+            ...(toClass.filiereId ? { filiereId: toClass.filiereId } : {}),
+          },
+        });
+
+        await this.upsertClassHistory(
+          studentId,
+          dto.toClassId,
+          dto.academicYear,
+          student.firstYearEntry,
+        );
+
+        transferred++;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(`Student ${studentId}: ${message}`);
+      }
+    }
+
+    if (userId) {
+      await this.prisma.activityLog.create({
+        data: {
+          userId,
+          action: 'TRANSFER_STUDENTS',
+          metadata: {
+            fromClassId: dto.fromClassId,
+            toClassId: dto.toClassId,
+            academicYear: dto.academicYear,
+            studentIds: dto.studentIds,
+            transferred,
+            errors: errors.length,
+          },
+        },
+      });
+    }
+
+    return { transferred, errors };
+  }
+
+  async importFromBuffer(buffer: Buffer): Promise<{ imported: number; errors: string[] }> {
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null });
+
+    let imported = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      try {
+        const classIdRaw = Number(row['classId'] ?? row['ClassId'] ?? 0);
+        if (!classIdRaw) {
+          errors.push(`Row ${i + 2}: classId is required`);
+          continue;
+        }
+        const dto: CreateStudentDto = {
+          firstName: String(row['firstName'] ?? row['Prénom'] ?? '').trim() || undefined,
+          lastName: String(row['lastName'] ?? row['Nom'] ?? '').trim() || undefined,
+          fullName: row['fullName'] ? String(row['fullName']).trim() : undefined,
+          cin: String(row['cin'] ?? row['CIN'] ?? '').trim(),
+          codeMassar: String(row['codeMassar'] ?? row['Code Massar'] ?? '').trim(),
+          sex: (['male', 'female'].includes(String(row['sex']).toLowerCase())
+            ? String(row['sex']).toLowerCase()
+            : 'male') as 'male' | 'female',
+          firstYearEntry: Number(row['firstYearEntry'] ?? new Date().getFullYear()),
+          anneeAcademique: String(row['anneeAcademique'] ?? row['Année Académique'] ?? '2025/2026').trim(),
+          classId: classIdRaw,
+          filiereId: row['filiereId'] ? Number(row['filiereId']) : undefined,
+          email: row['email'] ? String(row['email']).trim() : undefined,
+          telephone: row['telephone'] ? String(row['telephone']).trim() : undefined,
+          bacType: row['bacType'] ? String(row['bacType']).trim() : undefined,
+          dateNaissance: row['dateNaissance'] ? String(row['dateNaissance']).trim() : '1990-01-01',
+          dateInscription: row['dateInscription'] ? String(row['dateInscription']).trim() : new Date().toISOString().split('T')[0],
+        };
+        await this.create(dto);
+        imported++;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(`Row ${i + 2}: ${message}`);
+      }
+    }
+
+    return { imported, errors };
   }
 }

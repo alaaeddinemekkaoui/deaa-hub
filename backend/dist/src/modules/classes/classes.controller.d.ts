@@ -43,6 +43,10 @@ export declare class ClassesController {
             hasPreviousPage: boolean;
         };
     }>;
+    importFile(file: Express.Multer.File): Promise<{
+        imported: number;
+        errors: string[];
+    }>;
     findOne(id: number): Promise<{
         teachers: ({
             teacher: {

@@ -144,4 +144,8 @@ export declare class ClassesService {
     }>;
     private ensureFiliereExists;
     private ensureClassIdentityAvailable;
+    importFromBuffer(buffer: Buffer): Promise<{
+        imported: number;
+        errors: string[];
+    }>;
 }

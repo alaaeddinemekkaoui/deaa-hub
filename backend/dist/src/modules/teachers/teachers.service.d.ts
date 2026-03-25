@@ -188,48 +188,7 @@ export declare class TeachersService {
         roleId: number;
         gradeId: number;
     }>;
-    update(id: number, dto: UpdateTeacherDto): Promise<{
-        role: {
-            id: number;
-            createdAt: Date;
-            updatedAt: Date;
-            name: string;
-        };
-        department: {
-            id: number;
-            createdAt: Date;
-            updatedAt: Date;
-            name: string;
-        };
-        filiere: {
-            id: number;
-            createdAt: Date;
-            updatedAt: Date;
-            name: string;
-            code: string;
-            departmentId: number;
-            filiereType: string | null;
-        } | null;
-        _count: {
-            department: number;
-            filiere: number;
-            role: number;
-            grade: number;
-            taughtClasses: number;
-        };
-        grade: {
-            id: number;
-            createdAt: Date;
-            updatedAt: Date;
-            name: string;
-        };
-        taughtClasses: {
-            id: number;
-            createdAt: Date;
-            classId: number;
-            teacherId: number;
-        }[];
-    } & {
+    update(id: number, dto: UpdateTeacherDto, userId?: number): Promise<{
         id: number;
         email: string | null;
         createdAt: Date;
@@ -259,6 +218,15 @@ export declare class TeachersService {
         roleId: number;
         gradeId: number;
     }>;
+    findClassLogs(teacherId: number): Promise<{
+        id: number;
+        user: {
+            email: string;
+        };
+        action: string;
+        metadata: Prisma.JsonValue;
+        timestamp: Date;
+    }[]>;
     findRoles(): Prisma.PrismaPromise<({
         _count: {
             teachers: number;
@@ -338,7 +306,11 @@ export declare class TeachersService {
     private ensureRoleExists;
     private ensureGradeExists;
     private ensureTeacherExists;
-    private ensureClassAssignmentsBelongToScope;
+    private ensureClassAssignmentsExist;
     private handleTeacherUniqueErrors;
     private handleCatalogUniqueError;
+    importFromBuffer(buffer: Buffer): Promise<{
+        imported: number;
+        errors: string[];
+    }>;
 }

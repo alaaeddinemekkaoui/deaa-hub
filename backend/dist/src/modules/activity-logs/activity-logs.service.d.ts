@@ -13,10 +13,10 @@ export declare class ActivityLogsService {
         };
     } & {
         id: number;
-        userId: number;
         action: string;
         metadata: Prisma.JsonValue | null;
         timestamp: Date;
+        userId: number;
     })[]>;
     findOne(id: number): Prisma.Prisma__ActivityLogClient<({
         user: {
@@ -27,30 +27,30 @@ export declare class ActivityLogsService {
         };
     } & {
         id: number;
-        userId: number;
         action: string;
         metadata: Prisma.JsonValue | null;
         timestamp: Date;
+        userId: number;
     }) | null, null, import("@prisma/client/runtime/library").DefaultArgs>;
     create(dto: CreateActivityLogDto): Prisma.Prisma__ActivityLogClient<{
         id: number;
-        userId: number;
         action: string;
         metadata: Prisma.JsonValue | null;
         timestamp: Date;
+        userId: number;
     }, never, import("@prisma/client/runtime/library").DefaultArgs>;
     update(id: number, dto: Partial<CreateActivityLogDto>): Prisma.Prisma__ActivityLogClient<{
         id: number;
-        userId: number;
         action: string;
         metadata: Prisma.JsonValue | null;
         timestamp: Date;
+        userId: number;
     }, never, import("@prisma/client/runtime/library").DefaultArgs>;
     remove(id: number): Prisma.Prisma__ActivityLogClient<{
         id: number;
-        userId: number;
         action: string;
         metadata: Prisma.JsonValue | null;
         timestamp: Date;
+        userId: number;
     }, never, import("@prisma/client/runtime/library").DefaultArgs>;
 }

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,8 +9,17 @@ import {
   Patch,
   Post,
   Query,
+  Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { Request } from 'express';
+import { JwtPayload } from '../../auth/strategies/jwt.strategy';
+
+type AuthRequest = Request & { user: JwtPayload };
 import { TeachersService } from './teachers.service';
 import { CreateTeacherDto } from './dto/create-teacher.dto';
 import { UpdateTeacherDto } from './dto/update-teacher.dto';
@@ -88,6 +98,25 @@ export class TeachersController {
     return this.teachersService.removeGrade(id);
   }
 
+  @Post('import')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  importFile(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    return this.teachersService.importFromBuffer(file.buffer);
+  }
+
+  @Get(':id/class-logs')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  findClassLogs(@Param('id', ParseIntPipe) id: number) {
+    return this.teachersService.findClassLogs(id);
+  }
+
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
   findOne(@Param('id', ParseIntPipe) id: number) {
@@ -102,8 +131,12 @@ export class TeachersController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.STAFF)
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateTeacherDto) {
-    return this.teachersService.update(id, dto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateTeacherDto,
+    @Req() req: AuthRequest,
+  ) {
+    return this.teachersService.update(id, dto, req.user.sub);
   }
 
   @Delete(':id')

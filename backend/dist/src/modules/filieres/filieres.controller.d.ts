@@ -34,6 +34,10 @@ export declare class FilieresController {
             hasPreviousPage: boolean;
         };
     }>;
+    importFile(file: Express.Multer.File): Promise<{
+        imported: number;
+        errors: string[];
+    }>;
     findOne(id: number): Promise<{
         department: {
             id: number;

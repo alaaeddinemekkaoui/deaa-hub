@@ -12,10 +12,10 @@ export declare class ActivityLogsController {
         };
     } & {
         id: number;
-        userId: number;
         action: string;
         metadata: import("@prisma/client/runtime/library").JsonValue | null;
         timestamp: Date;
+        userId: number;
     })[]>;
     findOne(id: number): import(".prisma/client").Prisma.Prisma__ActivityLogClient<({
         user: {
@@ -26,30 +26,30 @@ export declare class ActivityLogsController {
         };
     } & {
         id: number;
-        userId: number;
         action: string;
         metadata: import("@prisma/client/runtime/library").JsonValue | null;
         timestamp: Date;
+        userId: number;
     }) | null, null, import("@prisma/client/runtime/library").DefaultArgs>;
     create(dto: CreateActivityLogDto): import(".prisma/client").Prisma.Prisma__ActivityLogClient<{
         id: number;
-        userId: number;
         action: string;
         metadata: import("@prisma/client/runtime/library").JsonValue | null;
         timestamp: Date;
+        userId: number;
     }, never, import("@prisma/client/runtime/library").DefaultArgs>;
     update(id: number, dto: Partial<CreateActivityLogDto>): import(".prisma/client").Prisma.Prisma__ActivityLogClient<{
         id: number;
-        userId: number;
         action: string;
         metadata: import("@prisma/client/runtime/library").JsonValue | null;
         timestamp: Date;
+        userId: number;
     }, never, import("@prisma/client/runtime/library").DefaultArgs>;
     remove(id: number): import(".prisma/client").Prisma.Prisma__ActivityLogClient<{
         id: number;
-        userId: number;
         action: string;
         metadata: import("@prisma/client/runtime/library").JsonValue | null;
         timestamp: Date;
+        userId: number;
     }, never, import("@prisma/client/runtime/library").DefaultArgs>;
 }

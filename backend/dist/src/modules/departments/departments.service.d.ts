@@ -65,4 +65,8 @@ export declare class DepartmentsService {
     }>;
     private ensureDepartmentExists;
     private ensureNameAvailable;
+    importFromBuffer(buffer: Buffer): Promise<{
+        imported: number;
+        errors: string[];
+    }>;
 }

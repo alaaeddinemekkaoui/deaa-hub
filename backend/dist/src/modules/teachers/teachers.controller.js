@@ -14,6 +14,8 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TeachersController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
+const multer_1 = require("multer");
 const teachers_service_1 = require("./teachers.service");
 const create_teacher_dto_1 = require("./dto/create-teacher.dto");
 const update_teacher_dto_1 = require("./dto/update-teacher.dto");
@@ -58,14 +60,22 @@ let TeachersController = class TeachersController {
     removeGrade(id) {
         return this.teachersService.removeGrade(id);
     }
+    importFile(file) {
+        if (!file)
+            throw new common_1.BadRequestException('No file uploaded');
+        return this.teachersService.importFromBuffer(file.buffer);
+    }
+    findClassLogs(id) {
+        return this.teachersService.findClassLogs(id);
+    }
     findOne(id) {
         return this.teachersService.findOne(id);
     }
     create(dto) {
         return this.teachersService.create(dto);
     }
-    update(id, dto) {
-        return this.teachersService.update(id, dto);
+    update(id, dto, req) {
+        return this.teachersService.update(id, dto, req.user.sub);
     }
     remove(id) {
         return this.teachersService.remove(id);
@@ -145,6 +155,26 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], TeachersController.prototype, "removeGrade", null);
 __decorate([
+    (0, common_1.Post)('import'),
+    (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', {
+        storage: (0, multer_1.memoryStorage)(),
+        limits: { fileSize: 10 * 1024 * 1024 },
+    })),
+    __param(0, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], TeachersController.prototype, "importFile", null);
+__decorate([
+    (0, common_1.Get)(':id/class-logs'),
+    (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF, role_type_1.UserRole.VIEWER),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number]),
+    __metadata("design:returntype", void 0)
+], TeachersController.prototype, "findClassLogs", null);
+__decorate([
     (0, common_1.Get)(':id'),
     (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF, role_type_1.UserRole.VIEWER),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
@@ -165,8 +195,9 @@ __decorate([
     (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number, update_teacher_dto_1.UpdateTeacherDto]),
+    __metadata("design:paramtypes", [Number, update_teacher_dto_1.UpdateTeacherDto, Object]),
     __metadata("design:returntype", void 0)
 ], TeachersController.prototype, "update", null);
 __decorate([

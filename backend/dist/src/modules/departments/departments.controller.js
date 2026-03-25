@@ -14,6 +14,8 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DepartmentsController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
+const multer_1 = require("multer");
 const departments_service_1 = require("./departments.service");
 const create_department_dto_1 = require("./dto/create-department.dto");
 const update_department_dto_1 = require("./dto/update-department.dto");
@@ -29,6 +31,11 @@ let DepartmentsController = class DepartmentsController {
     }
     findAll(query) {
         return this.departmentsService.findAll(query);
+    }
+    importFile(file) {
+        if (!file)
+            throw new common_1.BadRequestException('No file uploaded');
+        return this.departmentsService.importFromBuffer(file.buffer);
     }
     findOne(id) {
         return this.departmentsService.findOne(id);
@@ -52,6 +59,15 @@ __decorate([
     __metadata("design:paramtypes", [department_query_dto_1.DepartmentQueryDto]),
     __metadata("design:returntype", void 0)
 ], DepartmentsController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Post)('import'),
+    (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', { storage: (0, multer_1.memoryStorage)(), limits: { fileSize: 5 * 1024 * 1024 } })),
+    __param(0, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], DepartmentsController.prototype, "importFile", null);
 __decorate([
     (0, common_1.Get)(':id'),
     (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF, role_type_1.UserRole.VIEWER),

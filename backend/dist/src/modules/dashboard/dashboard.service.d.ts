@@ -32,10 +32,10 @@ export declare class DashboardService {
             };
         } & {
             id: number;
-            userId: number;
             action: string;
             metadata: import("@prisma/client/runtime/library").JsonValue | null;
             timestamp: Date;
+            userId: number;
         })[];
     }>;
 }

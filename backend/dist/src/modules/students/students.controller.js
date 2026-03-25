@@ -14,9 +14,12 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StudentsController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
+const multer_1 = require("multer");
 const students_service_1 = require("./students.service");
 const create_student_dto_1 = require("./dto/create-student.dto");
 const update_student_dto_1 = require("./dto/update-student.dto");
+const transfer_students_dto_1 = require("./dto/transfer-students.dto");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../common/guards/roles.guard");
 const roles_decorator_1 = require("../../common/decorators/roles.decorator");
@@ -29,6 +32,17 @@ let StudentsController = class StudentsController {
     }
     findAll(query) {
         return this.studentsService.findAll(query, query.search, query.filiereId);
+    }
+    findByClass(classId) {
+        return this.studentsService.findByClass(classId);
+    }
+    importFile(file) {
+        if (!file)
+            throw new common_1.BadRequestException('No file uploaded');
+        return this.studentsService.importFromBuffer(file.buffer);
+    }
+    transfer(dto, req) {
+        return this.studentsService.transferStudents(dto, req.user.sub);
     }
     findOne(id) {
         return this.studentsService.findOne(id);
@@ -52,6 +66,35 @@ __decorate([
     __metadata("design:paramtypes", [students_query_dto_1.StudentsQueryDto]),
     __metadata("design:returntype", void 0)
 ], StudentsController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Get)('by-class/:classId'),
+    (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF, role_type_1.UserRole.VIEWER),
+    __param(0, (0, common_1.Param)('classId', common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number]),
+    __metadata("design:returntype", void 0)
+], StudentsController.prototype, "findByClass", null);
+__decorate([
+    (0, common_1.Post)('import'),
+    (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', {
+        storage: (0, multer_1.memoryStorage)(),
+        limits: { fileSize: 10 * 1024 * 1024 },
+    })),
+    __param(0, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], StudentsController.prototype, "importFile", null);
+__decorate([
+    (0, common_1.Post)('transfer'),
+    (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [transfer_students_dto_1.TransferStudentsDto, Object]),
+    __metadata("design:returntype", void 0)
+], StudentsController.prototype, "transfer", null);
 __decorate([
     (0, common_1.Get)(':id'),
     (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF, role_type_1.UserRole.VIEWER),

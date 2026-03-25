@@ -25,6 +25,10 @@ export declare class DepartmentsController {
             hasPreviousPage: boolean;
         };
     }>;
+    importFile(file: Express.Multer.File): Promise<{
+        imported: number;
+        errors: string[];
+    }>;
     findOne(id: number): Promise<{
         filieres: {
             id: number;

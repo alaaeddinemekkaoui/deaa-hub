@@ -44,8 +44,8 @@ export declare class LaureatesService {
             createdAt: Date;
             name: string;
             studentId: number;
-            mimeType: string;
             path: string;
+            mimeType: string;
         } | null;
     } & {
         id: number;
@@ -96,8 +96,8 @@ export declare class LaureatesService {
             createdAt: Date;
             name: string;
             studentId: number;
-            mimeType: string;
             path: string;
+            mimeType: string;
         } | null;
     } & {
         id: number;
@@ -108,7 +108,18 @@ export declare class LaureatesService {
         diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
         proofDocumentId: number | null;
     }) | null, null, import("@prisma/client/runtime/library").DefaultArgs>;
-    create(dto: CreateLaureateDto): import(".prisma/client").Prisma.Prisma__LaureateClient<{
+    findNonLaureateStudents(search?: string): Promise<{
+        id: number;
+        fullName: string;
+        filiere: {
+            name: string;
+        } | null;
+        academicClass: {
+            name: string;
+        } | null;
+        codeMassar: string;
+    }[]>;
+    create(dto: CreateLaureateDto, userId?: number): Promise<{
         id: number;
         createdAt: Date;
         updatedAt: Date;
@@ -116,8 +127,8 @@ export declare class LaureatesService {
         graduationYear: number;
         diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
         proofDocumentId: number | null;
-    }, never, import("@prisma/client/runtime/library").DefaultArgs>;
-    update(id: number, dto: UpdateLaureateDto): import(".prisma/client").Prisma.Prisma__LaureateClient<{
+    }>;
+    update(id: number, dto: UpdateLaureateDto, userId?: number): Promise<{
         id: number;
         createdAt: Date;
         updatedAt: Date;
@@ -125,8 +136,8 @@ export declare class LaureatesService {
         graduationYear: number;
         diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
         proofDocumentId: number | null;
-    }, never, import("@prisma/client/runtime/library").DefaultArgs>;
-    remove(id: number): import(".prisma/client").Prisma.Prisma__LaureateClient<{
+    }>;
+    remove(id: number, userId?: number): Promise<{
         id: number;
         createdAt: Date;
         updatedAt: Date;
@@ -134,5 +145,10 @@ export declare class LaureatesService {
         graduationYear: number;
         diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
         proofDocumentId: number | null;
-    }, never, import("@prisma/client/runtime/library").DefaultArgs>;
+    }>;
+    importFromBuffer(buffer: Buffer, userId?: number): Promise<{
+        imported: number;
+        errors: string[];
+    }>;
+    private log;
 }

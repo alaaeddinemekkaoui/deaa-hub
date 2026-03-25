@@ -49,4 +49,8 @@ export declare class RoomsService {
         equipment: import("@prisma/client/runtime/library").JsonValue | null;
         availability: boolean;
     }, never, import("@prisma/client/runtime/library").DefaultArgs>;
+    importFromBuffer(buffer: Buffer): Promise<{
+        imported: number;
+        errors: string[];
+    }>;
 }

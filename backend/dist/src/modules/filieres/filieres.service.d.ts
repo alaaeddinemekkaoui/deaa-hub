@@ -94,4 +94,8 @@ export declare class FilieresService {
     private ensureFiliereExists;
     private ensureNameAvailable;
     private ensureCodeAvailable;
+    importFromBuffer(buffer: Buffer): Promise<{
+        imported: number;
+        errors: string[];
+    }>;
 }

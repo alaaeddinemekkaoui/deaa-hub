@@ -1,10 +1,43 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
@@ -12,6 +45,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.StudentsService = void 0;
 const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
+const XLSX = __importStar(require("xlsx"));
 const prisma_service_1 = require("../../common/prisma/prisma.service");
 let StudentsService = class StudentsService {
     prisma;
@@ -51,6 +85,7 @@ let StudentsService = class StudentsService {
                             academicYear: 'desc',
                         },
                     },
+                    laureate: { select: { id: true, graduationYear: true, diplomaStatus: true } },
                 },
                 skip: (pagination.page - 1) * pagination.limit,
                 take: pagination.limit,
@@ -305,6 +340,128 @@ let StudentsService = class StudentsService {
             throw new common_1.NotFoundException(`Class ${id} not found`);
         }
         return academicClass;
+    }
+    async findByClass(classId) {
+        return this.prisma.student.findMany({
+            where: { classId },
+            select: {
+                id: true,
+                fullName: true,
+                codeMassar: true,
+                anneeAcademique: true,
+                firstYearEntry: true,
+                filiere: { select: { id: true, name: true } },
+            },
+            orderBy: { fullName: 'asc' },
+        });
+    }
+    async transferStudents(dto, userId) {
+        const toClass = await this.prisma.academicClass.findUnique({
+            where: { id: dto.toClassId },
+            select: { id: true, name: true, filiereId: true },
+        });
+        if (!toClass) {
+            throw new common_1.NotFoundException(`Target class ${dto.toClassId} not found`);
+        }
+        let transferred = 0;
+        const errors = [];
+        for (const studentId of dto.studentIds) {
+            try {
+                const student = await this.prisma.student.findUnique({
+                    where: { id: studentId },
+                    select: {
+                        id: true,
+                        fullName: true,
+                        firstYearEntry: true,
+                        classId: true,
+                        filiereId: true,
+                        anneeAcademique: true,
+                    },
+                });
+                if (!student) {
+                    errors.push(`Student ${studentId}: not found`);
+                    continue;
+                }
+                if (student.classId !== dto.fromClassId) {
+                    errors.push(`Student ${student.fullName}: not enrolled in source class`);
+                    continue;
+                }
+                await this.prisma.student.update({
+                    where: { id: studentId },
+                    data: {
+                        classId: dto.toClassId,
+                        anneeAcademique: dto.academicYear,
+                        ...(toClass.filiereId ? { filiereId: toClass.filiereId } : {}),
+                    },
+                });
+                await this.upsertClassHistory(studentId, dto.toClassId, dto.academicYear, student.firstYearEntry);
+                transferred++;
+            }
+            catch (err) {
+                const message = err instanceof Error ? err.message : 'Unknown error';
+                errors.push(`Student ${studentId}: ${message}`);
+            }
+        }
+        if (userId) {
+            await this.prisma.activityLog.create({
+                data: {
+                    userId,
+                    action: 'TRANSFER_STUDENTS',
+                    metadata: {
+                        fromClassId: dto.fromClassId,
+                        toClassId: dto.toClassId,
+                        academicYear: dto.academicYear,
+                        studentIds: dto.studentIds,
+                        transferred,
+                        errors: errors.length,
+                    },
+                },
+            });
+        }
+        return { transferred, errors };
+    }
+    async importFromBuffer(buffer) {
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+        let imported = 0;
+        const errors = [];
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            try {
+                const classIdRaw = Number(row['classId'] ?? row['ClassId'] ?? 0);
+                if (!classIdRaw) {
+                    errors.push(`Row ${i + 2}: classId is required`);
+                    continue;
+                }
+                const dto = {
+                    firstName: String(row['firstName'] ?? row['Prénom'] ?? '').trim() || undefined,
+                    lastName: String(row['lastName'] ?? row['Nom'] ?? '').trim() || undefined,
+                    fullName: row['fullName'] ? String(row['fullName']).trim() : undefined,
+                    cin: String(row['cin'] ?? row['CIN'] ?? '').trim(),
+                    codeMassar: String(row['codeMassar'] ?? row['Code Massar'] ?? '').trim(),
+                    sex: (['male', 'female'].includes(String(row['sex']).toLowerCase())
+                        ? String(row['sex']).toLowerCase()
+                        : 'male'),
+                    firstYearEntry: Number(row['firstYearEntry'] ?? new Date().getFullYear()),
+                    anneeAcademique: String(row['anneeAcademique'] ?? row['Année Académique'] ?? '2025/2026').trim(),
+                    classId: classIdRaw,
+                    filiereId: row['filiereId'] ? Number(row['filiereId']) : undefined,
+                    email: row['email'] ? String(row['email']).trim() : undefined,
+                    telephone: row['telephone'] ? String(row['telephone']).trim() : undefined,
+                    bacType: row['bacType'] ? String(row['bacType']).trim() : undefined,
+                    dateNaissance: row['dateNaissance'] ? String(row['dateNaissance']).trim() : '1990-01-01',
+                    dateInscription: row['dateInscription'] ? String(row['dateInscription']).trim() : new Date().toISOString().split('T')[0],
+                };
+                await this.create(dto);
+                imported++;
+            }
+            catch (err) {
+                const message = err instanceof Error ? err.message : 'Unknown error';
+                errors.push(`Row ${i + 2}: ${message}`);
+            }
+        }
+        return { imported, errors };
     }
 };
 exports.StudentsService = StudentsService;

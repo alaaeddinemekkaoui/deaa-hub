@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateClassDto } from './dto/create-class.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
@@ -255,5 +256,38 @@ export class ClassesService {
         `A class named "${name}" already exists for year ${year}`,
       );
     }
+  }
+
+  async importFromBuffer(buffer: Buffer): Promise<{ imported: number; errors: string[] }> {
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null });
+
+    let imported = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      try {
+        const name = String(row['name'] ?? row['Nom'] ?? '').trim();
+        const year = Number(row['year'] ?? row['Année'] ?? 0);
+        if (!name || !year) {
+          errors.push(`Row ${i + 2}: name and year are required`);
+          continue;
+        }
+        await this.create({
+          name,
+          year,
+          filiereId: row['filiereId'] ? Number(row['filiereId']) : undefined,
+          classType: row['classType'] ? String(row['classType']).trim() : undefined,
+        });
+        imported++;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(`Row ${i + 2}: ${message}`);
+      }
+    }
+
+    return { imported, errors };
   }
 }

@@ -1,16 +1,50 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FilieresService = void 0;
 const common_1 = require("@nestjs/common");
+const XLSX = __importStar(require("xlsx"));
 const prisma_service_1 = require("../../common/prisma/prisma.service");
 let FilieresService = class FilieresService {
     prisma;
@@ -205,6 +239,39 @@ let FilieresService = class FilieresService {
         if (existing) {
             throw new common_1.ConflictException(`Filiere code "${code}" already exists`);
         }
+    }
+    async importFromBuffer(buffer) {
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+        let imported = 0;
+        const errors = [];
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            try {
+                const code = String(row['code'] ?? row['Code'] ?? '').trim();
+                const name = String(row['name'] ?? row['Nom'] ?? '').trim();
+                const departmentId = Number(row['departmentId'] ?? 0);
+                if (!code || !name || !departmentId) {
+                    errors.push(`Row ${i + 2}: code, name, and departmentId are required`);
+                    continue;
+                }
+                await this.prisma.filiere.create({
+                    data: {
+                        code,
+                        name,
+                        departmentId,
+                        filiereType: row['filiereType'] ? String(row['filiereType']).trim() : null,
+                    },
+                });
+                imported++;
+            }
+            catch (err) {
+                const message = err instanceof Error ? err.message : 'Unknown error';
+                errors.push(`Row ${i + 2}: ${message}`);
+            }
+        }
+        return { imported, errors };
     }
 };
 exports.FilieresService = FilieresService;

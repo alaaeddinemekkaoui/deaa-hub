@@ -1,6 +1,11 @@
+import { Request } from 'express';
 import { LaureatesService } from './laureates.service';
 import { CreateLaureateDto } from './dto/create-laureate.dto';
 import { UpdateLaureateDto } from './dto/update-laureate.dto';
+import { JwtPayload } from '../../auth/strategies/jwt.strategy';
+type AuthRequest = Request & {
+    user: JwtPayload;
+};
 export declare class LaureatesController {
     private readonly laureatesService;
     constructor(laureatesService: LaureatesService);
@@ -44,8 +49,8 @@ export declare class LaureatesController {
             createdAt: Date;
             name: string;
             studentId: number;
-            mimeType: string;
             path: string;
+            mimeType: string;
         } | null;
     } & {
         id: number;
@@ -56,6 +61,21 @@ export declare class LaureatesController {
         diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
         proofDocumentId: number | null;
     })[]>;
+    findNonLaureateStudents(search?: string): Promise<{
+        id: number;
+        fullName: string;
+        filiere: {
+            name: string;
+        } | null;
+        academicClass: {
+            name: string;
+        } | null;
+        codeMassar: string;
+    }[]>;
+    importFile(file: Express.Multer.File, req: AuthRequest): Promise<{
+        imported: number;
+        errors: string[];
+    }>;
     findOne(id: number): import(".prisma/client").Prisma.Prisma__LaureateClient<({
         student: {
             filiere: {
@@ -96,8 +116,8 @@ export declare class LaureatesController {
             createdAt: Date;
             name: string;
             studentId: number;
-            mimeType: string;
             path: string;
+            mimeType: string;
         } | null;
     } & {
         id: number;
@@ -108,7 +128,7 @@ export declare class LaureatesController {
         diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
         proofDocumentId: number | null;
     }) | null, null, import("@prisma/client/runtime/library").DefaultArgs>;
-    create(dto: CreateLaureateDto): import(".prisma/client").Prisma.Prisma__LaureateClient<{
+    create(dto: CreateLaureateDto, req: AuthRequest): Promise<{
         id: number;
         createdAt: Date;
         updatedAt: Date;
@@ -116,8 +136,8 @@ export declare class LaureatesController {
         graduationYear: number;
         diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
         proofDocumentId: number | null;
-    }, never, import("@prisma/client/runtime/library").DefaultArgs>;
-    update(id: number, dto: UpdateLaureateDto): import(".prisma/client").Prisma.Prisma__LaureateClient<{
+    }>;
+    update(id: number, dto: UpdateLaureateDto, req: AuthRequest): Promise<{
         id: number;
         createdAt: Date;
         updatedAt: Date;
@@ -125,8 +145,8 @@ export declare class LaureatesController {
         graduationYear: number;
         diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
         proofDocumentId: number | null;
-    }, never, import("@prisma/client/runtime/library").DefaultArgs>;
-    remove(id: number): import(".prisma/client").Prisma.Prisma__LaureateClient<{
+    }>;
+    remove(id: number, req: AuthRequest): Promise<{
         id: number;
         createdAt: Date;
         updatedAt: Date;
@@ -134,5 +154,6 @@ export declare class LaureatesController {
         graduationYear: number;
         diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
         proofDocumentId: number | null;
-    }, never, import("@prisma/client/runtime/library").DefaultArgs>;
+    }>;
 }
+export {};

@@ -1,7 +1,13 @@
+import { Request } from 'express';
 import { StudentsService } from './students.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
+import { TransferStudentsDto } from './dto/transfer-students.dto';
 import { StudentsQueryDto } from './dto/students-query.dto';
+import { JwtPayload } from '../../auth/strategies/jwt.strategy';
+type AuthRequest = Request & {
+    user: JwtPayload;
+};
 export declare class StudentsController {
     private readonly studentsService;
     constructor(studentsService: StudentsService);
@@ -42,6 +48,11 @@ export declare class StudentsController {
                 filiereId: number | null;
                 classType: string | null;
             }) | null;
+            laureate: {
+                id: number;
+                graduationYear: number;
+                diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
+            } | null;
             classHistory: ({
                 academicClass: {
                     id: number;
@@ -55,8 +66,8 @@ export declare class StudentsController {
             } & {
                 id: number;
                 createdAt: Date;
-                classId: number;
                 academicYear: string;
+                classId: number;
                 studentId: number;
                 studyYear: number;
             })[];
@@ -90,6 +101,25 @@ export declare class StudentsController {
             total: number;
             totalPages: number;
         };
+    }>;
+    findByClass(classId: number): Promise<{
+        id: number;
+        fullName: string;
+        filiere: {
+            id: number;
+            name: string;
+        } | null;
+        codeMassar: string;
+        firstYearEntry: number;
+        anneeAcademique: string;
+    }[]>;
+    importFile(file: Express.Multer.File): Promise<{
+        imported: number;
+        errors: string[];
+    }>;
+    transfer(dto: TransferStudentsDto, req: AuthRequest): Promise<{
+        transferred: number;
+        errors: string[];
     }>;
     findOne(id: number): import(".prisma/client").Prisma.Prisma__StudentClient<({
         filiere: ({
@@ -140,8 +170,8 @@ export declare class StudentsController {
         } & {
             id: number;
             createdAt: Date;
-            classId: number;
             academicYear: string;
+            classId: number;
             studentId: number;
             studyYear: number;
         })[];
@@ -218,8 +248,8 @@ export declare class StudentsController {
         } & {
             id: number;
             createdAt: Date;
-            classId: number;
             academicYear: string;
+            classId: number;
             studentId: number;
             studyYear: number;
         })[];
@@ -296,8 +326,8 @@ export declare class StudentsController {
         } & {
             id: number;
             createdAt: Date;
-            classId: number;
             academicYear: string;
+            classId: number;
             studentId: number;
             studyYear: number;
         })[];
@@ -350,3 +380,4 @@ export declare class StudentsController {
         dateInscription: Date;
     }, never, import("@prisma/client/runtime/library").DefaultArgs>;
 }
+export {};

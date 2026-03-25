@@ -1,10 +1,43 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
@@ -12,6 +45,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TeachersService = void 0;
 const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
+const XLSX = __importStar(require("xlsx"));
 const prisma_service_1 = require("../../common/prisma/prisma.service");
 let TeachersService = class TeachersService {
     prisma;
@@ -131,7 +165,7 @@ let TeachersService = class TeachersService {
     async create(dto) {
         const departmentId = dto.departmentId;
         const filiereId = dto.filiereId ?? null;
-        const classIds = await this.ensureClassAssignmentsBelongToScope(dto.classIds ?? [], departmentId, filiereId);
+        const classIds = await this.ensureClassAssignmentsExist(dto.classIds ?? []);
         await this.ensureDepartmentExists(departmentId);
         await this.ensureRoleExists(dto.roleId);
         await this.ensureGradeExists(dto.gradeId);
@@ -167,7 +201,7 @@ let TeachersService = class TeachersService {
             throw error;
         }
     }
-    async update(id, dto) {
+    async update(id, dto, userId) {
         const existing = await this.prisma.teacher.findUnique({
             where: { id },
             select: {
@@ -199,10 +233,12 @@ let TeachersService = class TeachersService {
             await this.ensureFiliereBelongsToDepartment(nextFiliereId, nextDepartmentId);
         }
         const nextClassIds = dto.classIds !== undefined
-            ? await this.ensureClassAssignmentsBelongToScope(dto.classIds, nextDepartmentId, nextFiliereId)
-            : await this.ensureClassAssignmentsBelongToScope(existing.taughtClasses.map((entry) => entry.classId), nextDepartmentId, nextFiliereId);
+            ? await this.ensureClassAssignmentsExist(dto.classIds)
+            : await this.ensureClassAssignmentsExist(existing.taughtClasses.map((entry) => entry.classId));
+        const oldClassIds = existing.taughtClasses.map((e) => e.classId);
+        let result;
         try {
-            return await this.prisma.teacher.update({
+            result = await this.prisma.teacher.update({
                 where: { id },
                 data: {
                     ...(dto.firstName !== undefined
@@ -253,10 +289,44 @@ let TeachersService = class TeachersService {
             this.handleTeacherUniqueErrors(error);
             throw error;
         }
+        if (userId && dto.classIds !== undefined) {
+            await this.prisma.activityLog.create({
+                data: {
+                    userId,
+                    action: 'UPDATE_TEACHER_CLASSES',
+                    metadata: {
+                        teacherId: id,
+                        previousClassIds: oldClassIds,
+                        newClassIds: nextClassIds,
+                    },
+                },
+            });
+        }
+        return result;
     }
     async remove(id) {
         await this.ensureTeacherExists(id);
         return this.prisma.teacher.delete({ where: { id } });
+    }
+    async findClassLogs(teacherId) {
+        return this.prisma.activityLog.findMany({
+            where: {
+                action: 'UPDATE_TEACHER_CLASSES',
+                metadata: {
+                    path: ['teacherId'],
+                    equals: teacherId,
+                },
+            },
+            orderBy: { timestamp: 'desc' },
+            take: 50,
+            select: {
+                id: true,
+                action: true,
+                metadata: true,
+                timestamp: true,
+                user: { select: { email: true } },
+            },
+        });
     }
     findRoles() {
         return this.prisma.teacherRole.findMany({
@@ -517,7 +587,7 @@ let TeachersService = class TeachersService {
             throw new common_1.NotFoundException(`Teacher ${id} not found`);
         }
     }
-    async ensureClassAssignmentsBelongToScope(classIds, departmentId, filiereId) {
+    async ensureClassAssignmentsExist(classIds) {
         if (classIds.length === 0) {
             return [];
         }
@@ -527,21 +597,13 @@ let TeachersService = class TeachersService {
                 id: {
                     in: uniqueClassIds,
                 },
-                filiere: {
-                    is: {
-                        departmentId,
-                        ...(filiereId ? { id: filiereId } : {}),
-                    },
-                },
             },
             select: {
                 id: true,
             },
         });
         if (classes.length !== uniqueClassIds.length) {
-            throw new common_1.BadRequestException(filiereId
-                ? 'Assigned classes must belong to the selected department and filiere'
-                : 'Assigned classes must belong to the selected department');
+            throw new common_1.BadRequestException('One or more assigned classes are invalid');
         }
         return uniqueClassIds;
     }
@@ -564,6 +626,43 @@ let TeachersService = class TeachersService {
             error.code === 'P2002') {
             throw new common_1.ConflictException(`${label} already exists`);
         }
+    }
+    async importFromBuffer(buffer) {
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+        let imported = 0;
+        const errors = [];
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            try {
+                const departmentId = Number(row['departmentId'] ?? 0);
+                const roleId = Number(row['roleId'] ?? 0);
+                const gradeId = Number(row['gradeId'] ?? 0);
+                if (!departmentId || !roleId || !gradeId) {
+                    errors.push(`Row ${i + 2}: departmentId, roleId, and gradeId are required`);
+                    continue;
+                }
+                await this.create({
+                    firstName: String(row['firstName'] ?? '').trim(),
+                    lastName: String(row['lastName'] ?? '').trim(),
+                    cin: row['cin'] ? String(row['cin']).trim() : undefined,
+                    email: row['email'] ? String(row['email']).trim() : undefined,
+                    phoneNumber: row['phoneNumber'] ? String(row['phoneNumber']).trim() : undefined,
+                    departmentId,
+                    filiereId: row['filiereId'] ? Number(row['filiereId']) : undefined,
+                    roleId,
+                    gradeId,
+                    dateInscription: row['dateInscription'] ? String(row['dateInscription']).trim() : undefined,
+                });
+                imported++;
+            }
+            catch (err) {
+                const message = err instanceof Error ? err.message : 'Unknown error';
+                errors.push(`Row ${i + 2}: ${message}`);
+            }
+        }
+        return { imported, errors };
     }
 };
 exports.TeachersService = TeachersService;

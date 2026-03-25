@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateTeacherDto } from './dto/create-teacher.dto';
 import { UpdateTeacherDto } from './dto/update-teacher.dto';
@@ -195,7 +196,7 @@ export class TeachersService {
     }
   }
 
-  async update(id: number, dto: UpdateTeacherDto) {
+  async update(id: number, dto: UpdateTeacherDto, userId?: number) {
     const existing = await this.prisma.teacher.findUnique({
       where: { id },
       select: {
@@ -242,8 +243,11 @@ export class TeachersService {
             existing.taughtClasses.map((entry) => entry.classId),
           );
 
+    const oldClassIds = existing.taughtClasses.map((e) => e.classId);
+
+    let result: Awaited<ReturnType<typeof this.prisma.teacher.update>>;
     try {
-      return await this.prisma.teacher.update({
+      result = await this.prisma.teacher.update({
         where: { id },
         data: {
           ...(dto.firstName !== undefined
@@ -295,11 +299,48 @@ export class TeachersService {
       this.handleTeacherUniqueErrors(error);
       throw error;
     }
+
+    if (userId && dto.classIds !== undefined) {
+      await this.prisma.activityLog.create({
+        data: {
+          userId,
+          action: 'UPDATE_TEACHER_CLASSES',
+          metadata: {
+            teacherId: id,
+            previousClassIds: oldClassIds,
+            newClassIds: nextClassIds,
+          },
+        },
+      });
+    }
+
+    return result;
   }
 
   async remove(id: number) {
     await this.ensureTeacherExists(id);
     return this.prisma.teacher.delete({ where: { id } });
+  }
+
+  async findClassLogs(teacherId: number) {
+    return this.prisma.activityLog.findMany({
+      where: {
+        action: 'UPDATE_TEACHER_CLASSES',
+        metadata: {
+          path: ['teacherId'],
+          equals: teacherId,
+        },
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        action: true,
+        metadata: true,
+        timestamp: true,
+        user: { select: { email: true } },
+      },
+    });
   }
 
   findRoles() {
@@ -645,5 +686,45 @@ export class TeachersService {
     ) {
       throw new ConflictException(`${label} already exists`);
     }
+  }
+
+  async importFromBuffer(buffer: Buffer): Promise<{ imported: number; errors: string[] }> {
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null });
+
+    let imported = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      try {
+        const departmentId = Number(row['departmentId'] ?? 0);
+        const roleId = Number(row['roleId'] ?? 0);
+        const gradeId = Number(row['gradeId'] ?? 0);
+        if (!departmentId || !roleId || !gradeId) {
+          errors.push(`Row ${i + 2}: departmentId, roleId, and gradeId are required`);
+          continue;
+        }
+        await this.create({
+          firstName: String(row['firstName'] ?? '').trim(),
+          lastName: String(row['lastName'] ?? '').trim(),
+          cin: row['cin'] ? String(row['cin']).trim() : undefined,
+          email: row['email'] ? String(row['email']).trim() : undefined,
+          phoneNumber: row['phoneNumber'] ? String(row['phoneNumber']).trim() : undefined,
+          departmentId,
+          filiereId: row['filiereId'] ? Number(row['filiereId']) : undefined,
+          roleId,
+          gradeId,
+          dateInscription: row['dateInscription'] ? String(row['dateInscription']).trim() : undefined,
+        });
+        imported++;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(`Row ${i + 2}: ${message}`);
+      }
+    }
+
+    return { imported, errors };
   }
 }
