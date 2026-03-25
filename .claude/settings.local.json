@@ -10,7 +10,8 @@
       "Skill(enhance-prompt)",
       "Skill(enhance-prompt:*)",
       "Bash(ls \"c:\\\\Users\\\\user\\\\Desktop\\\\deaa-hub\\\\frontend\\\\app\\\\\\(protected\\)\")",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(echo \"EXIT:$?\")"
     ]
   }
 }
