@@ -120,14 +120,15 @@ model Student {
 }
 
 model StudentClassHistory {
-  id           Int           @id @default(autoincrement())
-  studentId    Int
-  classId      Int
-  academicYear String
-  studyYear    Int
-  createdAt    DateTime      @default(now())
-  student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  academicClass AcademicClass @relation(fields: [classId], references: [id], onDelete: Restrict)
+  id             Int           @id @default(autoincrement())
+  studentId      Int
+  classId        Int
+  academicYear   String
+  studyYear      Int
+  decisionStatus String?       @default("admis")
+  createdAt      DateTime      @default(now())
+  student        Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  academicClass  AcademicClass @relation(fields: [classId], references: [id], onDelete: Restrict)
 
   @@unique([studentId, academicYear])
   @@index([studentId])

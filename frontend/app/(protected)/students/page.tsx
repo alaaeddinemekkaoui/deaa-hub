@@ -46,8 +46,8 @@ type Student = {
   laureate?: { id: number; graduationYear: number; diplomaStatus: string } | null;
 };
 
-type Filiere = { id: number; name: string };
-type AcademicClass = { id: number; name: string; year: number };
+type Filiere = { id: number; name: string; departmentId?: number };
+type AcademicClass = { id: number; name: string; year: number; filiereId?: number | null };
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -76,12 +76,54 @@ export default function StudentsPage() {
   const [bacType, setBacType] = useState('');
   const [anneeAcademique, setAnneeAcademique] = useState('2025/2026');
   const [dateInscription, setDateInscription] = useState(new Date().toISOString().split('T')[0]);
+  const [isLaureate, setIsLaureate] = useState(false);
+  const [graduationYear, setGraduationYear] = useState(String(new Date().getFullYear()));
 
   const parseOptionalId = (value: string): number | undefined => {
     const trimmed = value.trim();
     if (!trimmed) return undefined;
     const parsed = Number(trimmed);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+  };
+
+  const getSortedHistory = (history: StudentClassHistory[] = []) =>
+    [...history].sort(
+      (a, b) => a.academicYear.localeCompare(b.academicYear) || a.id - b.id,
+    );
+
+  const isHistoryEntryRedoublant = (
+    history: StudentClassHistory[],
+    entryId: number,
+  ): boolean => {
+    const seenClassIds = new Set<number>();
+
+    for (const entry of history) {
+      const classId = entry.academicClass.id;
+      const repeated = seenClassIds.has(classId);
+
+      if (entry.id === entryId) {
+        return repeated;
+      }
+
+      seenClassIds.add(classId);
+    }
+
+    return false;
+  };
+
+  const isCurrentClassRedoublant = (student: Student): boolean => {
+    if (!student.academicClass || !student.classHistory?.length) {
+      return false;
+    }
+
+    const sortedHistory = getSortedHistory(student.classHistory);
+    const latestEntry = sortedHistory[sortedHistory.length - 1];
+
+    if (!latestEntry || latestEntry.academicClass.id !== student.academicClass.id) {
+      return false;
+    }
+
+    return isHistoryEntryRedoublant(sortedHistory, latestEntry.id);
   };
 
   useEffect(() => {
@@ -152,6 +194,8 @@ export default function StudentsPage() {
     setBacType('');
     setAnneeAcademique('2025/2026');
     setDateInscription(new Date().toISOString().split('T')[0]);
+    setIsLaureate(false);
+    setGraduationYear(String(new Date().getFullYear()));
   };
 
   const openCreateModal = () => {
@@ -200,6 +244,17 @@ export default function StudentsPage() {
 
       if (editingId) {
         await api.patch(`/students/${editingId}`, payload);
+
+        // Handle laureate status
+        if (isLaureate) {
+          await api.post(`/students/${editingId}/make-laureate`, {
+            graduationYear: Number(graduationYear),
+          });
+        } else {
+          // Remove laureate status if unchecked
+          await api.delete(`/students/${editingId}/remove-laureate`).catch(() => {});
+        }
+
         toast.success('Student updated successfully');
       } else {
         await api.post('/students', payload);
@@ -326,7 +381,16 @@ export default function StudentsPage() {
               {students.map((student) => (
                 <tr key={student.id}>
                   <td>{student.id}</td>
-                  <td>{student.fullName}</td>
+                  <td>
+                    <div className="flex items-center gap-2">
+                      <span>{student.fullName}</span>
+                      {isCurrentClassRedoublant(student) && (
+                        <span className="status-chip status-chip--warn text-xs">
+                          Redoublant
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td>{student.sex}</td>
                   <td>{student.firstYearEntry}</td>
                   <td>{student.codeMassar}</td>
@@ -346,11 +410,19 @@ export default function StudentsPage() {
                   <td>
                     {student.classHistory && student.classHistory.length > 0 ? (
                       <div className="space-y-1">
-                        {student.classHistory.map((entry) => (
-                          <p key={entry.id} className="text-xs text-slate-600">
-                            {entry.academicYear}: {entry.academicClass.name} (Y{entry.studyYear})
-                          </p>
-                        ))}
+                        {getSortedHistory(student.classHistory).map((entry, _idx, sortedHistory) => {
+                          const isEntryRedoublant = isHistoryEntryRedoublant(
+                            sortedHistory,
+                            entry.id,
+                          );
+
+                          return (
+                            <p key={entry.id} className="text-xs text-slate-600">
+                              {entry.academicYear}: {entry.academicClass.name} (Y{entry.studyYear})
+                              {isEntryRedoublant ? ' · Redoublant' : ''}
+                            </p>
+                          );
+                        })}
                       </div>
                     ) : (
                       '-'
@@ -390,6 +462,8 @@ export default function StudentsPage() {
                           setBacType(student.bacType ?? '');
                           setAnneeAcademique(student.anneeAcademique);
                           setDateInscription(student.dateInscription ? student.dateInscription.split('T')[0] : new Date().toISOString().split('T')[0]);
+                          setIsLaureate(!!student.laureate);
+                          setGraduationYear(String(student.laureate?.graduationYear ?? new Date().getFullYear()));
                           setIsModalOpen(true);
                         }}
                       >
@@ -478,7 +552,14 @@ export default function StudentsPage() {
           </div>
           <div className="field-stack">
             <label className="field-label">Filière</label>
-            <select className="input" value={filiereId} onChange={(event) => setFiliereId(event.target.value)}>
+            <select
+              className="input"
+              value={filiereId}
+              onChange={(event) => {
+                setFiliereId(event.target.value);
+                setClassId('');
+              }}
+            >
               <option value="">Non assignée</option>
               {filieres.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -491,12 +572,17 @@ export default function StudentsPage() {
             <label className="field-label">Classe</label>
             <select className="input" value={classId} onChange={(event) => setClassId(event.target.value)}>
               <option value="">Sélectionner une classe</option>
-              {classes.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name} (Année {item.year})
-                </option>
-              ))}
+              {classes
+                .filter((item) => !filiereId || item.filiereId === Number(filiereId))
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} (Année {item.year})
+                  </option>
+                ))}
             </select>
+            {filiereId && classes.filter((c) => c.filiereId === Number(filiereId)).length === 0 && (
+              <p className="text-xs text-slate-400">Aucune classe pour cette filière.</p>
+            )}
           </div>
           <div className="field-stack">
             <label className="field-label">Type de bac</label>
@@ -509,6 +595,35 @@ export default function StudentsPage() {
           <div className="field-stack xl:col-span-2">
             <label className="field-label">Téléphone</label>
             <input className="input" value={telephone} onChange={(event) => setTelephone(event.target.value)} />
+          </div>
+
+          {/* Laureate section */}
+          <div className="field-stack xl:col-span-2 border-t pt-4 mt-4">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="is-laureate"
+                checked={isLaureate}
+                onChange={(e) => setIsLaureate(e.target.checked)}
+                className="w-4 h-4 cursor-pointer"
+              />
+              <label htmlFor="is-laureate" className="field-label cursor-pointer mb-0">
+                Lauréat
+              </label>
+            </div>
+            {isLaureate && (
+              <div className="mt-3">
+                <label className="field-label">Année de graduation</label>
+                <input
+                  className="input"
+                  type="number"
+                  min={1900}
+                  max={2100}
+                  value={graduationYear}
+                  onChange={(event) => setGraduationYear(event.target.value)}
+                />
+              </div>
+            )}
           </div>
         </div>
       </ModalShell>

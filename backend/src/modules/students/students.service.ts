@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { TransferStudentsDto } from './dto/transfer-students.dto';
+import { ProgressStudentsDto } from './dto/progress-students.dto';
 import { PrepaYear, Prisma, StudentCycle } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -340,6 +341,7 @@ export class StudentsService {
     classId: unknown,
     academicYear: unknown,
     firstYearEntry: unknown,
+    decisionStatus?: string,
   ) {
     const normalizedClassId = Number(classId);
     if (!Number.isInteger(normalizedClassId) || normalizedClassId < 1) {
@@ -374,12 +376,14 @@ export class StudentsService {
       update: {
         classId: normalizedClassId,
         studyYear: computedStudyYear,
+        ...(decisionStatus ? { decisionStatus } : {}),
       },
       create: {
         studentId,
         classId: normalizedClassId,
         academicYear,
         studyYear: computedStudyYear,
+        ...(decisionStatus ? { decisionStatus } : {}),
       },
     });
   }
@@ -508,6 +512,150 @@ export class StudentsService {
     }
 
     return { transferred, errors };
+  }
+
+  async progressStudents(
+    dto: ProgressStudentsDto,
+    userId?: number,
+  ): Promise<{ processed: number; errors: string[] }> {
+    const toClass = await this.prisma.academicClass.findUnique({
+      where: { id: dto.toClassId },
+      select: { id: true, name: true, filiereId: true },
+    });
+    if (!toClass) {
+      throw new NotFoundException(`Target class ${dto.toClassId} not found`);
+    }
+
+    let processed = 0;
+    const errors: string[] = [];
+
+    for (const entry of dto.students) {
+      try {
+        const student = await this.prisma.student.findUnique({
+          where: { id: entry.id },
+          select: {
+            id: true,
+            fullName: true,
+            firstYearEntry: true,
+            classId: true,
+            filiereId: true,
+            anneeAcademique: true,
+          },
+        });
+
+        if (!student) {
+          errors.push(`Étudiant ${entry.id}: introuvable`);
+          continue;
+        }
+
+        if (student.classId !== dto.fromClassId) {
+          errors.push(`${student.fullName}: non inscrit dans la classe source`);
+          continue;
+        }
+
+        if (entry.status === 'admis') {
+          // Move to target class
+          await this.prisma.student.update({
+            where: { id: entry.id },
+            data: {
+              classId: dto.toClassId,
+              anneeAcademique: dto.academicYear,
+              ...(toClass.filiereId ? { filiereId: toClass.filiereId } : {}),
+            },
+          });
+          await this.upsertClassHistory(
+            entry.id,
+            dto.toClassId,
+            dto.academicYear,
+            student.firstYearEntry,
+            'admis',
+          );
+        } else {
+          // Stay in same class, just update academic year
+          await this.prisma.student.update({
+            where: { id: entry.id },
+            data: { anneeAcademique: dto.academicYear },
+          });
+          await this.upsertClassHistory(
+            entry.id,
+            dto.fromClassId,
+            dto.academicYear,
+            student.firstYearEntry,
+            entry.status,
+          );
+        }
+
+        processed++;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(`Étudiant ${entry.id}: ${message}`);
+      }
+    }
+
+    if (userId) {
+      await this.prisma.activityLog.create({
+        data: {
+          userId,
+          action: 'PROGRESS_STUDENTS',
+          metadata: {
+            fromClassId: dto.fromClassId,
+            toClassId: dto.toClassId,
+            academicYear: dto.academicYear,
+            processed,
+            errors: errors.length,
+          },
+        },
+      });
+    }
+
+    return { processed, errors };
+  }
+
+  async makeLaureate(studentId: number, graduationYear: number) {
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: { id: true, fullName: true },
+    });
+
+    if (!student) {
+      throw new NotFoundException(`Student ${studentId} not found`);
+    }
+
+    // Check if already a laureate
+    const existing = await this.prisma.laureate.findUnique({
+      where: { studentId },
+    });
+
+    if (existing) {
+      // Update graduation year if already laureate
+      return this.prisma.laureate.update({
+        where: { studentId },
+        data: { graduationYear },
+      });
+    }
+
+    // Create new laureate record
+    return this.prisma.laureate.create({
+      data: {
+        studentId,
+        graduationYear,
+      },
+    });
+  }
+
+  async removeLaureate(studentId: number) {
+    const laureate = await this.prisma.laureate.findUnique({
+      where: { studentId },
+    });
+
+    if (!laureate) {
+      // Not an error, just nothing to remove
+      return null;
+    }
+
+    return this.prisma.laureate.delete({
+      where: { studentId },
+    });
   }
 
   async importFromBuffer(buffer: Buffer): Promise<{ imported: number; errors: string[] }> {

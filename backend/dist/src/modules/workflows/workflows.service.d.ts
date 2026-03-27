@@ -26,10 +26,10 @@ export declare class WorkflowsService {
         id: number;
         createdAt: Date;
         updatedAt: Date;
+        status: import(".prisma/client").$Enums.WorkflowStatus;
         studentId: number | null;
         title: string;
         description: string | null;
-        status: import(".prisma/client").$Enums.WorkflowStatus;
         assignedToId: number;
     })[]>;
     findOne(id: number): import(".prisma/client").Prisma.Prisma__WorkflowTaskClient<({
@@ -54,40 +54,40 @@ export declare class WorkflowsService {
         id: number;
         createdAt: Date;
         updatedAt: Date;
+        status: import(".prisma/client").$Enums.WorkflowStatus;
         studentId: number | null;
         title: string;
         description: string | null;
-        status: import(".prisma/client").$Enums.WorkflowStatus;
         assignedToId: number;
     }) | null, null, import("@prisma/client/runtime/library").DefaultArgs>;
     create(dto: CreateWorkflowDto): Promise<{
         id: number;
         createdAt: Date;
         updatedAt: Date;
+        status: import(".prisma/client").$Enums.WorkflowStatus;
         studentId: number | null;
         title: string;
         description: string | null;
-        status: import(".prisma/client").$Enums.WorkflowStatus;
         assignedToId: number;
     }>;
     update(id: number, dto: UpdateWorkflowDto): Promise<{
         id: number;
         createdAt: Date;
         updatedAt: Date;
+        status: import(".prisma/client").$Enums.WorkflowStatus;
         studentId: number | null;
         title: string;
         description: string | null;
-        status: import(".prisma/client").$Enums.WorkflowStatus;
         assignedToId: number;
     }>;
     remove(id: number): import(".prisma/client").Prisma.Prisma__WorkflowTaskClient<{
         id: number;
         createdAt: Date;
         updatedAt: Date;
+        status: import(".prisma/client").$Enums.WorkflowStatus;
         studentId: number | null;
         title: string;
         description: string | null;
-        status: import(".prisma/client").$Enums.WorkflowStatus;
         assignedToId: number;
     }, never, import("@prisma/client/runtime/library").DefaultArgs>;
 }

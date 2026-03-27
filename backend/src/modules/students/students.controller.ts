@@ -21,6 +21,7 @@ import { StudentsService } from './students.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { TransferStudentsDto } from './dto/transfer-students.dto';
+import { ProgressStudentsDto } from './dto/progress-students.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -64,6 +65,24 @@ export class StudentsController {
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   transfer(@Body() dto: TransferStudentsDto, @Req() req: AuthRequest) {
     return this.studentsService.transferStudents(dto, req.user.sub);
+  }
+
+  @Post('progress')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  progress(@Body() dto: ProgressStudentsDto, @Req() req: AuthRequest) {
+    return this.studentsService.progressStudents(dto, req.user.sub);
+  }
+
+  @Post(':id/make-laureate')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  makeLaureate(@Param('id', ParseIntPipe) id: number, @Body() body: { graduationYear: number }) {
+    return this.studentsService.makeLaureate(id, body.graduationYear);
+  }
+
+  @Delete(':id/remove-laureate')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  removeLaureate(@Param('id', ParseIntPipe) id: number) {
+    return this.studentsService.removeLaureate(id);
   }
 
   @Get(':id')

@@ -3,6 +3,7 @@ import { StudentsService } from './students.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { TransferStudentsDto } from './dto/transfer-students.dto';
+import { ProgressStudentsDto } from './dto/progress-students.dto';
 import { StudentsQueryDto } from './dto/students-query.dto';
 import { JwtPayload } from '../../auth/strategies/jwt.strategy';
 type AuthRequest = Request & {
@@ -48,11 +49,6 @@ export declare class StudentsController {
                 filiereId: number | null;
                 classType: string | null;
             }) | null;
-            laureate: {
-                id: number;
-                graduationYear: number;
-                diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
-            } | null;
             classHistory: ({
                 academicClass: {
                     id: number;
@@ -66,11 +62,17 @@ export declare class StudentsController {
             } & {
                 id: number;
                 createdAt: Date;
-                academicYear: string;
                 classId: number;
+                academicYear: string;
                 studentId: number;
                 studyYear: number;
+                decisionStatus: string | null;
             })[];
+            laureate: {
+                id: number;
+                graduationYear: number;
+                diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
+            } | null;
         } & {
             id: number;
             email: string | null;
@@ -78,11 +80,11 @@ export declare class StudentsController {
             createdAt: Date;
             updatedAt: Date;
             filiereId: number | null;
+            cin: string;
+            codeMassar: string;
             firstName: string | null;
             lastName: string | null;
             sex: import(".prisma/client").$Enums.Sex;
-            cin: string;
-            codeMassar: string;
             dateNaissance: Date;
             telephone: string | null;
             cycle: import(".prisma/client").$Enums.StudentCycle;
@@ -90,8 +92,8 @@ export declare class StudentsController {
             prepaTrack: string | null;
             entryLevel: number | null;
             classId: number | null;
-            firstYearEntry: number;
             bacType: string | null;
+            firstYearEntry: number;
             anneeAcademique: string;
             dateInscription: Date;
         })[];
@@ -121,6 +123,30 @@ export declare class StudentsController {
         transferred: number;
         errors: string[];
     }>;
+    progress(dto: ProgressStudentsDto, req: AuthRequest): Promise<{
+        processed: number;
+        errors: string[];
+    }>;
+    makeLaureate(id: number, body: {
+        graduationYear: number;
+    }): Promise<{
+        id: number;
+        createdAt: Date;
+        updatedAt: Date;
+        studentId: number;
+        graduationYear: number;
+        diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
+        proofDocumentId: number | null;
+    }>;
+    removeLaureate(id: number): Promise<{
+        id: number;
+        createdAt: Date;
+        updatedAt: Date;
+        studentId: number;
+        graduationYear: number;
+        diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
+        proofDocumentId: number | null;
+    } | null>;
     findOne(id: number): import(".prisma/client").Prisma.Prisma__StudentClient<({
         filiere: ({
             department: {
@@ -170,10 +196,11 @@ export declare class StudentsController {
         } & {
             id: number;
             createdAt: Date;
-            academicYear: string;
             classId: number;
+            academicYear: string;
             studentId: number;
             studyYear: number;
+            decisionStatus: string | null;
         })[];
     } & {
         id: number;
@@ -182,11 +209,11 @@ export declare class StudentsController {
         createdAt: Date;
         updatedAt: Date;
         filiereId: number | null;
+        cin: string;
+        codeMassar: string;
         firstName: string | null;
         lastName: string | null;
         sex: import(".prisma/client").$Enums.Sex;
-        cin: string;
-        codeMassar: string;
         dateNaissance: Date;
         telephone: string | null;
         cycle: import(".prisma/client").$Enums.StudentCycle;
@@ -194,8 +221,8 @@ export declare class StudentsController {
         prepaTrack: string | null;
         entryLevel: number | null;
         classId: number | null;
-        firstYearEntry: number;
         bacType: string | null;
+        firstYearEntry: number;
         anneeAcademique: string;
         dateInscription: Date;
     }) | null, null, import("@prisma/client/runtime/library").DefaultArgs>;
@@ -248,10 +275,11 @@ export declare class StudentsController {
         } & {
             id: number;
             createdAt: Date;
-            academicYear: string;
             classId: number;
+            academicYear: string;
             studentId: number;
             studyYear: number;
+            decisionStatus: string | null;
         })[];
     } & {
         id: number;
@@ -260,11 +288,11 @@ export declare class StudentsController {
         createdAt: Date;
         updatedAt: Date;
         filiereId: number | null;
+        cin: string;
+        codeMassar: string;
         firstName: string | null;
         lastName: string | null;
         sex: import(".prisma/client").$Enums.Sex;
-        cin: string;
-        codeMassar: string;
         dateNaissance: Date;
         telephone: string | null;
         cycle: import(".prisma/client").$Enums.StudentCycle;
@@ -272,8 +300,8 @@ export declare class StudentsController {
         prepaTrack: string | null;
         entryLevel: number | null;
         classId: number | null;
-        firstYearEntry: number;
         bacType: string | null;
+        firstYearEntry: number;
         anneeAcademique: string;
         dateInscription: Date;
     }) | null>;
@@ -326,10 +354,11 @@ export declare class StudentsController {
         } & {
             id: number;
             createdAt: Date;
-            academicYear: string;
             classId: number;
+            academicYear: string;
             studentId: number;
             studyYear: number;
+            decisionStatus: string | null;
         })[];
     } & {
         id: number;
@@ -338,11 +367,11 @@ export declare class StudentsController {
         createdAt: Date;
         updatedAt: Date;
         filiereId: number | null;
+        cin: string;
+        codeMassar: string;
         firstName: string | null;
         lastName: string | null;
         sex: import(".prisma/client").$Enums.Sex;
-        cin: string;
-        codeMassar: string;
         dateNaissance: Date;
         telephone: string | null;
         cycle: import(".prisma/client").$Enums.StudentCycle;
@@ -350,8 +379,8 @@ export declare class StudentsController {
         prepaTrack: string | null;
         entryLevel: number | null;
         classId: number | null;
-        firstYearEntry: number;
         bacType: string | null;
+        firstYearEntry: number;
         anneeAcademique: string;
         dateInscription: Date;
     }) | null>;
@@ -362,11 +391,11 @@ export declare class StudentsController {
         createdAt: Date;
         updatedAt: Date;
         filiereId: number | null;
+        cin: string;
+        codeMassar: string;
         firstName: string | null;
         lastName: string | null;
         sex: import(".prisma/client").$Enums.Sex;
-        cin: string;
-        codeMassar: string;
         dateNaissance: Date;
         telephone: string | null;
         cycle: import(".prisma/client").$Enums.StudentCycle;
@@ -374,8 +403,8 @@ export declare class StudentsController {
         prepaTrack: string | null;
         entryLevel: number | null;
         classId: number | null;
-        firstYearEntry: number;
         bacType: string | null;
+        firstYearEntry: number;
         anneeAcademique: string;
         dateInscription: Date;
     }, never, import("@prisma/client/runtime/library").DefaultArgs>;

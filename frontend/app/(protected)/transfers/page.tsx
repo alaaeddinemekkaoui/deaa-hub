@@ -1,16 +1,26 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, FileText, FileSpreadsheet, Upload, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { CheckCircle, XCircle, RefreshCw, ChevronDown } from 'lucide-react';
 import { PageHeader } from '@/components/admin/page-header';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
-import * as XLSX from 'xlsx';
+
+/* ── Types ──────────────────────────────────────────────────────────────── */
+type Department = { id: number; name: string };
+
+type Filiere = {
+  id: number;
+  name: string;
+  departmentId: number;
+};
 
 type AcademicClass = {
   id: number;
   name: string;
-  filiere?: { name: string } | null;
+  year: number;
+  filiereId: number | null;
+  filiere?: { id: number; name: string } | null;
 };
 
 type StudentRow = {
@@ -18,169 +28,218 @@ type StudentRow = {
   fullName: string;
   codeMassar: string;
   anneeAcademique: string;
-  filiere?: { name: string } | null;
+  firstYearEntry: number;
+  filiere?: { id: number; name: string } | null;
 };
 
-type TransferResult = {
-  transferred: number;
-  errors: string[];
-};
+type StudentStatus = 'admis' | 'non_admis' | 'redoublant';
+type StudentWithStatus = StudentRow & { status: StudentStatus };
 
-/* ── Next academic year helper ─────────────────────────────────────────── */
+type ProgressResult = { processed: number; errors: string[] };
+
+/* ── Helpers ────────────────────────────────────────────────────────────── */
 function nextAcademicYear(current: string): string {
   const match = current.match(/(\d{4})\/(\d{4})/);
   if (!match) return current;
-  const start = Number(match[1]) + 1;
-  const end = Number(match[2]) + 1;
-  return `${start}/${end}`;
+  return `${Number(match[1]) + 1}/${Number(match[2]) + 1}`;
 }
 
-/* ── Import CSV/XLSX and return student IDs ────────────────────────────── */
-async function parseImportedIds(file: File): Promise<number[]> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const wb = XLSX.read(data, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null });
-        const ids = rows
-          .map((r) => Number(r['studentId'] ?? r['id'] ?? r['Id'] ?? r['StudentId']))
-          .filter((n) => Number.isInteger(n) && n > 0);
-        resolve(ids);
-      } catch {
-        reject(new Error('Failed to parse file'));
-      }
-    };
-    reader.onerror = () => reject(new Error('File read error'));
-    reader.readAsArrayBuffer(file);
-  });
+const STATUS_COLORS: Record<StudentStatus, string> = {
+  admis: 'bg-emerald-50',
+  non_admis: 'bg-red-50',
+  redoublant: 'bg-orange-50',
+};
+
+const STATUS_BADGE: Record<StudentStatus, string> = {
+  admis: 'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-800',
+  non_admis: 'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-red-100 text-red-800',
+  redoublant: 'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-orange-100 text-orange-800',
+};
+
+/* ── Cascading class selector component ────────────────────────────────── */
+function ClassSelector({
+  label,
+  hint,
+  value,
+  onChange,
+  departments,
+  filieres,
+  classes,
+  excludeClassId,
+  disabled,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (v: string) => void;
+  departments: Department[];
+  filieres: Filiere[];
+  classes: AcademicClass[];
+  excludeClassId?: string;
+  disabled?: boolean;
+}) {
+  const [deptFilter, setDeptFilter] = useState('');
+  const [filiereFilter, setFiliereFilter] = useState('');
+
+  const filteredFilieres = useMemo(
+    () => (deptFilter ? filieres.filter((f) => f.departmentId === Number(deptFilter)) : filieres),
+    [filieres, deptFilter],
+  );
+
+  const filteredClasses = useMemo(() => {
+    let result = classes;
+    if (excludeClassId) result = result.filter((c) => String(c.id) !== excludeClassId);
+    if (filiereFilter) result = result.filter((c) => c.filiereId === Number(filiereFilter));
+    else if (deptFilter) {
+      const deptFiliereIds = new Set(
+        filieres.filter((f) => f.departmentId === Number(deptFilter)).map((f) => f.id),
+      );
+      result = result.filter((c) => c.filiereId !== null && deptFiliereIds.has(c.filiereId!));
+    }
+    return result;
+  }, [classes, filieres, deptFilter, filiereFilter, excludeClassId]);
+
+  // Clear filière filter when dept changes
+  const handleDeptChange = (v: string) => {
+    setDeptFilter(v);
+    setFiliereFilter('');
+    onChange('');
+  };
+
+  const handleFiliereChange = (v: string) => {
+    setFiliereFilter(v);
+    onChange('');
+  };
+
+  return (
+    <div className="space-y-2">
+      <label className="field-label">{label}</label>
+      {hint && <p className="text-xs text-slate-400 -mt-1">{hint}</p>}
+
+      {/* Department filter */}
+      <div className="grid grid-cols-2 gap-2">
+        <select
+          className="input text-sm"
+          value={deptFilter}
+          onChange={(e) => handleDeptChange(e.target.value)}
+          disabled={disabled}
+        >
+          <option value="">Tous les départements</option>
+          {departments.map((d) => (
+            <option key={d.id} value={d.id}>{d.name}</option>
+          ))}
+        </select>
+
+        <select
+          className="input text-sm"
+          value={filiereFilter}
+          onChange={(e) => handleFiliereChange(e.target.value)}
+          disabled={disabled}
+        >
+          <option value="">Toutes les filières</option>
+          {filteredFilieres.map((f) => (
+            <option key={f.id} value={f.id}>{f.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Class dropdown */}
+      <select
+        className="input"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+      >
+        <option value="">— choisir une classe —</option>
+        {filteredClasses.map((c) => (
+          <option key={c.id} value={String(c.id)}>
+            {c.name}
+            {c.filiere ? ` · ${c.filiere.name}` : ''}
+          </option>
+        ))}
+      </select>
+
+      {filteredClasses.length === 0 && (filiereFilter || deptFilter) && (
+        <p className="text-xs text-slate-400">Aucune classe pour ce filtre.</p>
+      )}
+    </div>
+  );
 }
 
+/* ── Main page ──────────────────────────────────────────────────────────── */
 export default function TransfersPage() {
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [filieres, setFilieres] = useState<Filiere[]>([]);
   const [classes, setClasses] = useState<AcademicClass[]>([]);
+
   const [fromClassId, setFromClassId] = useState('');
   const [toClassId, setToClassId] = useState('');
-  const [students, setStudents] = useState<StudentRow[]>([]);
+  const [students, setStudents] = useState<StudentWithStatus[]>([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [academicYear, setAcademicYear] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<TransferResult | null>(null);
+  const [result, setResult] = useState<ProgressResult | null>(null);
 
-  // CSV/XLSX import for student selection
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importedIds, setImportedIds] = useState<number[] | null>(null);
-
-  /* load classes on mount */
+  /* load reference data on mount */
   useEffect(() => {
-    api.get<{ data: AcademicClass[] }>('/classes', { params: { limit: 200 } })
-      .then((r) => {
-        const classData = r.data?.data || [];
-        setClasses(classData);
-      })
-      .catch((error) => {
-        console.error('Failed to load classes:', error);
-        toast.error('Impossible de charger les classes');
-      });
+    Promise.all([
+      api.get('/departments', { params: { limit: 200 } }),
+      api.get('/filieres', { params: { limit: 200 } }),
+      api.get('/classes', { params: { limit: 200 } }),
+    ]).then(([deptRes, filRes, clsRes]) => {
+      setDepartments((deptRes.data?.data as Department[]) || []);
+      setFilieres((filRes.data?.data as Filiere[]) || []);
+      setClasses((clsRes.data?.data as AcademicClass[]) || []);
+    }).catch(() => toast.error('Impossible de charger les données'));
   }, []);
 
-  /* load students when fromClass changes */
+  /* load students when source class changes */
   useEffect(() => {
-    if (!fromClassId) { setStudents([]); setSelectedIds(new Set()); return; }
+    if (!fromClassId) { setStudents([]); return; }
     setLoadingStudents(true);
-    const classIdNum = Number(fromClassId);
-    if (!Number.isInteger(classIdNum) || classIdNum < 1) {
-      console.error('Invalid classId:', fromClassId);
-      toast.error('ID de classe invalide');
-      setLoadingStudents(false);
-      return;
-    }
-    api.get(`/students/by-class/${classIdNum}`)
+    api.get(`/students/by-class/${fromClassId}`)
       .then((r) => {
-        const studentData = Array.isArray(r.data) ? r.data : (r.data?.data as StudentRow[]) || [];
-        setStudents(studentData);
-        setSelectedIds(new Set());
-        // auto-suggest next academic year from first student
-        if (studentData.length > 0) {
-          setAcademicYear(nextAcademicYear(studentData[0].anneeAcademique));
+        const data: StudentRow[] = Array.isArray(r.data) ? r.data : [];
+        setStudents(data.map((s) => ({ ...s, status: 'admis' as StudentStatus })));
+        if (data.length > 0) {
+          setAcademicYear(nextAcademicYear(data[0].anneeAcademique));
         }
       })
-      .catch((error) => {
-        console.error('Failed to load students:', error);
-        if (error.response?.status === 404) {
-          toast.error('Aucun étudiant trouvé dans cette classe');
-        } else {
-          toast.error('Impossible de charger les étudiants de la classe sélectionnée');
-        }
-      })
+      .catch(() => toast.error('Impossible de charger les étudiants'))
       .finally(() => setLoadingStudents(false));
   }, [fromClassId]);
 
-  const allChecked = students.length > 0 && selectedIds.size === students.length;
-  const toggleAll = () => {
-    if (allChecked) setSelectedIds(new Set());
-    else setSelectedIds(new Set(students.map((s) => s.id)));
-  };
-  const toggleOne = (id: number) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const setStudentStatus = (id: number, status: StudentStatus) => {
+    setStudents((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
   };
 
-  /* handle file import for student IDs */
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0] ?? null;
-    setImportFile(f);
-    if (!f) { setImportedIds(null); return; }
-    try {
-      const ids = await parseImportedIds(f);
-      setImportedIds(ids);
-      // pre-select matching students
-      const matching = new Set(
-        students.filter((s) => ids.includes(s.id)).map((s) => s.id),
-      );
-      setSelectedIds(matching);
-      toast.success(`${matching.size} student(s) selected from file`);
-    } catch {
-      toast.error('Impossible de lire le fichier importé');
-    }
+  const setAllStatus = (status: StudentStatus) => {
+    setStudents((prev) => prev.map((s) => ({ ...s, status })));
   };
 
-  const activeIds = useMemo(
-    () => (importedIds !== null ? importedIds : [...selectedIds]),
-    [importedIds, selectedIds],
-  );
+  const counts = students.reduce((acc, s) => {
+    acc[s.status] = (acc[s.status] || 0) + 1;
+    return acc;
+  }, {} as Record<StudentStatus, number>);
 
-  const canTransfer =
-    fromClassId &&
-    toClassId &&
-    fromClassId !== toClassId &&
-    activeIds.length > 0 &&
-    academicYear.trim();
+  const canSubmit = fromClassId && toClassId && fromClassId !== toClassId && students.length > 0 && academicYear.trim();
 
-  const handleTransfer = async () => {
-    if (!canTransfer) return;
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
     setSubmitting(true);
     try {
-      const res = await api.post<TransferResult>('/students/transfer', {
+      const res = await api.post<ProgressResult>('/students/progress', {
         fromClassId: Number(fromClassId),
         toClassId: Number(toClassId),
-        studentIds: activeIds,
         academicYear: academicYear.trim(),
+        students: students.map((s) => ({ id: s.id, status: s.status })),
       });
       setResult(res.data);
-      if (res.data.transferred > 0) {
-        toast.success(`${res.data.transferred} étudiant(s) transféré(s) avec succès`);
+      if (res.data.processed > 0) {
+        toast.success(`${res.data.processed} étudiant(s) traité(s) avec succès`);
       }
-    } catch (error) {
-      console.error('Transfer error:', error);
-      toast.error('Le transfert a échoué. Veuillez réessayer.');
+    } catch {
+      toast.error('Le traitement a échoué. Veuillez réessayer.');
     } finally {
       setSubmitting(false);
     }
@@ -190,27 +249,24 @@ export default function TransfersPage() {
     setFromClassId('');
     setToClassId('');
     setStudents([]);
-    setSelectedIds(new Set());
     setAcademicYear('');
     setResult(null);
-    setImportFile(null);
-    setImportedIds(null);
-    if (fileRef.current) fileRef.current.value = '';
   };
+
+  const targetClassName = classes.find((c) => String(c.id) === toClassId)?.name;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Transfert d'étudiants"
-        description="Déplacez un groupe d'étudiants d'une classe à une autre et mettez à jour leur année académique. L'historique de leur classe est préservé automatiquement."
+        title="Passage de classe"
+        description="Sélectionnez la classe source, définissez le statut de chaque étudiant, puis choisissez la classe cible pour les admis."
       />
 
       {result ? (
-        /* ── Result view ── */
         <div className="surface-card space-y-4">
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
             <p className="text-sm font-semibold text-emerald-800">
-              {result.transferred} étudiant(s) transféré(s) avec succès
+              {result.processed} étudiant(s) traité(s) avec succès
             </p>
           </div>
           {result.errors.length > 0 && (
@@ -227,136 +283,65 @@ export default function TransfersPage() {
           )}
           <div className="flex justify-end">
             <button className="btn-primary" type="button" onClick={handleReset}>
-              Nouveau transfert
+              Nouveau passage
             </button>
           </div>
         </div>
       ) : (
         <div className="space-y-5">
-          {/* ── Step 1: From / To / Year ── */}
+
+          {/* ── Step 1: Source class ── */}
           <div className="surface-card space-y-4">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-              Étape 1 — Sélectionner les classes &amp; l'année cible
+              Étape 1 — Classe source
             </p>
-            <div className="grid gap-4 md:grid-cols-3 items-end">
-              <div className="field-stack">
-                <label className="field-label">De la classe</label>
-                <select
-                  className="input"
-                  value={fromClassId}
-                  onChange={(e) => {
-                    const selectedValue = e.target.value;
-                    console.log('Selected class ID:', selectedValue);
-                    setFromClassId(selectedValue);
-                    setResult(null);
-                  }}
-                >
-                  <option value="">— choisir la classe source —</option>
-                  {classes.map((c) => (
-                    <option key={c.id} value={String(c.id)}>
-                      {c.name}{c.filiere ? ` (${c.filiere.name})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center justify-center pt-5 text-slate-400">
-                <ArrowRight size={20} />
-              </div>
-
-              <div className="field-stack">
-                <label className="field-label">Vers la classe</label>
-                <select
-                  className="input"
-                  value={toClassId}
-                  onChange={(e) => {
-                    const selectedValue = e.target.value;
-                    console.log('Selected target class ID:', selectedValue);
-                    setToClassId(selectedValue);
-                  }}
-                >
-                  <option value="">— choisir la classe cible —</option>
-                  {classes
-                    .filter((c) => String(c.id) !== fromClassId)
-                    .map((c) => (
-                      <option key={c.id} value={String(c.id)}>
-                        {c.name}{c.filiere ? ` (${c.filiere.name})` : ''}
-                      </option>
-                    ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="field-stack max-w-xs">
-              <label className="field-label">Année académique cible</label>
-              <input
-                className="input"
-                placeholder="ex. 2026/2027"
-                value={academicYear}
-                onChange={(e) => setAcademicYear(e.target.value)}
-              />
-              <p className="text-xs text-slate-400">
-                L'année académique des étudiants sera mise à jour à cette valeur.
-              </p>
-            </div>
+            <ClassSelector
+              label="Classe source"
+              value={fromClassId}
+              onChange={(v) => { setFromClassId(v); setToClassId(''); setResult(null); }}
+              departments={departments}
+              filieres={filieres}
+              classes={classes}
+            />
           </div>
 
-          {/* ── Step 2: Select students ── */}
+          {/* ── Step 2: Students with status ── */}
           {fromClassId && (
             <div className="surface-card space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                  Étape 2 — Sélectionner les étudiants
+                  Étape 2 — Statut des étudiants
                 </p>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">
-                    {importedIds !== null
-                      ? `${importedIds.length} du fichier`
-                      : `${selectedIds.size} sélectionné(s)`}
-                  </span>
-                  {/* import file */}
-                  <button
-                    type="button"
-                    className="btn-outline gap-1.5 text-xs py-1"
-                    onClick={() => fileRef.current?.click()}
-                  >
-                    <Upload size={13} />
-                    Importer la liste
-                  </button>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept=".csv,.xlsx"
-                    className="hidden"
-                    onChange={handleFileChange}
-                  />
-                  {importFile && (
-                    <button
-                      type="button"
-                      className="text-slate-400 hover:text-red-500"
-                      onClick={() => {
-                        setImportFile(null);
-                        setImportedIds(null);
-                        if (fileRef.current) fileRef.current.value = '';
-                      }}
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
 
-              {importFile && (
-                <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
-                  {importFile.name.endsWith('.xlsx')
-                    ? <FileSpreadsheet size={16} className="text-emerald-600" />
-                    : <FileText size={16} className="text-emerald-600" />}
-                  <span className="font-medium text-slate-800">{importFile.name}</span>
-                  <span className="text-slate-500 text-xs">
-                    — {importedIds?.length ?? 0} IDs trouvés
-                  </span>
-                </div>
-              )}
+                {students.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {(counts.admis ?? 0) > 0 && (
+                      <span className={STATUS_BADGE.admis}>
+                        <CheckCircle size={11} />
+                        {counts.admis} admis
+                      </span>
+                    )}
+                    {(counts.non_admis ?? 0) > 0 && (
+                      <span className={STATUS_BADGE.non_admis}>
+                        <XCircle size={11} />
+                        {counts.non_admis} non admis
+                      </span>
+                    )}
+                    {(counts.redoublant ?? 0) > 0 && (
+                      <span className={STATUS_BADGE.redoublant}>
+                        <RefreshCw size={11} />
+                        {counts.redoublant} redoublant(s)
+                      </span>
+                    )}
+                    <div className="flex items-center gap-1 border-l border-slate-200 pl-2 ml-1">
+                      <span className="text-xs text-slate-400 mr-1">Tout :</span>
+                      <button type="button" className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100" onClick={() => setAllStatus('admis')}>Admis</button>
+                      <button type="button" className="rounded-lg border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-100" onClick={() => setAllStatus('non_admis')}>Non Admis</button>
+                      <button type="button" className="rounded-lg border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 hover:bg-orange-100" onClick={() => setAllStatus('redoublant')}>Redoublant</button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {loadingStudents ? (
                 <p className="text-sm text-slate-400">Chargement des étudiants…</p>
@@ -368,68 +353,106 @@ export default function TransfersPage() {
                     <table className="table-base">
                       <thead>
                         <tr>
-                          <th className="w-10">
-                            <input
-                              type="checkbox"
-                              checked={allChecked}
-                              onChange={toggleAll}
-                              className="cursor-pointer"
-                              disabled={importedIds !== null}
-                            />
-                          </th>
                           <th>Étudiant</th>
                           <th>Code Massar</th>
                           <th>Filière</th>
                           <th>Année actuelle</th>
+                          <th>Statut</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {students.map((s) => {
-                          const checked = importedIds !== null
-                            ? importedIds.includes(s.id)
-                            : selectedIds.has(s.id);
-                          return (
-                            <tr
-                              key={s.id}
-                              className={checked ? 'bg-emerald-50/60' : ''}
-                              onClick={() => importedIds === null && toggleOne(s.id)}
-                              style={{ cursor: importedIds === null ? 'pointer' : 'default' }}
-                            >
-                              <td onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => importedIds === null && toggleOne(s.id)}
-                                  className="cursor-pointer"
-                                  disabled={importedIds !== null}
-                                />
-                              </td>
-                              <td className="font-medium text-slate-900">{s.fullName}</td>
-                              <td className="text-slate-500">{s.codeMassar}</td>
-                              <td className="text-slate-500">{s.filiere?.name ?? '—'}</td>
-                              <td className="text-slate-500">{s.anneeAcademique}</td>
-                            </tr>
-                          );
-                        })}
+                        {students.map((s) => (
+                          <tr key={s.id} className={STATUS_COLORS[s.status]}>
+                            <td className="font-medium text-slate-900">{s.fullName}</td>
+                            <td className="text-slate-500">{s.codeMassar}</td>
+                            <td className="text-slate-500">{s.filiere?.name ?? '—'}</td>
+                            <td className="text-slate-500">{s.anneeAcademique}</td>
+                            <td>
+                              <div className="relative inline-block">
+                                <select
+                                  className={`appearance-none cursor-pointer rounded-lg border py-1 pl-2.5 pr-7 text-xs font-semibold focus:outline-none transition-colors
+                                    ${s.status === 'admis' ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
+                                      : s.status === 'non_admis' ? 'border-red-300 bg-red-100 text-red-800'
+                                      : 'border-orange-300 bg-orange-100 text-orange-800'}`}
+                                  value={s.status}
+                                  onChange={(e) => setStudentStatus(s.id, e.target.value as StudentStatus)}
+                                >
+                                  <option value="admis">Admis</option>
+                                  <option value="non_admis">Non Admis</option>
+                                  <option value="redoublant">Redoublant</option>
+                                </select>
+                                <ChevronDown size={12} className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-current opacity-60" />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
                 </div>
               )}
+
+              {students.length > 0 && (
+                <p className="text-xs text-slate-500 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <strong>Admis</strong> → déplacés vers la classe cible, année mise à jour.{' '}
+                  <strong>Non Admis / Redoublant</strong> → restent dans la même classe, année mise à jour. L&apos;historique est conservé.
+                </p>
+              )}
             </div>
           )}
 
-          {/* ── Execute ── */}
-          <div className="flex justify-end gap-2">
-            <button
-              className="btn-primary"
-              type="button"
-              disabled={!canTransfer || submitting}
-              onClick={handleTransfer}
-            >
-              {submitting ? 'Transfert en cours…' : `Transférer ${activeIds.length} étudiant(s)`}
-            </button>
-          </div>
+          {/* ── Step 3: Target class + year ── */}
+          {fromClassId && students.length > 0 && (
+            <div className="surface-card space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                Étape 3 — Classe cible &amp; année académique
+              </p>
+              <div className="grid gap-6 md:grid-cols-2">
+                <ClassSelector
+                  label="Classe cible"
+                  hint="Pour les étudiants admis uniquement"
+                  value={toClassId}
+                  onChange={setToClassId}
+                  departments={departments}
+                  filieres={filieres}
+                  classes={classes}
+                  excludeClassId={fromClassId}
+                />
+                <div className="field-stack">
+                  <label className="field-label">Nouvelle année académique</label>
+                  <input
+                    className="input"
+                    placeholder="ex. 2026/2027"
+                    value={academicYear}
+                    onChange={(e) => setAcademicYear(e.target.value)}
+                  />
+                  <p className="text-xs text-slate-400">Appliquée à tous les étudiants.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Submit ── */}
+          {students.length > 0 && (
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-sm text-slate-500">
+                {counts.admis ?? 0} admis → <strong>{targetClassName ?? '—'}</strong>
+                {(counts.non_admis ?? 0) + (counts.redoublant ?? 0) > 0 && (
+                  <span className="ml-2 text-slate-400">
+                    · {(counts.non_admis ?? 0) + (counts.redoublant ?? 0)} restent dans leur classe
+                  </span>
+                )}
+              </p>
+              <button
+                className="btn-primary"
+                type="button"
+                disabled={!canSubmit || submitting}
+                onClick={handleSubmit}
+              >
+                {submitting ? 'Traitement en cours…' : `Valider le passage (${students.length} étudiants)`}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

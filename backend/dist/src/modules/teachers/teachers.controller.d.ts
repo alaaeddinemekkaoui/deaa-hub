@@ -37,13 +37,6 @@ export declare class TeachersController {
                 departmentId: number;
                 filiereType: string | null;
             } | null;
-            _count: {
-                department: number;
-                filiere: number;
-                role: number;
-                grade: number;
-                taughtClasses: number;
-            };
             grade: {
                 id: number;
                 createdAt: Date;
@@ -56,6 +49,13 @@ export declare class TeachersController {
                 classId: number;
                 teacherId: number;
             }[];
+            _count: {
+                department: number;
+                filiere: number;
+                role: number;
+                grade: number;
+                taughtClasses: number;
+            };
         } & {
             id: number;
             email: string | null;
@@ -63,9 +63,9 @@ export declare class TeachersController {
             updatedAt: Date;
             departmentId: number;
             filiereId: number | null;
+            cin: string | null;
             firstName: string;
             lastName: string;
-            cin: string | null;
             dateInscription: Date;
             phoneNumber: string | null;
             roleId: number;
@@ -187,13 +187,6 @@ export declare class TeachersController {
             departmentId: number;
             filiereType: string | null;
         } | null;
-        _count: {
-            department: number;
-            filiere: number;
-            role: number;
-            grade: number;
-            taughtClasses: number;
-        };
         grade: {
             id: number;
             createdAt: Date;
@@ -206,6 +199,13 @@ export declare class TeachersController {
             classId: number;
             teacherId: number;
         }[];
+        _count: {
+            department: number;
+            filiere: number;
+            role: number;
+            grade: number;
+            taughtClasses: number;
+        };
     } & {
         id: number;
         email: string | null;
@@ -213,9 +213,9 @@ export declare class TeachersController {
         updatedAt: Date;
         departmentId: number;
         filiereId: number | null;
+        cin: string | null;
         firstName: string;
         lastName: string;
-        cin: string | null;
         dateInscription: Date;
         phoneNumber: string | null;
         roleId: number;
@@ -243,13 +243,6 @@ export declare class TeachersController {
             departmentId: number;
             filiereType: string | null;
         } | null;
-        _count: {
-            department: number;
-            filiere: number;
-            role: number;
-            grade: number;
-            taughtClasses: number;
-        };
         grade: {
             id: number;
             createdAt: Date;
@@ -262,6 +255,13 @@ export declare class TeachersController {
             classId: number;
             teacherId: number;
         }[];
+        _count: {
+            department: number;
+            filiere: number;
+            role: number;
+            grade: number;
+            taughtClasses: number;
+        };
     } & {
         id: number;
         email: string | null;
@@ -269,9 +269,9 @@ export declare class TeachersController {
         updatedAt: Date;
         departmentId: number;
         filiereId: number | null;
+        cin: string | null;
         firstName: string;
         lastName: string;
-        cin: string | null;
         dateInscription: Date;
         phoneNumber: string | null;
         roleId: number;
@@ -284,9 +284,9 @@ export declare class TeachersController {
         updatedAt: Date;
         departmentId: number;
         filiereId: number | null;
+        cin: string | null;
         firstName: string;
         lastName: string;
-        cin: string | null;
         dateInscription: Date;
         phoneNumber: string | null;
         roleId: number;
@@ -299,9 +299,9 @@ export declare class TeachersController {
         updatedAt: Date;
         departmentId: number;
         filiereId: number | null;
+        cin: string | null;
         firstName: string;
         lastName: string;
-        cin: string | null;
         dateInscription: Date;
         phoneNumber: string | null;
         roleId: number;

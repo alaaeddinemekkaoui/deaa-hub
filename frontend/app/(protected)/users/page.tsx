@@ -425,215 +425,199 @@ export default function UsersPage() {
       </section>
 
       {isAdmin ? (
-        <section className="surface-card space-y-5">
+        <section className="surface-card space-y-6">
           <div className="panel-header">
             <div>
               <h2 className="panel-title">Paramètres d'administration</h2>
               <p className="panel-copy">
-                Maintenez les catalogues de rôles et grades d'enseignants, puis surveillez la santé du serveur et de la base de données à partir de la même section d'administration inférieure.
+                Vue simplifiée des paramètres système: statut global en premier, puis gestion des rôles et des grades d'enseignants.
               </p>
             </div>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-3">
-            <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5">
-              <div className="space-y-3">
-                <div>
-                  <h3 className="text-base font-semibold text-slate-950">
-                    Rôles d'enseignants
-                  </h3>
-                  <p className="text-sm text-slate-500">
-                    Étiquettes réservées aux administrateurs comme enseignant, chef de filière et chef de département.
-                  </p>
-                </div>
-                <div className="space-y-3">
-                  <input
-                    className="input"
-                    value={roleName}
-                    onChange={(event) => setRoleName(event.target.value)}
-                    placeholder="Ajouter un rôle d'enseignant"
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      className="btn-primary"
-                      type="button"
-                      onClick={onSubmitRole}
-                      disabled={settingsSaving}
-                    >
-                      {editingRoleId ? 'Enregistrer le rôle' : 'Ajouter un rôle'}
-                    </button>
-                    {editingRoleId ? (
-                      <button
-                        className="btn-outline"
-                        type="button"
-                        onClick={resetRoleForm}
-                      >
-                        Annuler
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  {teacherRoles.map((item) => (
-                    <div
-                      key={item.id}
-                      className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-medium text-slate-950">{item.name}</p>
-                          <p className="text-sm text-slate-500">
-                            {item._count?.teachers ?? 0} enseignants assignés
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            className="btn-outline"
-                            onClick={() => {
-                              setEditingRoleId(item.id);
-                              setRoleName(item.name);
-                            }}
-                          >
-                            Modifier
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-outline"
-                            onClick={() => onDeleteRole(item.id)}
-                          >
-                            Supprimer
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-base font-semibold text-slate-950">Statut du système</h3>
+                <p className="text-sm text-slate-500">
+                  Vérifications en temps réel pour le serveur et la base de données.
+                </p>
               </div>
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={() => void loadAdminSettings()}
+              >
+                Actualiser le statut
+              </button>
             </div>
 
-            <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5">
-              <div className="space-y-3">
-                <div>
-                  <h3 className="text-base font-semibold text-slate-950">
-                    Grades d'enseignants
-                  </h3>
-                  <p className="text-sm text-slate-500">
-                    Grades académiques réservés aux administrateurs utilisés par l'annuaire et les filtres d'enseignants.
-                  </p>
-                </div>
-                <div className="space-y-3">
-                  <input
-                    className="input"
-                    value={gradeName}
-                    onChange={(event) => setGradeName(event.target.value)}
-                    placeholder="Ajouter un grade d'enseignant"
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      className="btn-primary"
-                      type="button"
-                      onClick={onSubmitGrade}
-                      disabled={settingsSaving}
-                    >
-                      {editingGradeId ? 'Enregistrer le grade' : 'Ajouter un grade'}
-                    </button>
-                    {editingGradeId ? (
-                      <button
-                        className="btn-outline"
-                        type="button"
-                        onClick={resetGradeForm}
-                      >
-                        Annuler
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  {teacherGrades.map((item) => (
-                    <div
-                      key={item.id}
-                      className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-medium text-slate-950">{item.name}</p>
-                          <p className="text-sm text-slate-500">
-                            {item._count?.teachers ?? 0} enseignants assignés
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            className="btn-outline"
-                            onClick={() => {
-                              setEditingGradeId(item.id);
-                              setGradeName(item.name);
-                            }}
-                          >
-                            Modifier
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-outline"
-                            onClick={() => onDeleteGrade(item.id)}
-                          >
-                            Supprimer
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">API Serveur</p>
+                <p className="mt-2 text-lg font-semibold text-slate-950">
+                  {appStatus?.service ?? 'Indisponible'}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Statut: {appStatus?.status ?? 'inconnu'}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Vérifiée: {appStatus ? new Date(appStatus.timestamp).toLocaleString() : '-'}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Base de données</p>
+                <p className="mt-2 text-lg font-semibold text-slate-950">
+                  {dbStatus?.dbConnected ? 'Connectée' : 'Indisponible'}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {dbStatus?.message ?? 'Aucun statut de base de données disponible'}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Vérifiée: {dbStatus ? new Date(dbStatus.timestamp).toLocaleString() : '-'}
+                </p>
               </div>
             </div>
+          </div>
 
-            <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5">
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-base font-semibold text-slate-950">
-                    Statut du système
-                  </h3>
-                  <p className="text-sm text-slate-500">
-                    Vérifications en temps réel pour le service serveur et la connexion à la base de données.
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
-                    API Serveur
-                  </p>
-                  <p className="mt-2 text-lg font-semibold text-slate-950">
-                    {appStatus?.service ?? 'Indisponible'}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Statut: {appStatus?.status ?? 'inconnu'}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Vérifiée: {appStatus ? new Date(appStatus.timestamp).toLocaleString() : '-'}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
-                    Base de données
-                  </p>
-                  <p className="mt-2 text-lg font-semibold text-slate-950">
-                    {dbStatus?.dbConnected ? 'Connectée' : 'Indisponible'}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    {dbStatus?.message ?? 'Aucun statut de base de données disponible'}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Vérifiée: {dbStatus ? new Date(dbStatus.timestamp).toLocaleString() : '-'}
-                  </p>
-                </div>
+          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 space-y-4">
+            <div>
+              <h3 className="text-base font-semibold text-slate-950">Rôles d'enseignants</h3>
+              <p className="text-sm text-slate-500">
+                Gérez les rôles administrables comme enseignant, chef de filière et chef de département.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <input
+                className="input"
+                value={roleName}
+                onChange={(event) => setRoleName(event.target.value)}
+                placeholder="Ajouter un rôle d'enseignant"
+              />
+              <div className="flex flex-wrap gap-2">
                 <button
+                  className="btn-primary"
                   type="button"
-                  className="btn-outline"
-                  onClick={() => void loadAdminSettings()}
+                  onClick={onSubmitRole}
+                  disabled={settingsSaving}
                 >
-                  Actualiser le statut
+                  {editingRoleId ? 'Enregistrer le rôle' : 'Ajouter un rôle'}
                 </button>
+                {editingRoleId ? (
+                  <button className="btn-outline" type="button" onClick={resetRoleForm}>
+                    Annuler
+                  </button>
+                ) : null}
               </div>
+            </div>
+
+            <div className="space-y-2">
+              {teacherRoles.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-slate-950">{item.name}</p>
+                      <p className="text-sm text-slate-500">
+                        {item._count?.teachers ?? 0} enseignants assignés
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        onClick={() => {
+                          setEditingRoleId(item.id);
+                          setRoleName(item.name);
+                        }}
+                      >
+                        Modifier
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        onClick={() => onDeleteRole(item.id)}
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 space-y-4">
+            <div>
+              <h3 className="text-base font-semibold text-slate-950">Grades d'enseignants</h3>
+              <p className="text-sm text-slate-500">
+                Ce catalogue est affiché sous les rôles pour garder une hiérarchie claire de configuration.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <input
+                className="input"
+                value={gradeName}
+                onChange={(event) => setGradeName(event.target.value)}
+                placeholder="Ajouter un grade d'enseignant"
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="btn-primary"
+                  type="button"
+                  onClick={onSubmitGrade}
+                  disabled={settingsSaving}
+                >
+                  {editingGradeId ? 'Enregistrer le grade' : 'Ajouter un grade'}
+                </button>
+                {editingGradeId ? (
+                  <button className="btn-outline" type="button" onClick={resetGradeForm}>
+                    Annuler
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {teacherGrades.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-slate-950">{item.name}</p>
+                      <p className="text-sm text-slate-500">
+                        {item._count?.teachers ?? 0} enseignants assignés
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        onClick={() => {
+                          setEditingGradeId(item.id);
+                          setGradeName(item.name);
+                        }}
+                      >
+                        Modifier
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        onClick={() => onDeleteGrade(item.id)}
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </section>

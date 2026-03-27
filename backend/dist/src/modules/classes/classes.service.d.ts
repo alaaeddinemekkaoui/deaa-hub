@@ -52,9 +52,9 @@ export declare class ClassesService {
                 updatedAt: Date;
                 departmentId: number;
                 filiereId: number | null;
+                cin: string | null;
                 firstName: string;
                 lastName: string;
-                cin: string | null;
                 dateInscription: Date;
                 phoneNumber: string | null;
                 roleId: number;
@@ -73,11 +73,11 @@ export declare class ClassesService {
             createdAt: Date;
             updatedAt: Date;
             filiereId: number | null;
+            cin: string;
+            codeMassar: string;
             firstName: string | null;
             lastName: string | null;
             sex: import(".prisma/client").$Enums.Sex;
-            cin: string;
-            codeMassar: string;
             dateNaissance: Date;
             telephone: string | null;
             cycle: import(".prisma/client").$Enums.StudentCycle;
@@ -85,8 +85,8 @@ export declare class ClassesService {
             prepaTrack: string | null;
             entryLevel: number | null;
             classId: number | null;
-            firstYearEntry: number;
             bacType: string | null;
+            firstYearEntry: number;
             anneeAcademique: string;
             dateInscription: Date;
         }[];

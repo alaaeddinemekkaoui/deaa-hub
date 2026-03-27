@@ -22,11 +22,11 @@ export declare class LaureatesService {
             createdAt: Date;
             updatedAt: Date;
             filiereId: number | null;
+            cin: string;
+            codeMassar: string;
             firstName: string | null;
             lastName: string | null;
             sex: import(".prisma/client").$Enums.Sex;
-            cin: string;
-            codeMassar: string;
             dateNaissance: Date;
             telephone: string | null;
             cycle: import(".prisma/client").$Enums.StudentCycle;
@@ -34,8 +34,8 @@ export declare class LaureatesService {
             prepaTrack: string | null;
             entryLevel: number | null;
             classId: number | null;
-            firstYearEntry: number;
             bacType: string | null;
+            firstYearEntry: number;
             anneeAcademique: string;
             dateInscription: Date;
         };
@@ -74,11 +74,11 @@ export declare class LaureatesService {
             createdAt: Date;
             updatedAt: Date;
             filiereId: number | null;
+            cin: string;
+            codeMassar: string;
             firstName: string | null;
             lastName: string | null;
             sex: import(".prisma/client").$Enums.Sex;
-            cin: string;
-            codeMassar: string;
             dateNaissance: Date;
             telephone: string | null;
             cycle: import(".prisma/client").$Enums.StudentCycle;
@@ -86,8 +86,8 @@ export declare class LaureatesService {
             prepaTrack: string | null;
             entryLevel: number | null;
             classId: number | null;
-            firstYearEntry: number;
             bacType: string | null;
+            firstYearEntry: number;
             anneeAcademique: string;
             dateInscription: Date;
         };

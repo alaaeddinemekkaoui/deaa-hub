@@ -20,6 +20,7 @@ const students_service_1 = require("./students.service");
 const create_student_dto_1 = require("./dto/create-student.dto");
 const update_student_dto_1 = require("./dto/update-student.dto");
 const transfer_students_dto_1 = require("./dto/transfer-students.dto");
+const progress_students_dto_1 = require("./dto/progress-students.dto");
 const jwt_auth_guard_1 = require("../../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../../common/guards/roles.guard");
 const roles_decorator_1 = require("../../common/decorators/roles.decorator");
@@ -43,6 +44,15 @@ let StudentsController = class StudentsController {
     }
     transfer(dto, req) {
         return this.studentsService.transferStudents(dto, req.user.sub);
+    }
+    progress(dto, req) {
+        return this.studentsService.progressStudents(dto, req.user.sub);
+    }
+    makeLaureate(id, body) {
+        return this.studentsService.makeLaureate(id, body.graduationYear);
+    }
+    removeLaureate(id) {
+        return this.studentsService.removeLaureate(id);
     }
     findOne(id) {
         return this.studentsService.findOne(id);
@@ -95,6 +105,32 @@ __decorate([
     __metadata("design:paramtypes", [transfer_students_dto_1.TransferStudentsDto, Object]),
     __metadata("design:returntype", void 0)
 ], StudentsController.prototype, "transfer", null);
+__decorate([
+    (0, common_1.Post)('progress'),
+    (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [progress_students_dto_1.ProgressStudentsDto, Object]),
+    __metadata("design:returntype", void 0)
+], StudentsController.prototype, "progress", null);
+__decorate([
+    (0, common_1.Post)(':id/make-laureate'),
+    (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object]),
+    __metadata("design:returntype", void 0)
+], StudentsController.prototype, "makeLaureate", null);
+__decorate([
+    (0, common_1.Delete)(':id/remove-laureate'),
+    (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number]),
+    __metadata("design:returntype", void 0)
+], StudentsController.prototype, "removeLaureate", null);
 __decorate([
     (0, common_1.Get)(':id'),
     (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF, role_type_1.UserRole.VIEWER),

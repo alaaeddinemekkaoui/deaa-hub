@@ -43,6 +43,46 @@ export default function StudentProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const getSortedHistory = (history: StudentClassHistory[] = []) =>
+    [...history].sort(
+      (a, b) => a.academicYear.localeCompare(b.academicYear) || a.id - b.id,
+    );
+
+  const isHistoryEntryRedoublant = (
+    history: StudentClassHistory[],
+    entryId: number,
+  ): boolean => {
+    const seenClassIds = new Set<number>();
+
+    for (const entry of history) {
+      const classId = entry.academicClass.id;
+      const repeated = seenClassIds.has(classId);
+
+      if (entry.id === entryId) {
+        return repeated;
+      }
+
+      seenClassIds.add(classId);
+    }
+
+    return false;
+  };
+
+  const isCurrentClassRedoublant = (profile: StudentProfile): boolean => {
+    if (!profile.academicClass || !profile.classHistory?.length) {
+      return false;
+    }
+
+    const sortedHistory = getSortedHistory(profile.classHistory);
+    const latestEntry = sortedHistory[sortedHistory.length - 1];
+
+    if (!latestEntry || latestEntry.academicClass.id !== profile.academicClass.id) {
+      return false;
+    }
+
+    return isHistoryEntryRedoublant(sortedHistory, latestEntry.id);
+  };
+
   useEffect(() => {
     const load = async () => {
       const id = Number(params.id);
@@ -147,10 +187,15 @@ export default function StudentProfilePage() {
             </div>
             <div className="field-stack">
               <label className="field-label">Classe actuelle</label>
-              <p className="input bg-slate-50">
-                {student.academicClass
-                  ? `${student.academicClass.name} (Année ${student.academicClass.year})`
-                  : '-'}
+              <p className="input bg-slate-50 flex items-center justify-between gap-2">
+                <span>
+                  {student.academicClass
+                    ? `${student.academicClass.name} (Année ${student.academicClass.year})`
+                    : '-'}
+                </span>
+                {student.academicClass && isCurrentClassRedoublant(student) ? (
+                  <span className="status-chip status-chip--warn text-xs">Redoublant</span>
+                ) : null}
               </p>
             </div>
           </div>
@@ -161,17 +206,22 @@ export default function StudentProfilePage() {
               <div className="relative pl-5">
                 <div className="absolute left-[7px] top-2 bottom-2 w-px bg-emerald-200" />
                 <ol className="space-y-3">
-                  {[...student.classHistory]
-                    .sort((a, b) => a.academicYear.localeCompare(b.academicYear))
-                    .map((entry, idx, arr) => {
+                  {getSortedHistory(student.classHistory).map((entry, idx, arr) => {
                       const isLatest = idx === arr.length - 1;
+                      const isEntryRedoublant = isHistoryEntryRedoublant(arr, entry.id);
+
                       return (
                         <li key={entry.id} className="relative flex items-start gap-3">
                           <span className={`absolute -left-5 mt-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 ${isLatest ? 'border-emerald-500 bg-emerald-500' : 'border-emerald-300 bg-white'}`} />
                           <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm w-full">
                             <div className="flex items-center justify-between gap-2 flex-wrap">
                               <span className="font-semibold text-slate-900">{entry.academicClass.name}</span>
-                              {isLatest && <span className="status-chip status-chip--ok text-xs">Actuelle</span>}
+                              <div className="flex items-center gap-2">
+                                {isEntryRedoublant ? (
+                                  <span className="status-chip status-chip--warn text-xs">Redoublant</span>
+                                ) : null}
+                                {isLatest ? <span className="status-chip status-chip--ok text-xs">Actuelle</span> : null}
+                              </div>
                             </div>
                             <div className="mt-0.5 flex items-center gap-3 text-xs text-slate-500">
                               <span>{entry.academicYear}</span>
