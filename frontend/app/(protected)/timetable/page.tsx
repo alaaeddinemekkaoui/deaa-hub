@@ -290,7 +290,7 @@ export default function TimetablePage() {
       )}
 
       {!selectedClassId ? (
-        <div className="surface-card empty-note">Sélectionnez une classe et cliquez sur Générer pour afficher l'emploi du temps.</div>
+        <div className="surface-card empty-note">Sélectionnez une classe et cliquez sur Générer pour afficher l’emploi du temps.</div>
       ) : (
         <section className="flex gap-4">
           {/* ── Weekly grid ── */}

@@ -312,6 +312,111 @@ let AccreditationsService = class AccreditationsService {
             orderBy: [{ academicYear: 'desc' }, { createdAt: 'desc' }],
         });
     }
+    async transferClassAssignment(classId, dto) {
+        await this.ensureClassExists(classId);
+        if (dto.fromAcademicYear === dto.toAcademicYear) {
+            throw new common_1.BadRequestException('Source and target academic years must be different');
+        }
+        const sourceAssignment = await this.prisma.classAccreditationAssignment.findUnique({
+            where: {
+                classId_academicYear: {
+                    classId,
+                    academicYear: dto.fromAcademicYear,
+                },
+            },
+            include: {
+                plan: {
+                    include: {
+                        lines: {
+                            select: {
+                                id: true,
+                                coursId: true,
+                                moduleId: true,
+                                elementId: true,
+                                semestre: true,
+                                volumeHoraire: true,
+                                isMandatory: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        if (!sourceAssignment) {
+            throw new common_1.NotFoundException(`No class accreditation assignment found for year ${dto.fromAcademicYear}`);
+        }
+        const existingTarget = await this.prisma.classAccreditationAssignment.findUnique({
+            where: {
+                classId_academicYear: {
+                    classId,
+                    academicYear: dto.toAcademicYear,
+                },
+            },
+            include: {
+                plan: {
+                    select: {
+                        id: true,
+                        name: true,
+                        academicYear: true,
+                    },
+                },
+            },
+        });
+        if (existingTarget) {
+            throw new common_1.ConflictException(`Class already has an accreditation assignment for ${dto.toAcademicYear} (plan: ${existingTarget.plan.name})`);
+        }
+        return this.prisma.$transaction(async (tx) => {
+            const sourcePlan = sourceAssignment.plan;
+            const requestedName = dto.targetPlanName?.trim() ||
+                `${sourcePlan.name} (${dto.toAcademicYear})`;
+            const targetName = await this.generateAvailablePlanName(tx, requestedName, dto.toAcademicYear);
+            const targetPlan = await tx.accreditationPlan.create({
+                data: {
+                    name: targetName,
+                    academicYear: dto.toAcademicYear,
+                    levelYear: sourcePlan.levelYear,
+                    filiereId: sourcePlan.filiereId,
+                    optionId: sourcePlan.optionId,
+                    cycleId: sourcePlan.cycleId,
+                    sourcePlanId: sourcePlan.id,
+                    status: client_1.AccreditationPlanStatus.draft,
+                },
+            });
+            if (sourcePlan.lines.length > 0) {
+                await tx.accreditationPlanLine.createMany({
+                    data: sourcePlan.lines.map((line) => ({
+                        planId: targetPlan.id,
+                        coursId: line.coursId,
+                        moduleId: line.moduleId,
+                        elementId: line.elementId,
+                        semestre: line.semestre,
+                        volumeHoraire: line.volumeHoraire,
+                        isMandatory: line.isMandatory,
+                        originLineId: line.id,
+                    })),
+                });
+            }
+            return tx.classAccreditationAssignment.create({
+                data: {
+                    classId,
+                    academicYear: dto.toAcademicYear,
+                    planId: targetPlan.id,
+                },
+                include: {
+                    class: { select: { id: true, name: true, year: true } },
+                    plan: {
+                        select: {
+                            id: true,
+                            name: true,
+                            academicYear: true,
+                            status: true,
+                            sourcePlanId: true,
+                        },
+                    },
+                },
+            });
+        });
+    }
     async diffWithSource(id) {
         const plan = await this.prisma.accreditationPlan.findUnique({
             where: { id },
@@ -477,6 +582,24 @@ let AccreditationsService = class AccreditationsService {
         });
         if (!item) {
             throw new common_1.NotFoundException(`ElementModule ${id} not found`);
+        }
+    }
+    async generateAvailablePlanName(tx, baseName, academicYear) {
+        let candidate = baseName;
+        let sequence = 2;
+        while (true) {
+            const existing = await tx.accreditationPlan.findFirst({
+                where: {
+                    name: { equals: candidate, mode: 'insensitive' },
+                    academicYear,
+                },
+                select: { id: true },
+            });
+            if (!existing) {
+                return candidate;
+            }
+            candidate = `${baseName} - v${sequence}`;
+            sequence += 1;
         }
     }
 };

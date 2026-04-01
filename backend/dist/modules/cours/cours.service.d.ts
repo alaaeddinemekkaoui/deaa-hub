@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateCoursDto } from './dto/create-cours.dto';
 import { UpdateCoursDto } from './dto/update-cours.dto';
@@ -119,7 +120,7 @@ export declare class CoursService {
         type: import(".prisma/client").$Enums.ElementType;
         elementModuleId: number | null;
     }>;
-    assignToClass(coursId: number, dto: AssignCoursClassDto): Promise<{
+    assignToClass(coursId: number, dto: AssignCoursClassDto): Promise<({
         teacher: {
             id: number;
             firstName: string;
@@ -145,8 +146,34 @@ export declare class CoursService {
         teacherId: number | null;
         coursId: number;
         groupLabel: string | null;
-    }>;
-    removeFromClass(coursId: number, classId: number): Promise<{
+    }) | ({
+        teacher: {
+            id: number;
+            firstName: string;
+            lastName: string;
+        } | null;
+        class: {
+            option: string | null;
+            id: number;
+            createdAt: Date;
+            updatedAt: Date;
+            name: string;
+            year: number;
+            filiereId: number | null;
+            classType: string | null;
+            cycleId: number | null;
+            optionId: number | null;
+        };
+    } & {
+        id: number;
+        createdAt: Date;
+        updatedAt: Date;
+        classId: number;
+        teacherId: number | null;
+        coursId: number;
+        groupLabel: string | null;
+    })[]>;
+    removeFromClass(coursId: number, classId: number, teacherId?: number): Promise<Prisma.BatchPayload | {
         id: number;
         createdAt: Date;
         updatedAt: Date;

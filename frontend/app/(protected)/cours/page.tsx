@@ -83,7 +83,7 @@ export default function CoursPage() {
   const [loadingAssignments, setLoadingAssignments] = useState(false);
 
   const [addCoursId, setAddCoursId] = useState('');
-  const [addTeacherId, setAddTeacherId] = useState('');
+  const [addTeacherIds, setAddTeacherIds] = useState<string[]>([]);
   const [addingCours, setAddingCours] = useState(false);
 
   // ── Metrics ──
@@ -200,7 +200,7 @@ export default function CoursPage() {
       setSelectedClassId('');
       setClassAssignments([]);
       setAddCoursId('');
-      setAddTeacherId('');
+      setAddTeacherIds([]);
       setIsAssignModalOpen(true);
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Impossible de charger les données'));
@@ -219,14 +219,16 @@ export default function CoursPage() {
     try {
       await api.post(`/cours/${addCoursId}/classes`, {
         classId: Number(selectedClassId),
-        teacherId: addTeacherId ? Number(addTeacherId) : null,
+        teacherIds: addTeacherIds.length
+          ? addTeacherIds.map((value) => Number(value))
+          : undefined,
       });
       toast.success('Cours ajouté à la classe');
       // Refresh assignments for this class
       const res = await api.get<ClassCoursAssignment[]>(`/classes/${selectedClassId}/cours`);
       setClassAssignments(res.data);
       setAddCoursId('');
-      setAddTeacherId('');
+      setAddTeacherIds([]);
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Échec de l'ajout du cours"));
     } finally {
@@ -235,11 +237,13 @@ export default function CoursPage() {
   };
 
   // ── Remove a cours from the selected class ──
-  const onRemoveCours = async (coursId: number) => {
+  const onRemoveCours = async (coursId: number, teacherId?: number) => {
     if (!selectedClassId) return;
     if (!window.confirm('Retirer ce cours de la classe ?')) return;
     try {
-      await api.delete(`/cours/${coursId}/classes/${selectedClassId}`);
+      await api.delete(`/cours/${coursId}/classes/${selectedClassId}`, {
+        params: { teacherId },
+      });
       toast.success('Cours retiré');
       const res = await api.get<ClassCoursAssignment[]>(`/classes/${selectedClassId}/cours`);
       setClassAssignments(res.data);
@@ -499,12 +503,12 @@ export default function CoursPage() {
                 {loadingAssignments ? (
                   <p className="text-sm text-slate-500">Chargement...</p>
                 ) : classAssignments.length === 0 ? (
-                  <p className="text-sm text-slate-400 italic">Aucun cours affecté pour l'instant.</p>
+                  <p className="text-sm text-slate-400 italic">Aucun cours affecté pour l’instant.</p>
                 ) : (
                   <div className="space-y-2">
                     {classAssignments.map((a) => (
                       <div
-                        key={a.coursId}
+                        key={a.id}
                         className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
                       >
                         <div>
@@ -518,7 +522,7 @@ export default function CoursPage() {
                         <button
                           type="button"
                           className="btn-outline text-xs"
-                          onClick={() => onRemoveCours(a.coursId)}
+                          onClick={() => onRemoveCours(a.coursId, a.teacher?.id)}
                         >
                           Retirer
                         </button>
@@ -543,13 +547,29 @@ export default function CoursPage() {
                       </select>
                     </div>
                     <div className="field-stack">
-                      <label className="field-label">Enseignant (optionnel)</label>
-                      <select className="input" value={addTeacherId} onChange={(e) => setAddTeacherId(e.target.value)}>
-                        <option value="">Aucun</option>
-                        {teachers.map((t) => (
-                          <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>
-                        ))}
-                      </select>
+                      <label className="field-label">Enseignant(s) (optionnel)</label>
+                      <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2">
+                        {teachers.map((t) => {
+                          const id = String(t.id);
+                          const selected = addTeacherIds.includes(id);
+                          return (
+                            <label key={t.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-slate-50">
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() => {
+                                  setAddTeacherIds((prev) =>
+                                    prev.includes(id)
+                                      ? prev.filter((value) => value !== id)
+                                      : [...prev, id],
+                                  );
+                                }}
+                              />
+                              <span>{t.firstName} {t.lastName}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                   <button

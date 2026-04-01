@@ -364,7 +364,7 @@ export default function StudentsPage() {
                 <th>ID</th>
                 <th>Nom complet</th>
                 <th>Sexe</th>
-                <th>Année d'entrée</th>
+                <th>Année d’entrée</th>
                 <th>Code Massar</th>
                 <th>CIN</th>
                 <th>Filière</th>
@@ -484,8 +484,8 @@ export default function StudentsPage() {
 
       <ModalShell
         open={isModalOpen}
-        title={editingId ? 'Modifier l\'étudiant' : 'Ajouter un étudiant'}
-        description="Créez ou mettez à jour les détails du profil d'étudiant, le placement en classe et les informations de type bac."
+        title={editingId ? 'Modifier l’étudiant' : 'Ajouter un étudiant'}
+        description="Créez ou mettez à jour les détails du profil d’étudiant, le placement en classe et les informations de type bac."
         onClose={closeModal}
         footer={
           <>
@@ -520,7 +520,7 @@ export default function StudentsPage() {
             </select>
           </div>
           <div className="field-stack">
-            <label className="field-label">Année d'entrée</label>
+            <label className="field-label">Année d’entrée</label>
             <input
               className="input"
               type="number"
@@ -547,7 +547,7 @@ export default function StudentsPage() {
             <input className="input" value={anneeAcademique} onChange={(event) => setAnneeAcademique(event.target.value)} />
           </div>
           <div className="field-stack">
-            <label className="field-label">Date d'inscription</label>
+            <label className="field-label">Date d’inscription</label>
             <input className="input" type="date" value={dateInscription} onChange={(event) => setDateInscription(event.target.value)} />
           </div>
           <div className="field-stack">

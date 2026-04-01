@@ -15,6 +15,7 @@ const class_validator_1 = require("class-validator");
 class AssignCoursClassDto {
     classId;
     teacherId;
+    teacherIds;
     groupLabel;
 }
 exports.AssignCoursClassDto = AssignCoursClassDto;
@@ -36,6 +37,14 @@ __decorate([
     (0, class_validator_1.Min)(1),
     __metadata("design:type", Object)
 ], AssignCoursClassDto.prototype, "teacherId", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)({ each: true }),
+    (0, class_validator_1.Min)(1, { each: true }),
+    __metadata("design:type", Array)
+], AssignCoursClassDto.prototype, "teacherIds", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Transform)(({ value }) => (typeof value === 'string' ? value.trim() : value)),

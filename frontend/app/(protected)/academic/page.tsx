@@ -286,7 +286,7 @@ export default function AcademicPage() {
           {!selectedModule ? (
             <div className="empty-note">Sélectionnez un module pour voir ses éléments</div>
           ) : elements.length === 0 ? (
-            <EmptyState title="Aucun élément" description="Ce module n'a pas encore d'éléments." />
+            <EmptyState title="Aucun élément" description="Ce module n’a pas encore d’éléments." />
           ) : (
             <div className="divide-y divide-slate-50 overflow-y-auto" style={{ maxHeight: '70vh' }}>
               {elements.map((el) => (
@@ -340,11 +340,11 @@ export default function AcademicPage() {
       </ModalShell>
 
       {/* ── Element modal ── */}
-      <ModalShell open={elModal} title={editingElId ? "Modifier l'élément" : 'Ajouter un élément de module'} description="Un élément de module représente un cours (CM, TD ou TP)." onClose={() => setElModal(false)}
+      <ModalShell open={elModal} title={editingElId ? 'Modifier l’élément' : 'Ajouter un élément de module'} description="Un élément de module représente un cours (CM, TD ou TP)." onClose={() => setElModal(false)}
         footer={<><button className="btn-primary" type="button" onClick={saveEl} disabled={savingEl}>{editingElId ? 'Enregistrer' : 'Créer'}</button><button className="btn-outline" type="button" onClick={() => setElModal(false)}>Annuler</button></>}>
         <div className="space-y-3">
           <div className="field-stack">
-            <label className="field-label">Nom de l'élément / Cours</label>
+            <label className="field-label">Nom de l’élément / Cours</label>
             <input className="input" value={elName} onChange={(e) => setElName(e.target.value)} placeholder="ex. Algèbre, Analyse, TP Chimie" />
           </div>
           <div className="grid grid-cols-2 gap-3">

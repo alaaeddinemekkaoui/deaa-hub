@@ -272,7 +272,7 @@ export default function UsersPage() {
       <PageHeader
         eyebrow="Administration"
         title="Utilisateurs et paramètres de développement"
-        description="Gérez l'accès, maintenez les catalogues de facultés éditables pour les admins et surveillez la santé de l'application à partir d'une seule section d'administration inférieure."
+        description="Gérez l’accès, maintenez les catalogues de facultés éditables pour les admins et surveillez la santé de l’application à partir d’une seule section d’administration inférieure."
       />
 
       <section className="grid gap-4 md:grid-cols-4">
@@ -285,11 +285,11 @@ export default function UsersPage() {
         <MetricCard
           label="Administrateurs"
           value={rows.filter((item) => item.role === 'admin').length}
-          hint="Niveau d'accès le plus élevé"
+          hint="Niveau d’accès le plus élevé"
           icon={ShieldCheck}
         />
         <MetricCard
-          label="Rôles d'enseignants"
+          label="Rôles d’enseignants"
           value={teacherRoles.length}
           hint="Catalogue géré par les administrateurs"
           icon={UserCog}
@@ -428,9 +428,9 @@ export default function UsersPage() {
         <section className="surface-card space-y-6">
           <div className="panel-header">
             <div>
-              <h2 className="panel-title">Paramètres d'administration</h2>
+              <h2 className="panel-title">Paramètres d’administration</h2>
               <p className="panel-copy">
-                Vue simplifiée des paramètres système: statut global en premier, puis gestion des rôles et des grades d'enseignants.
+                Vue simplifiée des paramètres système: statut global en premier, puis gestion des rôles et des grades d’enseignants.
               </p>
             </div>
           </div>
@@ -483,7 +483,7 @@ export default function UsersPage() {
 
           <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 space-y-4">
             <div>
-              <h3 className="text-base font-semibold text-slate-950">Rôles d'enseignants</h3>
+              <h3 className="text-base font-semibold text-slate-950">Rôles d’enseignants</h3>
               <p className="text-sm text-slate-500">
                 Gérez les rôles administrables comme enseignant, chef de filière et chef de département.
               </p>
@@ -553,7 +553,7 @@ export default function UsersPage() {
 
           <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 space-y-4">
             <div>
-              <h3 className="text-base font-semibold text-slate-950">Grades d'enseignants</h3>
+              <h3 className="text-base font-semibold text-slate-950">Grades d’enseignants</h3>
               <p className="text-sm text-slate-500">
                 Ce catalogue est affiché sous les rôles pour garder une hiérarchie claire de configuration.
               </p>

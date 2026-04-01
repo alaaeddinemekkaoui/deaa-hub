@@ -46,8 +46,11 @@ let CoursController = class CoursController {
     assignToClass(id, dto) {
         return this.coursService.assignToClass(id, dto);
     }
-    removeFromClass(id, classId) {
-        return this.coursService.removeFromClass(id, classId);
+    removeFromClass(id, classId, teacherId) {
+        const parsedTeacherId = teacherId !== undefined && teacherId !== ''
+            ? Number(teacherId)
+            : undefined;
+        return this.coursService.removeFromClass(id, classId, parsedTeacherId);
     }
     importFromClass(classId) {
         return this.coursService.importFromClass(classId);
@@ -109,8 +112,9 @@ __decorate([
     (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __param(1, (0, common_1.Param)('classId', common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Query)('teacherId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number, Number]),
+    __metadata("design:paramtypes", [Number, Number, String]),
     __metadata("design:returntype", void 0)
 ], CoursController.prototype, "removeFromClass", null);
 __decorate([

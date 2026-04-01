@@ -222,7 +222,7 @@ export default function FilieresPage() {
           <div>
             <h2 className="panel-title">Registre des programmes</h2>
             <p className="panel-copy">
-              Vérifiez la propriété de la filière, la charge et l'activité opérationnelle avec un meilleur contrôle et une meilleure visibilité.
+              Vérifiez la propriété de la filière, la charge et l’activité opérationnelle avec un meilleur contrôle et une meilleure visibilité.
             </p>
           </div>
         </div>

@@ -69,8 +69,13 @@ export class CoursController {
   removeFromClass(
     @Param('id', ParseIntPipe) id: number,
     @Param('classId', ParseIntPipe) classId: number,
+    @Query('teacherId') teacherId?: string,
   ) {
-    return this.coursService.removeFromClass(id, classId);
+    const parsedTeacherId =
+      teacherId !== undefined && teacherId !== ''
+        ? Number(teacherId)
+        : undefined;
+    return this.coursService.removeFromClass(id, classId, parsedTeacherId);
   }
 
   @Post('import-from-class/:classId')

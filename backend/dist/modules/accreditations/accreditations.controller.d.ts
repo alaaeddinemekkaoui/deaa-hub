@@ -4,6 +4,7 @@ import { CreateAccreditationPlanDto } from './dto/create-accreditation-plan.dto'
 import { UpdateAccreditationPlanDto } from './dto/update-accreditation-plan.dto';
 import { CreateAccreditationLineDto } from './dto/create-accreditation-line.dto';
 import { AssignClassAccreditationDto } from './dto/assign-class-accreditation.dto';
+import { TransferClassAccreditationDto } from './dto/transfer-class-accreditation.dto';
 export declare class AccreditationsController {
     private readonly service;
     constructor(service: AccreditationsService);
@@ -312,4 +313,25 @@ export declare class AccreditationsController {
         classId: number;
         planId: number;
     })[]>;
+    transferClassAssignment(classId: number, dto: TransferClassAccreditationDto): Promise<{
+        class: {
+            id: number;
+            name: string;
+            year: number;
+        };
+        plan: {
+            id: number;
+            name: string;
+            academicYear: string;
+            status: import(".prisma/client").$Enums.AccreditationPlanStatus;
+            sourcePlanId: number | null;
+        };
+    } & {
+        id: number;
+        createdAt: Date;
+        updatedAt: Date;
+        academicYear: string;
+        classId: number;
+        planId: number;
+    }>;
 }

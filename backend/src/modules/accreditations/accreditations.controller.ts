@@ -20,6 +20,7 @@ import { CreateAccreditationPlanDto } from './dto/create-accreditation-plan.dto'
 import { UpdateAccreditationPlanDto } from './dto/update-accreditation-plan.dto';
 import { CreateAccreditationLineDto } from './dto/create-accreditation-line.dto';
 import { AssignClassAccreditationDto } from './dto/assign-class-accreditation.dto';
+import { TransferClassAccreditationDto } from './dto/transfer-class-accreditation.dto';
 
 @Controller('accreditations')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -87,5 +88,14 @@ export class AccreditationsController {
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
   findClassAssignments(@Param('classId', ParseIntPipe) classId: number) {
     return this.service.findClassAssignments(classId);
+  }
+
+  @Post('classes/:classId/assignments/transfer')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  transferClassAssignment(
+    @Param('classId', ParseIntPipe) classId: number,
+    @Body() dto: TransferClassAccreditationDto,
+  ) {
+    return this.service.transferClassAssignment(classId, dto);
   }
 }

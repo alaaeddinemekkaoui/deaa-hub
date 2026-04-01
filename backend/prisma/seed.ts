@@ -569,10 +569,25 @@ async function main() {
   const assignCoursToClass = async (
     coursId: number, classId: number, teacherId: number | null, groupLabel: string | null,
   ) => {
-    await prisma.coursClass.upsert({
-      where: { coursId_classId: { coursId, classId } },
-      update: { teacherId, groupLabel },
-      create: { coursId, classId, teacherId, groupLabel },
+    const existing = await prisma.coursClass.findFirst({
+      where: {
+        coursId,
+        classId,
+        ...(teacherId === null ? { teacherId: null } : { teacherId }),
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.coursClass.update({
+        where: { id: existing.id },
+        data: { groupLabel },
+      });
+      return;
+    }
+
+    await prisma.coursClass.create({
+      data: { coursId, classId, teacherId, groupLabel },
     });
   };
 
@@ -586,6 +601,7 @@ async function main() {
   const cAlgoProg = await upsertCours('Algorithmique et Programmation — TP', ElementType.TP);
 
   await assignCoursToClass(cMathCM.id,   classAPESA1.id, teacher('NN144144'), null);
+  await assignCoursToClass(cMathCM.id,   classAPESA1.id, teacher('JJ100100'), 'Co-enseignement');
   await assignCoursToClass(cMathTD1.id,  classAPESA1.id, teacher('NN144144'), 'Groupe TD 1');
   await assignCoursToClass(cMathTD2.id,  classAPESA1.id, teacher('KK111111'), 'Groupe TD 2');
   await assignCoursToClass(cPhysiqCM.id, classAPESA1.id, teacher('JJ100100'), null);
@@ -653,6 +669,228 @@ async function main() {
   await assignCoursToClass(cConsTV.id,   classIAA1.id, teacher('HH808080'), null);
   await assignCoursToClass(cConsTD.id,   classIAA1.id, teacher('OO155155'), 'Groupe TD 1');
 
+  // ─── TeacherClass derived links (class-level assignment from cours teaching) ─
+  const coursClassRows = await prisma.coursClass.findMany({
+    where: { teacherId: { not: null } },
+    select: { classId: true, teacherId: true },
+  });
+
+  for (const row of coursClassRows) {
+    if (!row.teacherId) {
+      continue;
+    }
+
+    const existingTeacherClass = await prisma.teacherClass.findFirst({
+      where: { teacherId: row.teacherId, classId: row.classId },
+      select: { id: true },
+    });
+
+    if (!existingTeacherClass) {
+      await prisma.teacherClass.create({
+        data: { teacherId: row.teacherId, classId: row.classId },
+      });
+    }
+  }
+
+  // ─── Accreditation plans, lines and class assignments ───────────────────
+  const planAgro2025 = await prisma.accreditationPlan.upsert({
+    where: { name_academicYear: { name: 'Plan Agronomie Tronc Commun', academicYear: '2025/2026' } },
+    update: {
+      levelYear: 1,
+      filiereId: filiereAgronomie.id,
+      cycleId: cycleIng.id,
+      status: 'published',
+    },
+    create: {
+      name: 'Plan Agronomie Tronc Commun',
+      academicYear: '2025/2026',
+      levelYear: 1,
+      filiereId: filiereAgronomie.id,
+      cycleId: cycleIng.id,
+      status: 'published',
+    },
+  });
+
+  const planVeto2025 = await prisma.accreditationPlan.upsert({
+    where: { name_academicYear: { name: 'Plan Vétérinaire Fondamental', academicYear: '2025/2026' } },
+    update: {
+      levelYear: 1,
+      filiereId: filiereVeto.id,
+      cycleId: cycleVeto.id,
+      status: 'published',
+    },
+    create: {
+      name: 'Plan Vétérinaire Fondamental',
+      academicYear: '2025/2026',
+      levelYear: 1,
+      filiereId: filiereVeto.id,
+      cycleId: cycleVeto.id,
+      status: 'published',
+    },
+  });
+
+  const upsertPlanLine = async (
+    planId: number,
+    coursId: number,
+    moduleId: number | null,
+    elementId: number | null,
+    semestre: string | null,
+    volumeHoraire: number | null,
+    isMandatory = true,
+  ) => {
+    const existing = await prisma.accreditationPlanLine.findFirst({
+      where: { planId, coursId },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.accreditationPlanLine.update({
+        where: { id: existing.id },
+        data: { moduleId, elementId, semestre, volumeHoraire, isMandatory },
+      });
+      return;
+    }
+
+    await prisma.accreditationPlanLine.create({
+      data: { planId, coursId, moduleId, elementId, semestre, volumeHoraire, isMandatory },
+    });
+  };
+
+  await upsertPlanLine(planAgro2025.id, cAgronCM.id, modAgronGen.id, null, 'S1', 30, true);
+  await upsertPlanLine(planAgro2025.id, cAgronTD.id, modAgronGen.id, null, 'S1', 15, true);
+  await upsertPlanLine(planAgro2025.id, cBiochCM.id, modBiochim.id, null, 'S1', 30, true);
+  await upsertPlanLine(planAgro2025.id, cPedoCM.id, modPedologie.id, null, 'S2', 30, true);
+  await upsertPlanLine(planAgro2025.id, cStatCM.id, modStatInfo.id, null, 'S2', 25, true);
+
+  await upsertPlanLine(planVeto2025.id, cAnatCM.id, modAnatomie.id, null, 'S1', 40, true);
+  await upsertPlanLine(planVeto2025.id, cHistoCM.id, modHistoEmb.id, null, 'S1', 30, true);
+  await upsertPlanLine(planVeto2025.id, cPhysioCM.id, modPhysioVet.id, null, 'S2', 25, true);
+
+  await prisma.classAccreditationAssignment.upsert({
+    where: { classId_academicYear: { classId: classAgro1.id, academicYear: '2025/2026' } },
+    update: { planId: planAgro2025.id },
+    create: { classId: classAgro1.id, academicYear: '2025/2026', planId: planAgro2025.id },
+  });
+
+  await prisma.classAccreditationAssignment.upsert({
+    where: { classId_academicYear: { classId: classVeto1.id, academicYear: '2025/2026' } },
+    update: { planId: planVeto2025.id },
+    create: { classId: classVeto1.id, academicYear: '2025/2026', planId: planVeto2025.id },
+  });
+
+  // ─── Timetable sessions (sample weekly schedule) ────────────────────────
+  const upsertSession = async (
+    elementName: string,
+    classId: number,
+    dayOfWeek: number,
+    startTime: string,
+    endTime: string,
+    teacherId: number | null,
+    roomName: string,
+  ) => {
+    const element = await prisma.elementModule.findFirst({
+      where: { name: elementName, classId },
+      select: { id: true },
+    });
+
+    const room = await prisma.room.findUnique({
+      where: { name: roomName },
+      select: { id: true },
+    });
+
+    if (!element || !room) {
+      return;
+    }
+
+    const existing = await prisma.timetableSession.findFirst({
+      where: { elementId: element.id, classId, dayOfWeek, startTime, endTime },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.timetableSession.update({
+        where: { id: existing.id },
+        data: { teacherId, roomId: room.id },
+      });
+      return;
+    }
+
+    await prisma.timetableSession.create({
+      data: {
+        elementId: element.id,
+        classId,
+        dayOfWeek,
+        startTime,
+        endTime,
+        teacherId,
+        roomId: room.id,
+      },
+    });
+  };
+
+  await upsertSession('Analyse et Algèbre', classAPESA1.id, 1, '08:30', '10:30', teacher('NN144144'), 'Amphi A');
+  await upsertSession('Physique Générale', classAPESA1.id, 2, '10:45', '12:15', teacher('JJ100100'), 'Amphi B');
+  await upsertSession("Introduction à l'Agronomie", classAgro1.id, 1, '10:45', '12:15', teacher('BB202020'), 'Salle 101');
+  await upsertSession('Biochimie Structurale', classAgro1.id, 3, '08:30', '10:00', teacher('JJ100100'), 'Labo Chimie A');
+  await upsertSession('Anatomie des Carnivores', classVeto1.id, 2, '08:30', '11:00', teacher('CC303030'), 'Salle TP Vétérinaire');
+  await upsertSession('Hydraulique Générale', classGR1.id, 4, '14:00', '16:00', teacher('DD404040'), 'Salle 201');
+  await upsertSession('Microbiologie Générale', classIAA1.id, 5, '08:30', '10:30', teacher('GG707070'), 'Labo Biologie');
+
+  // ─── Activity logs and workflow tasks ────────────────────────────────────
+  const adminUser = await prisma.user.findUnique({ where: { email: 'admin' }, select: { id: true } });
+
+  if (adminUser) {
+    const existingLog = await prisma.activityLog.findFirst({
+      where: { userId: adminUser.id, action: 'Initialisation des données de démonstration (seed)' },
+      select: { id: true },
+    });
+
+    if (!existingLog) {
+      await prisma.activityLog.create({
+        data: {
+          userId: adminUser.id,
+          action: 'Initialisation des données de démonstration (seed)',
+          metadata: { source: 'prisma/seed.ts', version: '2026-04-01' },
+        },
+      });
+    }
+
+    const workflowStudent = await prisma.student.findUnique({
+      where: { cin: 'SB006006' },
+      select: { id: true },
+    });
+
+    if (workflowStudent) {
+      const existingTask = await prisma.workflowTask.findFirst({
+        where: {
+          title: 'Vérifier l\'accréditation des cours de la classe Agronomie 1A',
+          assignedToId: adminUser.id,
+          studentId: workflowStudent.id,
+        },
+        select: { id: true },
+      });
+
+      if (!existingTask) {
+        const task = await prisma.workflowTask.create({
+          data: {
+            title: 'Vérifier l\'accréditation des cours de la classe Agronomie 1A',
+            description: 'Contrôler la cohérence entre plan accrédité, cours assignés et emploi du temps.',
+            assignedToId: adminUser.id,
+            studentId: workflowStudent.id,
+            status: 'in_progress',
+          },
+        });
+
+        await prisma.workflowTimeline.createMany({
+          data: [
+            { taskId: task.id, status: 'pending', note: 'Tâche créée automatiquement par le seed.' },
+            { taskId: task.id, status: 'in_progress', note: 'Analyse pédagogique démarrée.' },
+          ],
+        });
+      }
+    }
+  }
+
   console.log('✅ Seed completed successfully.');
   console.log(`   Departments: 8`);
   console.log(`   Cycles: 4`);
@@ -662,6 +900,9 @@ async function main() {
   console.log(`   Rooms: ${roomDefs.length}`);
   console.log(`   Teachers: ${teacherDefs.length} (10 permanent + 5 vacataires)`);
   console.log(`   Students: ${studentDefs.length} + 3 laureates`);
+  console.log('   Accreditation plans: 2 (published)');
+  console.log('   Timetable sessions: seeded sample weekly grid');
+  console.log('   Workflow + activity logs: seeded');
 }
 
 main()

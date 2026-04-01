@@ -209,7 +209,7 @@ export default function StudentProfilePage() {
               <p className="input bg-slate-50">{student.telephone ?? '-'}</p>
             </div>
             <div className="field-stack">
-              <label className="field-label">Première année d'entrée</label>
+              <label className="field-label">Première année d’entrée</label>
               <p className="input bg-slate-50">{student.firstYearEntry}</p>
             </div>
             <div className="field-stack">
@@ -217,7 +217,7 @@ export default function StudentProfilePage() {
               <p className="input bg-slate-50">{student.anneeAcademique}</p>
             </div>
             <div className="field-stack">
-              <label className="field-label">Date d'inscription</label>
+              <label className="field-label">Date d’inscription</label>
               <p className="input bg-slate-50">
                 {student.dateInscription ? new Date(student.dateInscription).toLocaleDateString('fr-FR') : '-'}
               </p>

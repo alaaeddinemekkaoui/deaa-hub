@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CopyPlus, GraduationCap, Plus, ShieldCheck } from 'lucide-react';
+import { ArrowRightLeft, CopyPlus, GraduationCap, Plus, ShieldCheck } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
@@ -47,6 +47,7 @@ export default function AccreditationsPage() {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
 
   const [name, setName] = useState('');
   const [academicYear, setAcademicYear] = useState('');
@@ -57,6 +58,11 @@ export default function AccreditationsPage() {
   const [assignPlanId, setAssignPlanId] = useState('');
   const [assignClassId, setAssignClassId] = useState('');
   const [assignYear, setAssignYear] = useState('');
+  const [transferClassId, setTransferClassId] = useState('');
+  const [transferFromYear, setTransferFromYear] = useState('');
+  const [transferToYear, setTransferToYear] = useState('');
+  const [transferPlanName, setTransferPlanName] = useState('');
+  const [transferring, setTransferring] = useState(false);
 
   const [diffForPlanId, setDiffForPlanId] = useState('');
   const [diff, setDiff] = useState<PlanDiff | null>(null);
@@ -172,6 +178,32 @@ export default function AccreditationsPage() {
     }
   };
 
+  const onTransferClassAssignment = async () => {
+    if (!transferClassId || !transferFromYear.trim() || !transferToYear.trim()) {
+      return;
+    }
+
+    try {
+      setTransferring(true);
+      await api.post(`/accreditations/classes/${transferClassId}/assignments/transfer`, {
+        fromAcademicYear: transferFromYear.trim(),
+        toAcademicYear: transferToYear.trim(),
+        targetPlanName: transferPlanName.trim() || undefined,
+      });
+      toast.success('Transfert effectué vers la nouvelle année');
+      setIsTransferOpen(false);
+      setTransferClassId('');
+      setTransferFromYear('');
+      setTransferToYear('');
+      setTransferPlanName('');
+      setRefreshKey((k) => k + 1);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Échec du transfert de l’accréditation'));
+    } finally {
+      setTransferring(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -181,6 +213,9 @@ export default function AccreditationsPage() {
       />
 
       <section className="flex justify-end gap-2">
+        <button className="btn-outline" type="button" onClick={() => setIsTransferOpen(true)}>
+          <ArrowRightLeft size={14} className="mr-1 inline" />Transférer N→N+1
+        </button>
         <button className="btn-outline" type="button" onClick={() => setIsAssignOpen(true)}>
           <GraduationCap size={14} className="mr-1 inline" />Affecter à une classe
         </button>
@@ -379,6 +414,81 @@ export default function AccreditationsPage() {
           <div className="field-stack">
             <label className="field-label">Année académique</label>
             <input className="input" placeholder="2026-2027" value={assignYear} onChange={(e) => setAssignYear(e.target.value)} />
+          </div>
+        </div>
+      </ModalShell>
+
+      <ModalShell
+        open={isTransferOpen}
+        title="Transférer l’accréditation d’une classe"
+        description="Crée un nouveau plan brouillon pour l’année cible à partir du plan source, puis conserve l’historique d’origine."
+        onClose={() => {
+          setIsTransferOpen(false);
+          setTransferClassId('');
+          setTransferFromYear('');
+          setTransferToYear('');
+          setTransferPlanName('');
+        }}
+        footer={
+          <>
+            <button
+              className="btn-primary"
+              type="button"
+              onClick={onTransferClassAssignment}
+              disabled={transferring}
+            >
+              {transferring ? 'Transfert...' : 'Transférer'}
+            </button>
+            <button className="btn-outline" type="button" onClick={() => setIsTransferOpen(false)}>
+              Annuler
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="field-stack">
+            <label className="field-label">Classe</label>
+            <select
+              className="input"
+              value={transferClassId}
+              onChange={(e) => setTransferClassId(e.target.value)}
+            >
+              <option value="">—</option>
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} (A{c.year})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="field-stack">
+              <label className="field-label">Année source</label>
+              <input
+                className="input"
+                placeholder="2025-2026"
+                value={transferFromYear}
+                onChange={(e) => setTransferFromYear(e.target.value)}
+              />
+            </div>
+            <div className="field-stack">
+              <label className="field-label">Année cible</label>
+              <input
+                className="input"
+                placeholder="2026-2027"
+                value={transferToYear}
+                onChange={(e) => setTransferToYear(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="field-stack">
+            <label className="field-label">Nom du plan cible (optionnel)</label>
+            <input
+              className="input"
+              placeholder="Laisser vide pour nom automatique"
+              value={transferPlanName}
+              onChange={(e) => setTransferPlanName(e.target.value)}
+            />
           </div>
         </div>
       </ModalShell>

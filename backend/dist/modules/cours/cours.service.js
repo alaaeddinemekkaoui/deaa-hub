@@ -116,36 +116,79 @@ let CoursService = class CoursService {
     async assignToClass(coursId, dto) {
         await this.ensureExists(coursId);
         await this.ensureClassExists(dto.classId);
-        if (dto.teacherId)
-            await this.ensureTeacherExists(dto.teacherId);
-        const existing = await this.prisma.coursClass.findUnique({
-            where: { coursId_classId: { coursId, classId: dto.classId } },
-        });
-        if (existing) {
-            return this.prisma.coursClass.update({
-                where: { coursId_classId: { coursId, classId: dto.classId } },
-                data: { teacherId: dto.teacherId ?? null, groupLabel: dto.groupLabel ?? null },
+        const teacherIds = Array.from(new Set((dto.teacherIds?.length
+            ? dto.teacherIds
+            : dto.teacherId
+                ? [dto.teacherId]
+                : [])));
+        for (const teacherId of teacherIds) {
+            await this.ensureTeacherExists(teacherId);
+        }
+        if (teacherIds.length === 0) {
+            const existingUnassigned = await this.prisma.coursClass.findFirst({
+                where: { coursId, classId: dto.classId, teacherId: null },
+            });
+            if (existingUnassigned) {
+                return this.prisma.coursClass.update({
+                    where: { id: existingUnassigned.id },
+                    data: { groupLabel: dto.groupLabel ?? null },
+                    include: {
+                        class: true,
+                        teacher: { select: { id: true, firstName: true, lastName: true } },
+                    },
+                });
+            }
+            return this.prisma.coursClass.create({
+                data: {
+                    coursId,
+                    classId: dto.classId,
+                    teacherId: null,
+                    groupLabel: dto.groupLabel ?? null,
+                },
                 include: {
                     class: true,
                     teacher: { select: { id: true, firstName: true, lastName: true } },
                 },
             });
         }
-        return this.prisma.coursClass.create({
-            data: { coursId, classId: dto.classId, teacherId: dto.teacherId ?? null, groupLabel: dto.groupLabel ?? null },
+        for (const teacherId of teacherIds) {
+            const existing = await this.prisma.coursClass.findFirst({
+                where: { coursId, classId: dto.classId, teacherId },
+                select: { id: true },
+            });
+            if (!existing) {
+                await this.prisma.coursClass.create({
+                    data: {
+                        coursId,
+                        classId: dto.classId,
+                        teacherId,
+                        groupLabel: dto.groupLabel ?? null,
+                    },
+                });
+            }
+        }
+        return this.prisma.coursClass.findMany({
+            where: { coursId, classId: dto.classId },
             include: {
                 class: true,
                 teacher: { select: { id: true, firstName: true, lastName: true } },
             },
+            orderBy: [{ teacherId: 'asc' }, { id: 'asc' }],
         });
     }
-    async removeFromClass(coursId, classId) {
-        const existing = await this.prisma.coursClass.findUnique({
-            where: { coursId_classId: { coursId, classId } },
-        });
+    async removeFromClass(coursId, classId, teacherId) {
+        const where = {
+            coursId,
+            classId,
+            ...(teacherId ? { teacherId } : {}),
+        };
+        const existing = await this.prisma.coursClass.findFirst({ where, select: { id: true } });
         if (!existing)
             throw new common_1.NotFoundException(`Cours ${coursId} is not assigned to class ${classId}`);
-        return this.prisma.coursClass.delete({ where: { coursId_classId: { coursId, classId } } });
+        if (teacherId) {
+            return this.prisma.coursClass.delete({ where: { id: existing.id } });
+        }
+        return this.prisma.coursClass.deleteMany({ where: { coursId, classId } });
     }
     async importFromClass(classId) {
         const cls = await this.prisma.academicClass.findUnique({
@@ -173,8 +216,8 @@ let CoursService = class CoursService {
             }
             else {
                 let cours = await this.prisma.cours.findFirst({
-                    where: { name: { equals: el.name, mode: 'insensitive' }, elementModuleId: null },
-                    select: { id: true },
+                    where: { name: { equals: el.name, mode: 'insensitive' } },
+                    select: { id: true, elementModuleId: true },
                 });
                 if (!cours) {
                     cours = await this.prisma.cours.create({
@@ -183,19 +226,25 @@ let CoursService = class CoursService {
                     created++;
                 }
                 else {
-                    await this.prisma.cours.update({
-                        where: { id: cours.id },
-                        data: { elementModuleId: el.id },
-                    });
+                    if (!cours.elementModuleId) {
+                        await this.prisma.cours.update({
+                            where: { id: cours.id },
+                            data: { elementModuleId: el.id },
+                        });
+                    }
                     existing++;
                 }
                 coursId = cours.id;
             }
-            await this.prisma.coursClass.upsert({
-                where: { coursId_classId: { coursId, classId } },
-                create: { coursId, classId },
-                update: {},
+            const existingClassAssignment = await this.prisma.coursClass.findFirst({
+                where: { coursId, classId, teacherId: null },
+                select: { id: true },
             });
+            if (!existingClassAssignment) {
+                await this.prisma.coursClass.create({
+                    data: { coursId, classId, teacherId: null },
+                });
+            }
         }
         return { created, existing, total: elements.length };
     }

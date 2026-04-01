@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  BadgeCheck,
   BookOpen,
   Building2,
   GraduationCap,
@@ -24,16 +23,10 @@ type Department = { id: number; name: string };
 type Filiere = { id: number; name: string; departmentId?: number };
 type TeacherRole = { id: number; name: string; _count?: { teachers: number } };
 type TeacherGrade = { id: number; name: string; _count?: { teachers: number } };
-type AcademicClass = {
+type TeacherAssignedClass = {
   id: number;
   name: string;
   year: number;
-  filiere?: {
-    id?: number;
-    departmentId?: number;
-    name: string;
-    department?: { id: number; name: string };
-  } | null;
 };
 type Teacher = {
   id: number;
@@ -55,7 +48,7 @@ type Teacher = {
   grade: { id: number; name: string };
   taughtClasses: Array<{
     classId: number;
-    class: AcademicClass;
+    class: TeacherAssignedClass;
   }>;
 };
 
@@ -67,7 +60,6 @@ export default function TeachersPage() {
   const [filieres, setFilieres] = useState<Filiere[]>([]);
   const [roles, setRoles] = useState<TeacherRole[]>([]);
   const [grades, setGrades] = useState<TeacherGrade[]>([]);
-  const [availableClasses, setAvailableClasses] = useState<AcademicClass[]>([]);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [cin, setCin] = useState('');
@@ -78,9 +70,6 @@ export default function TeachersPage() {
   const [filiereId, setFiliereId] = useState('');
   const [roleId, setRoleId] = useState('');
   const [gradeId, setGradeId] = useState('');
-  const [classIds, setClassIds] = useState<number[]>([]);
-  const [classDepartmentFilterId, setClassDepartmentFilterId] = useState('');
-  const [classFiliereFilterId, setClassFiliereFilterId] = useState('');
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [filterDepartmentId, setFilterDepartmentId] = useState('');
@@ -96,7 +85,6 @@ export default function TeachersPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [classesLoading, setClassesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [meta, setMeta] = useState({
@@ -127,33 +115,6 @@ export default function TeachersPage() {
       (item) => String(item.departmentId ?? '') === filterDepartmentId,
     );
   }, [filterDepartmentId, filieres]);
-
-  const classFilterFilieres = useMemo(() => {
-    if (!classDepartmentFilterId) {
-      return filieres;
-    }
-
-    return filieres.filter(
-      (item) => String(item.departmentId ?? '') === classDepartmentFilterId,
-    );
-  }, [classDepartmentFilterId, filieres]);
-
-  const displayedAvailableClasses = useMemo(() => {
-    return availableClasses.filter((item) => {
-      const itemDepartmentId = item.filiere?.department?.id;
-      const itemFiliereId = item.filiere?.id;
-
-      const matchesDepartment = classDepartmentFilterId
-        ? String(itemDepartmentId ?? '') === classDepartmentFilterId
-        : true;
-
-      const matchesFiliere = classFiliereFilterId
-        ? String(itemFiliereId ?? '') === classFiliereFilterId
-        : true;
-
-      return matchesDepartment && matchesFiliere;
-    });
-  }, [availableClasses, classDepartmentFilterId, classFiliereFilterId]);
 
   const assignedClassCount = useMemo(
     () => rows.reduce((sum, item) => sum + item.taughtClasses.length, 0),
@@ -200,10 +161,6 @@ export default function TeachersPage() {
     setFiliereId('');
     setRoleId('');
     setGradeId('');
-    setClassIds([]);
-    setClassDepartmentFilterId('');
-    setClassFiliereFilterId('');
-    setAvailableClasses([]);
   };
 
   const closeModal = () => {
@@ -352,65 +309,6 @@ export default function TeachersPage() {
     }
   }, [filterDepartmentId, filterFiliereId, filieres]);
 
-  useEffect(() => {
-    if (!isModalOpen || !departmentId) {
-      return;
-    }
-
-    const loadClasses = async () => {
-      try {
-        setClassesLoading(true);
-        const rows = await fetchAllPaginatedRows<AcademicClass>('/classes', {
-          sortBy: 'name',
-          sortOrder: 'asc',
-        });
-        setAvailableClasses(rows);
-      } catch (loadError) {
-        toast.error(getApiErrorMessage(loadError, 'Unable to load classes.'));
-      } finally {
-        setClassesLoading(false);
-      }
-    };
-
-    void loadClasses();
-  }, [departmentId, isModalOpen]);
-
-  useEffect(() => {
-    if (!classDepartmentFilterId) {
-      return;
-    }
-
-    const hasSelectedFiliere = filieres.some(
-      (item) =>
-        String(item.id) === classFiliereFilterId &&
-        String(item.departmentId ?? '') === classDepartmentFilterId,
-    );
-
-    if (!hasSelectedFiliere) {
-      setClassFiliereFilterId('');
-    }
-  }, [classDepartmentFilterId, classFiliereFilterId, filieres]);
-
-  useEffect(() => {
-    if (!isModalOpen || classesLoading) {
-      return;
-    }
-
-    setClassIds((currentValue) =>
-      currentValue.filter((id) =>
-        availableClasses.some((classItem) => classItem.id === id),
-      ),
-    );
-  }, [availableClasses, classesLoading, isModalOpen]);
-
-  const toggleClass = (id: number) => {
-    setClassIds((currentValue) =>
-      currentValue.includes(id)
-        ? currentValue.filter((classId) => classId !== id)
-        : [...currentValue, id],
-    );
-  };
-
   const onSubmit = async () => {
     if (
       !firstName.trim() ||
@@ -432,7 +330,6 @@ export default function TeachersPage() {
         departmentId: Number(departmentId),
         roleId: Number(roleId),
         gradeId: Number(gradeId),
-        classIds,
       };
 
       if (email.trim()) {
@@ -540,8 +437,7 @@ export default function TeachersPage() {
           <div>
             <h2 className="panel-title">Registre des enseignants</h2>
             <p className="panel-copy">
-              Recherchez les facultés par identité, structure, rôle et grade tout en gardant
-              l'affectation des classes liée à la portée du département et de la filière sélectionnés.
+              Recherchez les facultés par identité, structure, rôle et grade.
             </p>
           </div>
         </div>
@@ -760,11 +656,6 @@ export default function TeachersPage() {
                                 setFiliereId(String(item.filiereId ?? ''));
                                 setRoleId(String(item.roleId));
                                 setGradeId(String(item.gradeId));
-                                setClassDepartmentFilterId('');
-                                setClassFiliereFilterId('');
-                                setClassIds(
-                                  item.taughtClasses.map((entry) => entry.classId),
-                                );
                                 setIsModalOpen(true);
                               }}
                             >
@@ -799,7 +690,7 @@ export default function TeachersPage() {
       <ModalShell
         open={isModalOpen}
         title={editingId ? 'Modifier l\'enseignant' : 'Ajouter un enseignant'}
-        description="Définissez le département/filière d'accueil de l'enseignant, puis assignez des classes de n'importe quel département en utilisant les filtres de classe ci-dessous."
+        description="Définissez l’identité, le rôle, le grade et le rattachement département/filière de l’enseignant."
         onClose={closeModal}
         footer={
           <>
@@ -856,7 +747,7 @@ export default function TeachersPage() {
             />
           </div>
           <div className="field-stack">
-            <label className="field-label">Date d'inscription</label>
+            <label className="field-label">Date d’inscription</label>
             <input
               className="input"
               type="date"
@@ -933,101 +824,6 @@ export default function TeachersPage() {
                 </option>
               ))}
             </select>
-          </div>
-          <div className="field-stack xl:col-span-2">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <label className="field-label">Classes assignées</label>
-                <p className="text-sm text-slate-500">
-                  {departmentId
-                    ? 'Utilisez tous les départements/filières pour assigner des classes entre départements.'
-                    : "Choisissez d'abord le département de l'enseignant, puis assignez des classes."}
-                </p>
-              </div>
-              {departmentId ? (
-                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                  <BadgeCheck size={14} />
-                  {displayedAvailableClasses.length} disponibles
-                </span>
-              ) : null}
-            </div>
-            <div className="mt-3 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
-              {!departmentId ? (
-                <p className="text-sm text-slate-500">
-                  Sélectionnez le département de l'enseignant pour activer l'assignation des classes.
-                </p>
-              ) : classesLoading ? (
-                <p className="text-sm text-slate-500">Chargement des classes...</p>
-              ) : displayedAvailableClasses.length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  Aucune classe ne correspond aux filtres sélectionnés.
-                </p>
-              ) : (
-                <>
-                  <div className="mb-3 grid gap-3 md:grid-cols-2">
-                    <div className="field-stack">
-                      <label className="field-label">Département de la classe</label>
-                      <select
-                        className="input"
-                        value={classDepartmentFilterId}
-                        onChange={(event) =>
-                          setClassDepartmentFilterId(event.target.value)
-                        }
-                      >
-                        <option value="">Tous les départements</option>
-                        {departments.map((department) => (
-                          <option key={department.id} value={department.id}>
-                            {department.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="field-stack">
-                      <label className="field-label">Filière de la classe</label>
-                      <select
-                        className="input"
-                        value={classFiliereFilterId}
-                        onChange={(event) =>
-                          setClassFiliereFilterId(event.target.value)
-                        }
-                      >
-                        <option value="">Toutes les filières</option>
-                        {classFilterFilieres.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2 md:grid-cols-2">
-                    {displayedAvailableClasses.map((classItem) => (
-                    <label
-                      key={classItem.id}
-                      className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700"
-                    >
-                      <input
-                        type="checkbox"
-                        className="mt-1"
-                        checked={classIds.includes(classItem.id)}
-                        onChange={() => toggleClass(classItem.id)}
-                      />
-                      <span>
-                        <span className="block font-medium text-slate-950">
-                          {classItem.name}
-                        </span>
-                        <span className="block text-xs text-slate-500">
-                          {classItem.filiere?.department?.name ?? 'Sans département'} •{' '}
-                          {classItem.filiere?.name ?? 'Sans filière'} • Année {classItem.year}
-                        </span>
-                      </span>
-                    </label>
-                  ))}
-                  </div>
-                </>
-              )}
-            </div>
           </div>
         </div>
       </ModalShell>

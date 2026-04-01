@@ -165,7 +165,7 @@ export default function DashboardPage() {
             <div>
               <h2 className="panel-title">Distribution des étudiants par filière</h2>
               <p className="panel-copy">
-                Utilisez cette vue pour identifier la concentration du programme et la pression d'effectifs potentielle.
+                Utilisez cette vue pour identifier la concentration du programme et la pression d’effectifs potentielle.
               </p>
             </div>
           </div>
@@ -263,7 +263,7 @@ export default function DashboardPage() {
             <div className="empty-note">{error}</div>
           ) : (overview?.laureatesPerYear ?? []).length === 0 ? (
             <EmptyState
-              title="Pas encore d'archive de lauréat"
+              title="Pas encore d’archive de lauréat"
               description="Les tendances de graduation apparaîtront ici une fois les dossiers de lauréat saisis."
             />
           ) : (
@@ -295,13 +295,13 @@ export default function DashboardPage() {
             <div>
               <h2 className="panel-title">Activité administrative récente</h2>
               <p className="panel-copy">
-                Examinez les actions les plus récentes de l'utilisateur pour surveiller le flux opérationnel.
+                Examinez les actions les plus récentes de l’utilisateur pour surveiller le flux opérationnel.
               </p>
             </div>
           </div>
 
           {loading ? (
-            <div className="empty-note">Chargement du flux d'activités...</div>
+            <div className="empty-note">Chargement du flux d’activités...</div>
           ) : error ? (
             <div className="empty-note">{error}</div>
           ) : (overview?.recentActivity ?? []).length === 0 ? (
@@ -342,7 +342,7 @@ export default function DashboardPage() {
       <section className="surface-card space-y-5">
         <div className="panel-header">
           <div>
-            <h2 className="panel-title">Surfaces d'administration prioritaires</h2>
+            <h2 className="panel-title">Surfaces d’administration prioritaires</h2>
             <p className="panel-copy">
               Accédez directement aux structures de données qui façonnent les départements, les filières et les classes.
             </p>

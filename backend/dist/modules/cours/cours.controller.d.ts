@@ -119,7 +119,7 @@ export declare class CoursController {
         type: import(".prisma/client").$Enums.ElementType;
         elementModuleId: number | null;
     }>;
-    assignToClass(id: number, dto: AssignCoursClassDto): Promise<{
+    assignToClass(id: number, dto: AssignCoursClassDto): Promise<({
         teacher: {
             id: number;
             firstName: string;
@@ -145,8 +145,34 @@ export declare class CoursController {
         teacherId: number | null;
         coursId: number;
         groupLabel: string | null;
-    }>;
-    removeFromClass(id: number, classId: number): Promise<{
+    }) | ({
+        teacher: {
+            id: number;
+            firstName: string;
+            lastName: string;
+        } | null;
+        class: {
+            option: string | null;
+            id: number;
+            createdAt: Date;
+            updatedAt: Date;
+            name: string;
+            year: number;
+            filiereId: number | null;
+            classType: string | null;
+            cycleId: number | null;
+            optionId: number | null;
+        };
+    } & {
+        id: number;
+        createdAt: Date;
+        updatedAt: Date;
+        classId: number;
+        teacherId: number | null;
+        coursId: number;
+        groupLabel: string | null;
+    })[]>;
+    removeFromClass(id: number, classId: number, teacherId?: string): Promise<import(".prisma/client").Prisma.BatchPayload | {
         id: number;
         createdAt: Date;
         updatedAt: Date;

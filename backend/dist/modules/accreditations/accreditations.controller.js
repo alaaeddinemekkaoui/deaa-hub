@@ -24,6 +24,7 @@ const create_accreditation_plan_dto_1 = require("./dto/create-accreditation-plan
 const update_accreditation_plan_dto_1 = require("./dto/update-accreditation-plan.dto");
 const create_accreditation_line_dto_1 = require("./dto/create-accreditation-line.dto");
 const assign_class_accreditation_dto_1 = require("./dto/assign-class-accreditation.dto");
+const transfer_class_accreditation_dto_1 = require("./dto/transfer-class-accreditation.dto");
 let AccreditationsController = class AccreditationsController {
     service;
     constructor(service) {
@@ -55,6 +56,9 @@ let AccreditationsController = class AccreditationsController {
     }
     findClassAssignments(classId) {
         return this.service.findClassAssignments(classId);
+    }
+    transferClassAssignment(classId, dto) {
+        return this.service.transferClassAssignment(classId, dto);
     }
 };
 exports.AccreditationsController = AccreditationsController;
@@ -133,6 +137,15 @@ __decorate([
     __metadata("design:paramtypes", [Number]),
     __metadata("design:returntype", void 0)
 ], AccreditationsController.prototype, "findClassAssignments", null);
+__decorate([
+    (0, common_1.Post)('classes/:classId/assignments/transfer'),
+    (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF),
+    __param(0, (0, common_1.Param)('classId', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, transfer_class_accreditation_dto_1.TransferClassAccreditationDto]),
+    __metadata("design:returntype", void 0)
+], AccreditationsController.prototype, "transferClassAssignment", null);
 exports.AccreditationsController = AccreditationsController = __decorate([
     (0, common_1.Controller)('accreditations'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

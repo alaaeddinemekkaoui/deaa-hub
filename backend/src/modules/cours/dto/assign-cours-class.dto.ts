@@ -1,5 +1,13 @@
 import { Type, Transform } from 'class-transformer';
-import { IsInt, IsOptional, IsString, MaxLength, Min, ValidateIf } from 'class-validator';
+import {
+  IsArray,
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+  ValidateIf,
+} from 'class-validator';
 
 export class AssignCoursClassDto {
   @Type(() => Number)
@@ -16,6 +24,13 @@ export class AssignCoursClassDto {
   @IsInt()
   @Min(1)
   teacherId?: number | null;
+
+  @IsOptional()
+  @IsArray()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  teacherIds?: number[];
 
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))

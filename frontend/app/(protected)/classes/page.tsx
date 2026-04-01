@@ -558,7 +558,7 @@ export default function ClassesPage() {
             />
           </div>
           <div className="field-stack">
-            <label className="field-label">Niveau d'année académique</label>
+            <label className="field-label">Niveau d’année académique</label>
             <input
               className="input"
               type="number"
@@ -601,7 +601,7 @@ export default function ClassesPage() {
               disabled={!filiereId}
             >
               <option value="">
-                {filiereId ? 'Aucune option' : 'Sélectionner une filière d\'abord'}
+                {filiereId ? 'Aucune option' : 'Sélectionner une filière d’abord'}
               </option>
               {optionsByFiliere.map((opt) => (
                 <option key={opt.id} value={opt.id}>

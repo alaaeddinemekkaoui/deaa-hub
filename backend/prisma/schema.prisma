@@ -518,8 +518,9 @@ model CoursClass {
   class      AcademicClass @relation(fields: [classId], references: [id], onDelete: Cascade)
   teacher    Teacher?      @relation(fields: [teacherId], references: [id], onDelete: SetNull)
 
-  @@unique([coursId, classId])
+  @@unique([coursId, classId, teacherId])
   @@index([coursId])
   @@index([classId])
+  @@index([coursId, classId])
   @@index([teacherId])
 }

@@ -59,18 +59,37 @@ export class ElementModulesService {
       data: { name: dto.name, moduleId: dto.moduleId, volumeHoraire: dto.volumeHoraire ?? null, type: dto.type ?? 'CM', classId: dto.classId ?? null },
     });
 
-    // Auto-create a matching Cours if one doesn't already exist for this element
+    // Auto-link/create a matching Cours while avoiding duplicate unique names.
     const existingCours = await this.prisma.cours.findFirst({
-      where: { name: { equals: dto.name, mode: 'insensitive' }, elementModuleId: null },
-      select: { id: true },
+      where: { name: { equals: dto.name, mode: 'insensitive' } },
+      select: { id: true, elementModuleId: true },
     });
 
     if (existingCours) {
-      // Link the existing cours to this element
-      await this.prisma.cours.update({
-        where: { id: existingCours.id },
-        data: { elementModuleId: element.id },
-      });
+      // Link only if cours is currently unlinked.
+      if (!existingCours.elementModuleId) {
+        await this.prisma.cours.update({
+          where: { id: existingCours.id },
+          data: { elementModuleId: element.id },
+        });
+      }
+
+      if (dto.classId) {
+        const existingClassAssignment = await this.prisma.coursClass.findFirst({
+          where: {
+            coursId: existingCours.id,
+            classId: dto.classId,
+            teacherId: null,
+          },
+          select: { id: true },
+        });
+
+        if (!existingClassAssignment) {
+          await this.prisma.coursClass.create({
+            data: { coursId: existingCours.id, classId: dto.classId, teacherId: null },
+          });
+        }
+      }
     } else {
       // Create a new cours linked to this element
       const cours = await this.prisma.cours.create({
