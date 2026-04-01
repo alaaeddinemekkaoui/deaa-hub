@@ -23,6 +23,7 @@ import { ElementModulesModule } from './modules/element-modules/element-modules.
 import { TimetableModule } from './modules/timetable/timetable.module';
 import { CyclesModule } from './modules/cycles/cycles.module';
 import { StudentObservationsModule } from './modules/student-observations/student-observations.module';
+import { AccreditationsModule } from './modules/accreditations/accreditations.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { StudentObservationsModule } from './modules/student-observations/studen
     TimetableModule,
     CyclesModule,
     StudentObservationsModule,
+    AccreditationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -43,6 +43,12 @@ enum WorkflowStatus {
   completed
 }
 
+enum AccreditationPlanStatus {
+  draft
+  published
+  archived
+}
+
 enum DiplomaStatus {
   retrieved
   not_retrieved
@@ -85,6 +91,7 @@ model Filiere {
   classes     AcademicClass[]
   options     Option[]
   modules     Module[]
+  accreditationPlans AccreditationPlan[]
 
   @@index([departmentId])
 }
@@ -208,6 +215,7 @@ model Cycle {
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   classes   AcademicClass[]
+  accreditationPlans AccreditationPlan[]
 }
 
 model AcademicClass {
@@ -230,6 +238,7 @@ model AcademicClass {
   cours       CoursClass[]
   sessions    TimetableSession[]
   elements    ElementModule[]
+  accreditationAssignments ClassAccreditationAssignment[]
 
   @@index([year])
   @@index([filiereId])
@@ -338,9 +347,82 @@ model Cours {
   updatedAt       DateTime     @updatedAt
   classes         CoursClass[]
   elementModule   ElementModule? @relation(fields: [elementModuleId], references: [id], onDelete: SetNull)
+  accreditationLines AccreditationPlanLine[]
 
   @@index([name])
   @@index([elementModuleId])
+}
+
+model AccreditationPlan {
+  id            Int                     @id @default(autoincrement())
+  name          String
+  academicYear  String
+  levelYear     Int?
+  filiereId     Int?
+  optionId      Int?
+  cycleId       Int?
+  status        AccreditationPlanStatus @default(draft)
+  sourcePlanId  Int?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  filiere       Filiere?                @relation(fields: [filiereId], references: [id], onDelete: SetNull)
+  option        Option?                 @relation(fields: [optionId], references: [id], onDelete: SetNull)
+  cycle         Cycle?                  @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  sourcePlan    AccreditationPlan?      @relation("AccreditationPlanSource", fields: [sourcePlanId], references: [id], onDelete: SetNull)
+  derivedPlans  AccreditationPlan[]     @relation("AccreditationPlanSource")
+  lines         AccreditationPlanLine[]
+  classAssignments ClassAccreditationAssignment[]
+
+  @@index([academicYear])
+  @@index([filiereId])
+  @@index([optionId])
+  @@index([cycleId])
+  @@index([status])
+  @@index([sourcePlanId])
+  @@unique([name, academicYear])
+}
+
+model AccreditationPlanLine {
+  id            Int                @id @default(autoincrement())
+  planId        Int
+  coursId       Int
+  moduleId      Int?
+  elementId     Int?
+  semestre      String?
+  volumeHoraire Int?
+  isMandatory   Boolean            @default(true)
+  originLineId  Int?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  plan          AccreditationPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  cours         Cours              @relation(fields: [coursId], references: [id], onDelete: Restrict)
+  module        Module?            @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  element       ElementModule?     @relation(fields: [elementId], references: [id], onDelete: SetNull)
+  originLine    AccreditationPlanLine? @relation("AccreditationLineOrigin", fields: [originLineId], references: [id], onDelete: SetNull)
+  derivedLines  AccreditationPlanLine[] @relation("AccreditationLineOrigin")
+
+  @@index([planId])
+  @@index([coursId])
+  @@index([moduleId])
+  @@index([elementId])
+  @@index([originLineId])
+  @@unique([planId, coursId])
+}
+
+model ClassAccreditationAssignment {
+  id             Int               @id @default(autoincrement())
+  classId        Int
+  academicYear   String
+  planId         Int
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  class          AcademicClass     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  plan           AccreditationPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@unique([classId, academicYear])
+  @@index([classId])
+  @@index([planId])
+  @@index([academicYear])
 }
 
 // ─── Academic Structure ────────────────────────────────────────────────────────
@@ -355,6 +437,7 @@ model Option {
   filiere   Filiere         @relation(fields: [filiereId], references: [id], onDelete: Restrict)
   classes   AcademicClass[]
   modules   Module[]
+  accreditationPlans AccreditationPlan[]
 
   @@unique([name, filiereId])
   @@index([filiereId])
@@ -371,6 +454,7 @@ model Module {
   filiere   Filiere?        @relation(fields: [filiereId], references: [id], onDelete: SetNull)
   option    Option?         @relation(fields: [optionId], references: [id], onDelete: SetNull)
   elements  ElementModule[]
+  accreditationLines AccreditationPlanLine[]
 
   @@index([filiereId])
   @@index([optionId])
@@ -389,6 +473,7 @@ model ElementModule {
   class         AcademicClass?     @relation(fields: [classId], references: [id], onDelete: SetNull)
   sessions      TimetableSession[]
   cours         Cours?
+  accreditationLines AccreditationPlanLine[]
 
   @@index([moduleId])
   @@index([classId])

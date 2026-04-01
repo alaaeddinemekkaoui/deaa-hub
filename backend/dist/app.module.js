@@ -32,6 +32,7 @@ const element_modules_module_1 = require("./modules/element-modules/element-modu
 const timetable_module_1 = require("./modules/timetable/timetable.module");
 const cycles_module_1 = require("./modules/cycles/cycles.module");
 const student_observations_module_1 = require("./modules/student-observations/student-observations.module");
+const accreditations_module_1 = require("./modules/accreditations/accreditations.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -60,6 +61,7 @@ exports.AppModule = AppModule = __decorate([
             timetable_module_1.TimetableModule,
             cycles_module_1.CyclesModule,
             student_observations_module_1.StudentObservationsModule,
+            accreditations_module_1.AccreditationsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

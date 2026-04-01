@@ -18,6 +18,7 @@ import {
   Medal,
   NotebookPen,
   RefreshCw,
+  ShieldCheck,
   UserCog,
   Users,
   Workflow,
@@ -61,6 +62,7 @@ const navigation: NavGroup[] = [
     heading: 'Structure Académique',
     items: [
       { href: '/academic', label: 'Modules & Éléments', caption: 'Modules · CM · TD · TP', icon: BookOpenCheck },
+      { href: '/accreditations', label: 'Accréditations', caption: 'Plans annuels versionnés', icon: ShieldCheck },
     ],
   },
   

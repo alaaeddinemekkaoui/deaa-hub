@@ -348,6 +348,7 @@ export default function StudentProfilePage() {
             </div>
           )}
         </section>
+        </>
       ) : null}
 
       <ModalShell

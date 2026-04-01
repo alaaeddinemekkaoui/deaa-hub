@@ -26,8 +26,9 @@ type AcademicClass = {
 type Teacher = { id: number; firstName: string; lastName: string };
 type ElementModule = { id: number; name: string; type: string; volumeHoraire?: number | null };
 type CoursAssignment = {
-  cours: { id: number; name: string; elementModuleId?: number | null };
+  cours: { id: number; name: string; type: string; elementModuleId?: number | null };
   teacher?: { id: number; firstName: string; lastName: string } | null;
+  groupLabel?: string | null;
 };
 type Cours = {
   id: number;
@@ -73,6 +74,8 @@ export default function ClassesCoursPage() {
 
   // Create cours form
   const [newCoursName, setNewCoursName] = useState('');
+  const [newCoursType, setNewCoursType] = useState<'CM' | 'TD' | 'TP'>('CM');
+  const [newCoursGroupLabel, setNewCoursGroupLabel] = useState('');
   const [newCoursElementId, setNewCoursElementId] = useState('');
   const [newCoursClassId, setNewCoursClassId] = useState('');
   const [newCoursTeacherId, setNewCoursTeacherId] = useState('');
@@ -81,6 +84,7 @@ export default function ClassesCoursPage() {
   // Assign cours form
   const [assignCoursId, setAssignCoursId] = useState('');
   const [assignTeacherId, setAssignTeacherId] = useState('');
+  const [assignGroupLabel, setAssignGroupLabel] = useState('');
   const [savingAssign, setSavingAssign] = useState(false);
 
   // Import state
@@ -233,13 +237,17 @@ export default function ClassesCoursPage() {
       setSavingCours(true);
       await api.post('/cours', {
         name: newCoursName.trim(),
+        type: newCoursType,
         elementModuleId: newCoursElementId ? Number(newCoursElementId) : null,
         classId: newCoursClassId ? Number(newCoursClassId) : null,
         teacherId: newCoursTeacherId ? Number(newCoursTeacherId) : null,
+        groupLabel: (newCoursType === 'TD' || newCoursType === 'TP') && newCoursGroupLabel.trim() ? newCoursGroupLabel.trim() : null,
       });
       toast.success('Cours créé avec succès');
       setCreateModalOpen(false);
       setNewCoursName('');
+      setNewCoursType('CM');
+      setNewCoursGroupLabel('');
       setNewCoursElementId('');
       setNewCoursClassId(selectedClassId);
       setNewCoursTeacherId('');
@@ -258,11 +266,13 @@ export default function ClassesCoursPage() {
       await api.post(`/cours/${assignCoursId}/classes`, {
         classId: Number(selectedClassId),
         teacherId: assignTeacherId ? Number(assignTeacherId) : null,
+        groupLabel: assignGroupLabel.trim() || null,
       });
       toast.success('Cours affecté avec succès');
       setAssignModalOpen(false);
       setAssignCoursId('');
       setAssignTeacherId('');
+      setAssignGroupLabel('');
       setCoursRefreshKey((k) => k + 1);
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Échec de l\'affectation'));
@@ -285,6 +295,8 @@ export default function ClassesCoursPage() {
 
   const openCreateModal = () => {
     setNewCoursName('');
+    setNewCoursType('CM');
+    setNewCoursGroupLabel('');
     setNewCoursElementId('');
     setNewCoursClassId(selectedClassId);
     setNewCoursTeacherId('');
@@ -420,6 +432,8 @@ export default function ClassesCoursPage() {
                   <thead>
                     <tr>
                       <th>Cours</th>
+                      <th>Type</th>
+                      <th>Groupe</th>
                       <th>Professeur</th>
                       <th>Actions</th>
                     </tr>
@@ -430,9 +444,17 @@ export default function ClassesCoursPage() {
                         <td>
                           <p className="font-medium text-slate-950">{a.cours.name}</p>
                           {a.cours.elementModuleId && (
-                            <p className="text-xs text-slate-400">Lié à un élément de module</p>
+                            <p className="text-xs text-slate-400">Lié à un élément</p>
                           )}
                         </td>
+                        <td>
+                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
+                            a.cours.type === 'CM' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            a.cours.type === 'TD' ? 'bg-violet-50 text-violet-700 border-violet-200' :
+                            'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}>{a.cours.type}</span>
+                        </td>
+                        <td>{a.groupLabel ?? <span className="text-slate-400">—</span>}</td>
                         <td>
                           {a.teacher
                             ? `${a.teacher.firstName} ${a.teacher.lastName}`
@@ -570,6 +592,39 @@ export default function ClassesCoursPage() {
           </div>
 
           <div className="field-stack">
+            <label className="field-label">Type</label>
+            <div className="flex gap-2">
+              {(['CM', 'TD', 'TP'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => { setNewCoursType(t); if (t === 'CM') setNewCoursGroupLabel(''); }}
+                  className={`flex-1 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                    newCoursType === t
+                      ? t === 'CM' ? 'bg-blue-600 border-blue-600 text-white'
+                        : t === 'TD' ? 'bg-violet-600 border-violet-600 text-white'
+                        : 'bg-amber-500 border-amber-500 text-white'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >{t}</button>
+              ))}
+            </div>
+          </div>
+
+          {(newCoursType === 'TD' || newCoursType === 'TP') && (
+            <div className="field-stack">
+              <label className="field-label">Libellé du groupe</label>
+              <input
+                className="input"
+                value={newCoursGroupLabel}
+                onChange={(e) => setNewCoursGroupLabel(e.target.value)}
+                placeholder={`ex. Groupe ${newCoursType} 1`}
+                maxLength={80}
+              />
+            </div>
+          )}
+
+          <div className="field-stack">
             <label className="field-label">Classe (affectation directe)</label>
             <select
               className="input"
@@ -674,6 +729,16 @@ export default function ClassesCoursPage() {
                 </option>
               ))}
             </select>
+          </div>
+          <div className="field-stack">
+            <label className="field-label">Libellé du groupe</label>
+            <input
+              className="input"
+              value={assignGroupLabel}
+              onChange={(e) => setAssignGroupLabel(e.target.value)}
+              placeholder="ex. Groupe TD 1 (optionnel)"
+              maxLength={80}
+            />
           </div>
         </div>
       </ModalShell>
