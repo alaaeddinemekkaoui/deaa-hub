@@ -685,13 +685,12 @@ export default function TeachersPage() {
                   <thead>
                     <tr>
                       <th>Enseignant</th>
+                      <th>Statut</th>
                       <th>CIN</th>
-                      <th>Rôle</th>
                       <th>Grade</th>
                       <th>Inscription</th>
                       <th>Département</th>
                       <th>Filière</th>
-                      <th>Classes</th>
                       <th>Contact</th>
                       <th>Mise à jour</th>
                       <th>Actions</th>
@@ -706,12 +705,22 @@ export default function TeachersPage() {
                               {item.firstName} {item.lastName}
                             </p>
                             <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
-                              {item.filiere ? 'Portée du département + filière' : 'Portée du département'}
+                              {item.grade.name}
                             </p>
                           </div>
                         </td>
+                        <td>
+                          {/vacataire/i.test(item.role.name) ? (
+                            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                              Vacataire
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                              Permanent
+                            </span>
+                          )}
+                        </td>
                         <td>{item.cin ?? '-'}</td>
-                        <td>{item.role.name}</td>
                         <td>{item.grade.name}</td>
                         <td>
                           {item.dateInscription
@@ -719,23 +728,7 @@ export default function TeachersPage() {
                             : '-'}
                         </td>
                         <td>{item.department.name}</td>
-                        <td>{item.filiere?.name ?? 'Toutes les filières du département'}</td>
-                        <td>
-                          {item.taughtClasses.length ? (
-                            <div className="space-y-1 text-sm text-slate-600">
-                              <p>
-                                {item.taughtClasses[0].class.name}
-                              </p>
-                              {item.taughtClasses.length > 1 ? (
-                                <p className="text-xs font-medium text-slate-500">
-                                  +{item.taughtClasses.length - 1} autres classes
-                                </p>
-                              ) : null}
-                            </div>
-                          ) : (
-                            '-'
-                          )}
-                        </td>
+                        <td>{item.filiere?.name ?? 'Toutes les filières'}</td>
                         <td>
                           <div className="space-y-1 text-sm text-slate-600">
                             <p>{item.email ?? '-'}</p>

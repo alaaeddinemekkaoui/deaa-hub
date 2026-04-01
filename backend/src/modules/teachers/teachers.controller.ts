@@ -117,6 +117,12 @@ export class TeachersController {
     return this.teachersService.findClassLogs(id);
   }
 
+  @Get(':id/cours')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  findCours(@Param('id', ParseIntPipe) id: number) {
+    return this.teachersService.findCours(id);
+  }
+
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
   findOne(@Param('id', ParseIntPipe) id: number) {

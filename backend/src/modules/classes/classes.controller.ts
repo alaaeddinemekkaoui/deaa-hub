@@ -49,6 +49,12 @@ export class ClassesController {
     return this.classesService.findOne(id);
   }
 
+  @Get(':id/cours')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  findCours(@Param('id', ParseIntPipe) id: number) {
+    return this.classesService.findCours(id);
+  }
+
   @Post()
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   create(@Body() dto: CreateClassDto) {

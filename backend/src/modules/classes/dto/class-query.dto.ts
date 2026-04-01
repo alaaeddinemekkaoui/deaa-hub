@@ -37,6 +37,18 @@ export class ClassQueryDto extends PaginationDto {
   year?: number;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cycleId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  optionId?: number;
+
+  @IsOptional()
   @IsIn(['name', 'year', 'createdAt', 'updatedAt'])
   sortBy: 'name' | 'year' | 'createdAt' | 'updatedAt' = 'year';
 

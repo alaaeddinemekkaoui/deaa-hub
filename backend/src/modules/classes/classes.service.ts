@@ -23,6 +23,8 @@ export class ClassesService {
       filiereId,
       departmentId,
       year,
+      cycleId,
+      optionId,
       sortBy,
       sortOrder,
     } = query;
@@ -32,33 +34,17 @@ export class ClassesService {
     if (search) {
       filters.push({
         OR: [
-          {
-            name: {
-              contains: search,
-              mode: 'insensitive',
-            },
-          },
-          {
-            classType: {
-              contains: search,
-              mode: 'insensitive',
-            },
-          },
+          { name: { contains: search, mode: 'insensitive' } },
+          { classType: { contains: search, mode: 'insensitive' } },
         ],
       });
     }
 
-    if (typeof year === 'number') {
-      filters.push({ year });
-    }
-
-    if (filiereId) {
-      filters.push({ filiereId });
-    }
-
-    if (departmentId) {
-      filters.push({ filiere: { is: { departmentId } } });
-    }
+    if (typeof year === 'number') filters.push({ year });
+    if (filiereId) filters.push({ filiereId });
+    if (departmentId) filters.push({ filiere: { is: { departmentId } } });
+    if (cycleId) filters.push({ cycleId });
+    if (optionId) filters.push({ optionId });
 
     const where: Prisma.AcademicClassWhereInput =
       filters.length > 0 ? { AND: filters } : {};
@@ -69,19 +55,13 @@ export class ClassesService {
         include: {
           filiere: {
             include: {
-              department: {
-                select: {
-                  id: true,
-                  name: true,
-                },
-              },
+              department: { select: { id: true, name: true } },
             },
           },
+          academicOption: { select: { id: true, name: true, code: true } },
+          cycle: { select: { id: true, name: true, code: true } },
           _count: {
-            select: {
-              students: true,
-              teachers: true,
-            },
+            select: { students: true, teachers: true, cours: true },
           },
         },
         skip: (page - 1) * limit,
@@ -111,42 +91,49 @@ export class ClassesService {
     const academicClass = await this.prisma.academicClass.findUnique({
       where: { id },
       include: {
-        filiere: {
-          include: {
-            department: true,
-          },
-        },
+        filiere: { include: { department: true } },
+        academicOption: true,
+        cycle: true,
         students: true,
-        teachers: {
-          include: {
-            teacher: true,
-          },
-        },
+        teachers: { include: { teacher: true } },
       },
     });
 
-    if (!academicClass) {
-      throw new NotFoundException(`Class ${id} not found`);
-    }
-
+    if (!academicClass) throw new NotFoundException(`Class ${id} not found`);
     return academicClass;
   }
 
-  async create(dto: CreateClassDto) {
-    if (dto.filiereId) {
-      await this.ensureFiliereExists(dto.filiereId);
-    }
+  async findCours(id: number) {
+    const academicClass = await this.prisma.academicClass.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!academicClass) throw new NotFoundException(`Class ${id} not found`);
 
-    await this.ensureClassIdentityAvailable(
-      dto.name,
-      dto.year,
-    );
+    return this.prisma.coursClass.findMany({
+      where: { classId: id },
+      include: {
+        cours: true,
+        teacher: { select: { id: true, firstName: true, lastName: true } },
+      },
+      orderBy: { cours: { name: 'asc' } },
+    });
+  }
+
+  async create(dto: CreateClassDto) {
+    if (dto.filiereId) await this.ensureFiliereExists(dto.filiereId);
+    if (dto.cycleId) await this.ensureCycleExists(dto.cycleId);
+    if (dto.optionId) await this.ensureOptionExists(dto.optionId);
+
+    await this.ensureClassIdentityAvailable(dto.name, dto.year);
 
     return this.prisma.academicClass.create({
       data: {
         name: dto.name,
         year: dto.year,
         classType: dto.classType ?? null,
+        cycleId: dto.cycleId ?? null,
+        optionId: dto.optionId ?? null,
         filiereId: dto.filiereId ?? null,
       },
     });
@@ -155,40 +142,28 @@ export class ClassesService {
   async update(id: number, dto: UpdateClassDto) {
     const existing = await this.prisma.academicClass.findUnique({
       where: { id },
-      select: {
-        id: true,
-        name: true,
-        year: true,
-      },
+      select: { id: true, name: true, year: true },
     });
 
-    if (!existing) {
-      throw new NotFoundException(`Class ${id} not found`);
-    }
+    if (!existing) throw new NotFoundException(`Class ${id} not found`);
 
-    if (typeof dto.filiereId === 'number') {
-      await this.ensureFiliereExists(dto.filiereId);
-    }
+    if (typeof dto.filiereId === 'number') await this.ensureFiliereExists(dto.filiereId);
+    if (typeof dto.cycleId === 'number') await this.ensureCycleExists(dto.cycleId);
+    if (typeof dto.optionId === 'number') await this.ensureOptionExists(dto.optionId);
 
     const nextName = dto.name ?? existing.name;
     const nextYear = dto.year ?? existing.year;
-    await this.ensureClassIdentityAvailable(
-      nextName,
-      nextYear,
-      id,
-    );
+    await this.ensureClassIdentityAvailable(nextName, nextYear, id);
 
     return this.prisma.academicClass.update({
       where: { id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.year !== undefined ? { year: dto.year } : {}),
-        ...(dto.classType !== undefined
-          ? { classType: dto.classType ?? null }
-          : {}),
-        ...(dto.filiereId !== undefined
-          ? { filiereId: dto.filiereId ?? null }
-          : {}),
+        ...(dto.classType !== undefined ? { classType: dto.classType ?? null } : {}),
+        ...(dto.cycleId !== undefined ? { cycleId: dto.cycleId ?? null } : {}),
+        ...(dto.optionId !== undefined ? { optionId: dto.optionId ?? null } : {}),
+        ...(dto.filiereId !== undefined ? { filiereId: dto.filiereId ?? null } : {}),
       },
     });
   }
@@ -198,23 +173,13 @@ export class ClassesService {
       where: { id },
       select: {
         id: true,
-        _count: {
-          select: {
-            students: true,
-            teachers: true,
-          },
-        },
+        _count: { select: { students: true, teachers: true } },
       },
     });
 
-    if (!academicClass) {
-      throw new NotFoundException(`Class ${id} not found`);
-    }
+    if (!academicClass) throw new NotFoundException(`Class ${id} not found`);
 
-    if (
-      academicClass._count.students > 0 ||
-      academicClass._count.teachers > 0
-    ) {
+    if (academicClass._count.students > 0 || academicClass._count.teachers > 0) {
       throw new BadRequestException(
         'Class cannot be deleted while students or teachers are still attached',
       );
@@ -224,14 +189,18 @@ export class ClassesService {
   }
 
   private async ensureFiliereExists(id: number) {
-    const filiere = await this.prisma.filiere.findUnique({
-      where: { id },
-      select: { id: true },
-    });
+    const f = await this.prisma.filiere.findUnique({ where: { id }, select: { id: true } });
+    if (!f) throw new NotFoundException(`Filiere ${id} not found`);
+  }
 
-    if (!filiere) {
-      throw new NotFoundException(`Filiere ${id} not found`);
-    }
+  private async ensureCycleExists(id: number) {
+    const c = await this.prisma.cycle.findUnique({ where: { id }, select: { id: true } });
+    if (!c) throw new NotFoundException(`Cycle ${id} not found`);
+  }
+
+  private async ensureOptionExists(id: number) {
+    const o = await this.prisma.option.findUnique({ where: { id }, select: { id: true } });
+    if (!o) throw new NotFoundException(`Option ${id} not found`);
   }
 
   private async ensureClassIdentityAvailable(
@@ -241,10 +210,7 @@ export class ClassesService {
   ) {
     const existing = await this.prisma.academicClass.findFirst({
       where: {
-        name: {
-          equals: name,
-          mode: 'insensitive',
-        },
+        name: { equals: name, mode: 'insensitive' },
         year,
         ...(excludeId ? { id: { not: excludeId } } : {}),
       },

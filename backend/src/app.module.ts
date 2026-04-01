@@ -16,6 +16,13 @@ import { RoomsModule } from './modules/rooms/rooms.module';
 import { LaureatesModule } from './modules/laureates/laureates.module';
 import { ActivityLogsModule } from './modules/activity-logs/activity-logs.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { CoursModule } from './modules/cours/cours.module';
+import { OptionsModule } from './modules/options/options.module';
+import { AcademicModulesModule } from './modules/academic-modules/academic-modules.module';
+import { ElementModulesModule } from './modules/element-modules/element-modules.module';
+import { TimetableModule } from './modules/timetable/timetable.module';
+import { CyclesModule } from './modules/cycles/cycles.module';
+import { StudentObservationsModule } from './modules/student-observations/student-observations.module';
 
 @Module({
   imports: [
@@ -34,6 +41,13 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     LaureatesModule,
     ActivityLogsModule,
     DashboardModule,
+    CoursModule,
+    OptionsModule,
+    AcademicModulesModule,
+    ElementModulesModule,
+    TimetableModule,
+    CyclesModule,
+    StudentObservationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

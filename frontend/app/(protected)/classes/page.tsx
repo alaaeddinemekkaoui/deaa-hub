@@ -17,6 +17,8 @@ type AcademicClass = {
   name: string;
   year: number;
   classType?: string | null;
+  cycleId?: number | null;
+  optionId?: number | null;
   filiereId?: number | null;
   createdAt: string;
   updatedAt: string;
@@ -25,14 +27,19 @@ type AcademicClass = {
     name: string;
     department?: { id: number; name: string };
   } | null;
+  academicOption?: { id: number; name: string } | null;
+  cycle?: { id: number; name: string; code?: string | null } | null;
   _count: {
     students: number;
     teachers: number;
+    cours: number;
   };
 };
 
 type Filiere = { id: number; name: string; departmentId?: number };
 type Department = { id: number; name: string };
+type AcademicOption = { id: number; name: string; filiereId: number };
+type Cycle = { id: number; name: string; code?: string | null };
 
 const PAGE_SIZE = 8;
 
@@ -40,9 +47,13 @@ export default function ClassesPage() {
   const [rows, setRows] = useState<AcademicClass[]>([]);
   const [filieres, setFilieres] = useState<Filiere[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [options, setOptions] = useState<AcademicOption[]>([]);
+  const [cycles, setCycles] = useState<Cycle[]>([]);
   const [name, setName] = useState('');
   const [year, setYear] = useState('1');
   const [classType, setClassType] = useState('');
+  const [cycleId, setCycleId] = useState('');
+  const [optionId, setOptionId] = useState('');
   const [departmentId, setDepartmentId] = useState('');
   const [filiereId, setFiliereId] = useState('');
   const [filterDepartmentId, setFilterDepartmentId] = useState('');
@@ -81,6 +92,8 @@ export default function ClassesPage() {
     setName('');
     setYear('1');
     setClassType('');
+    setCycleId('');
+    setOptionId('');
     setDepartmentId('');
     setFiliereId('');
   };
@@ -96,14 +109,14 @@ export default function ClassesPage() {
   };
 
   const filieresByDepartment = useMemo(() => {
-    if (!departmentId) {
-      return filieres;
-    }
-
-    return filieres.filter(
-      (item) => String(item.departmentId ?? '') === departmentId,
-    );
+    if (!departmentId) return filieres;
+    return filieres.filter((item) => String(item.departmentId ?? '') === departmentId);
   }, [departmentId, filieres]);
+
+  const optionsByFiliere = useMemo(() => {
+    if (!filiereId) return [];
+    return options.filter((item) => String(item.filiereId) === filiereId);
+  }, [filiereId, options]);
 
   const filterFilieresByDepartment = useMemo(() => {
     if (!filterDepartmentId) {
@@ -120,7 +133,7 @@ export default function ClassesPage() {
       try {
         setLoading(true);
         setError(null);
-        const [classesResponse, filieresResponse, departmentsResponse] =
+        const [classesResponse, filieresResponse, departmentsResponse, optionsResponse, cyclesResponse] =
           await Promise.all([
           api.get<PaginatedResponse<AcademicClass>>('/classes', {
             params: {
@@ -134,27 +147,23 @@ export default function ClassesPage() {
             },
           }),
           api.get<PaginatedResponse<Filiere>>('/filieres', {
-            params: {
-              page: 1,
-              limit: 100,
-              sortBy: 'name',
-              sortOrder: 'asc',
-            },
+            params: { page: 1, limit: 100, sortBy: 'name', sortOrder: 'asc' },
           }),
           api.get<PaginatedResponse<Department>>('/departments', {
-            params: {
-              page: 1,
-              limit: 100,
-              sortBy: 'name',
-              sortOrder: 'asc',
-            },
+            params: { page: 1, limit: 100, sortBy: 'name', sortOrder: 'asc' },
           }),
+          api.get<PaginatedResponse<AcademicOption>>('/options', {
+            params: { page: 1, limit: 200, sortBy: 'name', sortOrder: 'asc' },
+          }),
+          api.get<Cycle[]>('/cycles'),
         ]);
 
         setRows(classesResponse.data.data);
         setMeta(classesResponse.data.meta);
         setFilieres(filieresResponse.data.data);
         setDepartments(departmentsResponse.data.data);
+        setOptions(optionsResponse.data.data);
+        setCycles(Array.isArray(cyclesResponse.data) ? cyclesResponse.data : []);
       } catch (loadError) {
         setError(getApiErrorMessage(loadError, 'Impossible de charger les classes maintenant.'));
       } finally {
@@ -205,6 +214,11 @@ export default function ClassesPage() {
     }
   }, [filterDepartmentId, filterFiliereId, filieres]);
 
+  // Reset optionId when filiereId changes in the form
+  useEffect(() => {
+    setOptionId('');
+  }, [filiereId]);
+
   const onSubmit = async () => {
     if (!name.trim() || !year.trim()) return;
 
@@ -214,6 +228,8 @@ export default function ClassesPage() {
         name: name.trim(),
         year: Number(year),
         classType: classType.trim() || null,
+        cycleId: cycleId ? Number(cycleId) : null,
+        optionId: optionId ? Number(optionId) : null,
         filiereId: filiereId ? Number(filiereId) : null,
       };
 
@@ -427,8 +443,9 @@ export default function ClassesPage() {
                       <th>Département</th>
                       <th>Étudiants</th>
                       <th>Enseignants</th>
-                      <th>State</th>
-                      <th>Updated</th>
+                      <th>Cours</th>
+                      <th>État</th>
+                      <th>Mis à jour</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -443,6 +460,8 @@ export default function ClassesPage() {
                             <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
                               Année {item.year}
                               {item.classType ? ` • ${item.classType}` : ''}
+                              {item.cycle ? ` • ${item.cycle.name}` : ''}
+                              {item.academicOption ? ` • ${item.academicOption.name}` : ''}
                             </p>
                           </div>
                         </td>
@@ -450,6 +469,11 @@ export default function ClassesPage() {
                         <td>{item.filiere?.department?.name ?? '-'}</td>
                         <td>{item._count.students}</td>
                         <td>{item._count.teachers}</td>
+                        <td>
+                          <span className={`status-chip ${item._count.cours > 0 ? 'status-chip--ok' : 'status-chip--warn'}`}>
+                            {item._count.cours}
+                          </span>
+                        </td>
                         <td>
                           <span
                             className={`status-chip ${
@@ -470,6 +494,8 @@ export default function ClassesPage() {
                                 setName(item.name);
                                 setYear(String(item.year));
                                 setClassType(item.classType ?? '');
+                                setCycleId(String(item.cycleId ?? ''));
+                                setOptionId(String(item.optionId ?? ''));
                                 setDepartmentId(
                                   String(item.filiere?.department?.id ?? ''),
                                 );
@@ -550,6 +576,39 @@ export default function ClassesPage() {
               onChange={(event) => setClassType(event.target.value)}
               placeholder="prépa / ingénieur"
             />
+          </div>
+          <div className="field-stack">
+            <label className="field-label">Cycle</label>
+            <select
+              className="input"
+              value={cycleId}
+              onChange={(event) => setCycleId(event.target.value)}
+            >
+              <option value="">— Aucun cycle —</option>
+              {cycles.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.code ? ` (${c.code})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field-stack">
+            <label className="field-label">Option</label>
+            <select
+              className="input"
+              value={optionId}
+              onChange={(event) => setOptionId(event.target.value)}
+              disabled={!filiereId}
+            >
+              <option value="">
+                {filiereId ? 'Aucune option' : 'Sélectionner une filière d\'abord'}
+              </option>
+              {optionsByFiliere.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="field-stack">
             <label className="field-label">Département</label>

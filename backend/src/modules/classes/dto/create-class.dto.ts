@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import {
   IsInt,
   IsNotEmpty,
@@ -9,7 +9,6 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
 
 export class CreateClassDto {
   @Transform(({ value }: { value: unknown }) =>
@@ -35,6 +34,26 @@ export class CreateClassDto {
   @IsInt()
   @Min(1)
   filiereId?: number | null;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === null || value === undefined || value === '') return null;
+    return Number(value);
+  })
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  optionId?: number | null;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === null || value === undefined || value === '') return null;
+    return Number(value);
+  })
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  cycleId?: number | null;
 
   @IsOptional()
   @Transform(({ value }: { value: unknown }) =>

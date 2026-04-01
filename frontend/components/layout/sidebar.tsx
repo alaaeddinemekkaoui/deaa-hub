@@ -7,12 +7,17 @@ import {
   Activity,
   ArrowLeftRight,
   BookOpen,
+  BookOpenCheck,
   Building2,
   CalendarRange,
+  CalendarDays,
   DoorOpen,
   GraduationCap,
   Home,
+  Layers,
   Medal,
+  NotebookPen,
+  RefreshCw,
   UserCog,
   Users,
   Workflow,
@@ -39,44 +44,58 @@ const navigation: NavGroup[] = [
     ],
   },
   {
-    heading: 'Gestion des étudiants',
+    heading: 'Étudiants',
     items: [
-      { href: '/students',   label: 'Étudiants',   caption: 'Profils et cohortes',    icon: GraduationCap },
-      { href: '/laureates',  label: 'Lauréats',    caption: 'Diplômes et suivi',      icon: Medal },
-      { href: '/transfers',  label: 'Transferts',  caption: 'Changements de classe',  icon: ArrowLeftRight },
+      { href: '/students',  label: 'Étudiants',  caption: 'Profils et cohortes',   icon: GraduationCap },
+      { href: '/laureates', label: 'Lauréats',   caption: 'Diplômes et suivi',     icon: Medal },
+      { href: '/transfers', label: 'Transferts', caption: 'Changements de classe', icon: ArrowLeftRight },
     ],
   },
   {
-    heading: 'Ressources humaines',
+    heading: 'Enseignants',
     items: [
-      { href: '/teachers', label: 'Enseignants', caption: 'Permanents et vacataires', icon: Users },
+      { href: '/teachers', label: 'Professeurs', caption: 'Permanents et vacataires', icon: Users },
     ],
   },
   {
-    heading: 'Structure académique',
+    heading: 'Structure Académique',
     items: [
-      { href: '/departments', label: 'Départements', caption: 'Structures académiques', icon: Building2 },
-      { href: '/filieres',    label: 'Filières',     caption: 'Programmes et voies',    icon: BookOpen },
-      { href: '/classes',     label: 'Classes',      caption: 'Groupes académiques',    icon: CalendarRange },
+      { href: '/academic', label: 'Modules & Éléments', caption: 'Modules · CM · TD · TP', icon: BookOpenCheck },
+    ],
+  },
+  
+  {
+    heading: 'Classes',
+    items: [
+      { href: '/classes',       label: 'Gestion des Classes', caption: 'Cohortes et groupes', icon: CalendarRange },
+      { href: '/classes/cours', label: 'Gestion des cours',   caption: 'Cours par classe',    icon: NotebookPen },
     ],
   },
   {
-    heading: 'Infrastructure',
+    heading: 'Emploi du Temps et Gestion des Salles',
     items: [
-      { href: '/rooms', label: 'Salles', caption: 'Gestion des espaces', icon: DoorOpen },
+      { href: '/timetable', label: 'Générateur', caption: 'Planification hebdomadaire', icon: CalendarDays },
+      { href: '/rooms', label: 'Gestion des salles', caption: 'Espaces et équipements', icon: DoorOpen },
+   
     ],
   },
+
   {
-    heading: 'Processus',
+    heading: 'Structure Organisationnelle',
     items: [
-      { href: '/workflows', label: 'Workflows', caption: 'Suivi des dossiers', icon: Workflow },
+      { href: '/departments', label: 'Départements', caption: "Structures de l'établissement", icon: Building2 },
+      { href: '/filieres',    label: 'Filières',     caption: 'Programmes et voies',           icon: BookOpen },
+      { href: '/structure',   label: 'Options',      caption: 'Spécialités par filière',       icon: Layers },
+      { href: '/cycles',      label: 'Cycles',       caption: 'Cycles académiques',            icon: RefreshCw },
     ],
   },
+  
   {
     heading: 'Administration',
     items: [
-      { href: '/activity-logs', label: 'Historique',    caption: "Journaux d'activité", icon: Activity },
-      { href: '/users',         label: 'Utilisateurs',   caption: 'Accès et rôles',     icon: UserCog },
+      { href: '/workflows',     label: 'Workflows',    caption: 'Suivi des dossiers',    icon: Workflow },
+      { href: '/activity-logs', label: 'Journaux',     caption: "Historique d'activité", icon: Activity },
+      { href: '/users',         label: 'Utilisateurs', caption: 'Accès et rôles',        icon: UserCog },
     ],
   },
 ];
@@ -113,10 +132,14 @@ export function Sidebar() {
               </p>
               <div className="grid gap-0.5">
                 {group.items.map(({ href, label, caption, icon: Icon }) => {
-                  const active = pathname === href || pathname.startsWith(`${href}/`);
+                  const allHrefs = navigation.flatMap((g) => g.items.map((i) => i.href));
+                  const bestMatch = allHrefs
+                    .filter((h) => pathname === h || pathname.startsWith(`${h}/`))
+                    .sort((a, b) => b.length - a.length)[0];
+                  const active = href === bestMatch;
                   return (
                     <Link
-                      key={href}
+                      key={`${group.heading}-${label}`}
                       href={href}
                       className={cn('sidebar-link', active && 'active')}
                     >

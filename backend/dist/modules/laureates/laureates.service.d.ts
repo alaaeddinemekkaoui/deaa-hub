@@ -1,0 +1,154 @@
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { CreateLaureateDto } from './dto/create-laureate.dto';
+import { UpdateLaureateDto } from './dto/update-laureate.dto';
+export declare class LaureatesService {
+    private readonly prisma;
+    constructor(prisma: PrismaService);
+    findAll(): import(".prisma/client").Prisma.PrismaPromise<({
+        student: {
+            filiere: {
+                id: number;
+                createdAt: Date;
+                updatedAt: Date;
+                name: string;
+                code: string;
+                departmentId: number;
+                filiereType: string | null;
+            } | null;
+        } & {
+            cycle: import(".prisma/client").$Enums.StudentCycle;
+            fullName: string;
+            email: string | null;
+            id: number;
+            createdAt: Date;
+            updatedAt: Date;
+            firstName: string | null;
+            lastName: string | null;
+            sex: import(".prisma/client").$Enums.Sex;
+            cin: string;
+            codeMassar: string;
+            dateNaissance: Date;
+            telephone: string | null;
+            prepaYear: import(".prisma/client").$Enums.PrepaYear | null;
+            prepaTrack: string | null;
+            entryLevel: number | null;
+            filiereId: number | null;
+            classId: number | null;
+            firstYearEntry: number;
+            bacType: string | null;
+            anneeAcademique: string;
+            dateInscription: Date;
+        };
+        proofDocument: {
+            id: number;
+            createdAt: Date;
+            name: string;
+            studentId: number;
+            path: string;
+            mimeType: string;
+        } | null;
+    } & {
+        id: number;
+        createdAt: Date;
+        updatedAt: Date;
+        studentId: number;
+        graduationYear: number;
+        diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
+        proofDocumentId: number | null;
+    })[]>;
+    findOne(id: number): import(".prisma/client").Prisma.Prisma__LaureateClient<({
+        student: {
+            filiere: {
+                id: number;
+                createdAt: Date;
+                updatedAt: Date;
+                name: string;
+                code: string;
+                departmentId: number;
+                filiereType: string | null;
+            } | null;
+        } & {
+            cycle: import(".prisma/client").$Enums.StudentCycle;
+            fullName: string;
+            email: string | null;
+            id: number;
+            createdAt: Date;
+            updatedAt: Date;
+            firstName: string | null;
+            lastName: string | null;
+            sex: import(".prisma/client").$Enums.Sex;
+            cin: string;
+            codeMassar: string;
+            dateNaissance: Date;
+            telephone: string | null;
+            prepaYear: import(".prisma/client").$Enums.PrepaYear | null;
+            prepaTrack: string | null;
+            entryLevel: number | null;
+            filiereId: number | null;
+            classId: number | null;
+            firstYearEntry: number;
+            bacType: string | null;
+            anneeAcademique: string;
+            dateInscription: Date;
+        };
+        proofDocument: {
+            id: number;
+            createdAt: Date;
+            name: string;
+            studentId: number;
+            path: string;
+            mimeType: string;
+        } | null;
+    } & {
+        id: number;
+        createdAt: Date;
+        updatedAt: Date;
+        studentId: number;
+        graduationYear: number;
+        diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
+        proofDocumentId: number | null;
+    }) | null, null, import("@prisma/client/runtime/library").DefaultArgs>;
+    findNonLaureateStudents(search?: string): Promise<{
+        filiere: {
+            name: string;
+        } | null;
+        academicClass: {
+            name: string;
+        } | null;
+        fullName: string;
+        id: number;
+        codeMassar: string;
+    }[]>;
+    create(dto: CreateLaureateDto, userId?: number): Promise<{
+        id: number;
+        createdAt: Date;
+        updatedAt: Date;
+        studentId: number;
+        graduationYear: number;
+        diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
+        proofDocumentId: number | null;
+    }>;
+    update(id: number, dto: UpdateLaureateDto, userId?: number): Promise<{
+        id: number;
+        createdAt: Date;
+        updatedAt: Date;
+        studentId: number;
+        graduationYear: number;
+        diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
+        proofDocumentId: number | null;
+    }>;
+    remove(id: number, userId?: number): Promise<{
+        id: number;
+        createdAt: Date;
+        updatedAt: Date;
+        studentId: number;
+        graduationYear: number;
+        diplomaStatus: import(".prisma/client").$Enums.DiplomaStatus;
+        proofDocumentId: number | null;
+    }>;
+    importFromBuffer(buffer: Buffer, userId?: number): Promise<{
+        imported: number;
+        errors: string[];
+    }>;
+    private log;
+}

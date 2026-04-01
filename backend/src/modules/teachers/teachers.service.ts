@@ -322,6 +322,23 @@ export class TeachersService {
     return this.prisma.teacher.delete({ where: { id } });
   }
 
+  async findCours(teacherId: number) {
+    await this.ensureTeacherExists(teacherId);
+    return this.prisma.coursClass.findMany({
+      where: { teacherId },
+      include: {
+        cours: { select: { id: true, name: true, type: true } },
+        class: {
+          select: {
+            id: true, name: true, year: true,
+            filiere: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async findClassLogs(teacherId: number) {
     return this.prisma.activityLog.findMany({
       where: {

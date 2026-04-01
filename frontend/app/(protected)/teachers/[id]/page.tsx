@@ -18,30 +18,33 @@ type TeacherProfile = {
   filiere?: { id: number; name: string } | null;
   role?: { id: number; name: string };
   grade?: { id: number; name: string };
-  taughtClasses?: Array<{
-    classId: number;
-    class: { id: number; name: string; year: number };
-  }>;
   createdAt: string;
   updatedAt: string;
 };
 
-type ClassLogEntry = {
+type CoursAssignment = {
   id: number;
-  action: string;
-  metadata: {
-    teacherId: number;
-    previousClassIds: number[];
-    newClassIds: number[];
-  };
-  timestamp: string;
-  user: { email: string };
+  createdAt: string;
+  groupLabel?: string | null;
+  cours: { id: number; name: string; type: string };
+  class: { id: number; name: string; year: number; filiere?: { id: number; name: string } | null };
 };
+
+const TYPE_CHIP: Record<string, string> = {
+  CM: 'bg-blue-50 text-blue-700 border-blue-200',
+  TD: 'bg-violet-50 text-violet-700 border-violet-200',
+  TP: 'bg-amber-50 text-amber-700 border-amber-200',
+};
+
+function formatAffectationDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+}
 
 export default function TeacherProfilePage() {
   const params = useParams<{ id: string }>();
   const [teacher, setTeacher] = useState<TeacherProfile | null>(null);
-  const [classLogs, setClassLogs] = useState<ClassLogEntry[]>([]);
+  const [coursHistory, setCoursHistory] = useState<CoursAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,42 +52,40 @@ export default function TeacherProfilePage() {
     const load = async () => {
       const id = Number(params.id);
       if (!Number.isInteger(id) || id < 1) {
-        setError('Invalid teacher id.');
+        setError('Identifiant enseignant invalide.');
         setLoading(false);
         return;
       }
-
       try {
         setLoading(true);
         setError(null);
-        const [teacherRes, logsRes] = await Promise.all([
+        const [teacherRes, coursRes] = await Promise.all([
           api.get<TeacherProfile>(`/teachers/${id}`),
-          api.get<ClassLogEntry[]>(`/teachers/${id}/class-logs`),
+          api.get<CoursAssignment[]>(`/teachers/${id}/cours`),
         ]);
         setTeacher(teacherRes.data);
-        setClassLogs(logsRes.data);
+        setCoursHistory(Array.isArray(coursRes.data) ? coursRes.data : []);
       } catch (loadError) {
-        setError(getApiErrorMessage(loadError, 'Failed to load teacher profile'));
+        setError(getApiErrorMessage(loadError, 'Impossible de charger le profil'));
       } finally {
         setLoading(false);
       }
     };
-
     void load();
   }, [params.id]);
+
+  const isVacataire = /vacataire/i.test(teacher?.role?.name ?? '');
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Corps enseignant"
         title="Profil enseignant"
-        description="Détails complets et historique d'affectation des classes"
+        description="Informations détaillées et historique des cours affectés"
       />
 
       <section className="flex justify-end">
-        <Link className="btn-outline" href="/teachers">
-          Retour aux enseignants
-        </Link>
+        <Link className="btn-outline" href="/teachers">Retour aux enseignants</Link>
       </section>
 
       {loading ? <div className="empty-note">Chargement du profil...</div> : null}
@@ -93,133 +94,105 @@ export default function TeacherProfilePage() {
       {!loading && !error && teacher ? (
         <>
           <section className="surface-card space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="field-stack">
-                <label className="field-label">Prénom</label>
-                <p className="input bg-slate-50 dark:bg-slate-900">{teacher.firstName}</p>
-              </div>
-              <div className="field-stack">
-                <label className="field-label">Nom</label>
-                <p className="input bg-slate-50 dark:bg-slate-900">{teacher.lastName}</p>
-              </div>
-              <div className="field-stack">
-                <label className="field-label">CIN</label>
-                <p className="input bg-slate-50 dark:bg-slate-900">{teacher.cin ?? '-'}</p>
-              </div>
-              <div className="field-stack">
-                <label className="field-label">Date d'inscription</label>
-                <p className="input bg-slate-50 dark:bg-slate-900">
-                  {teacher.dateInscription
-                    ? new Date(teacher.dateInscription).toLocaleDateString()
-                    : '-'}
-                </p>
-              </div>
-              <div className="field-stack">
-                <label className="field-label">Email</label>
-                <p className="input bg-slate-50 dark:bg-slate-900">{teacher.email ?? '-'}</p>
-              </div>
-              <div className="field-stack">
-                <label className="field-label">Téléphone</label>
-                <p className="input bg-slate-50 dark:bg-slate-900">{teacher.phoneNumber ?? '-'}</p>
-              </div>
-              <div className="field-stack">
-                <label className="field-label">Département</label>
-                <p className="input bg-slate-50 dark:bg-slate-900">{teacher.department?.name ?? '-'}</p>
-              </div>
-              <div className="field-stack">
-                <label className="field-label">Filière</label>
-                <p className="input bg-slate-50 dark:bg-slate-900">{teacher.filiere?.name ?? '-'}</p>
-              </div>
-              <div className="field-stack">
-                <label className="field-label">Rôle</label>
-                <p className="input bg-slate-50 dark:bg-slate-900">{teacher.role?.name ?? '-'}</p>
-              </div>
-              <div className="field-stack">
-                <label className="field-label">Grade académique</label>
-                <p className="input bg-slate-50 dark:bg-slate-900">{teacher.grade?.name ?? '-'}</p>
-              </div>
-            </div>
-
-            <div className="field-stack">
-              <label className="field-label">Classes assignées</label>
-              {teacher.taughtClasses && teacher.taughtClasses.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {teacher.taughtClasses.map(({ class: classItem, classId }) => (
-                    <span key={classId} className="status-chip status-chip--muted">
-                      {classItem.name}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="input bg-slate-50 dark:bg-slate-900">-</p>
+            {/* Status badge */}
+            <div className="flex items-center gap-3">
+              <span className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${isVacataire ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                {isVacataire ? 'Vacataire' : 'Permanent'}
+              </span>
+              {teacher.role && (
+                <span className="text-sm text-slate-500">{teacher.role.name}</span>
               )}
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
               <div className="field-stack">
-                <label className="field-label">Créé le</label>
-                <p className="input bg-slate-50 dark:bg-slate-900">
-                  {new Date(teacher.createdAt).toLocaleString()}
+                <label className="field-label">Prénom</label>
+                <p className="input bg-slate-50">{teacher.firstName}</p>
+              </div>
+              <div className="field-stack">
+                <label className="field-label">Nom</label>
+                <p className="input bg-slate-50">{teacher.lastName}</p>
+              </div>
+              <div className="field-stack">
+                <label className="field-label">CIN</label>
+                <p className="input bg-slate-50">{teacher.cin ?? '—'}</p>
+              </div>
+              <div className="field-stack">
+                <label className="field-label">Date d&apos;inscription</label>
+                <p className="input bg-slate-50">
+                  {teacher.dateInscription ? new Date(teacher.dateInscription).toLocaleDateString('fr-FR') : '—'}
                 </p>
               </div>
               <div className="field-stack">
+                <label className="field-label">Email</label>
+                <p className="input bg-slate-50">{teacher.email ?? '—'}</p>
+              </div>
+              <div className="field-stack">
+                <label className="field-label">Téléphone</label>
+                <p className="input bg-slate-50">{teacher.phoneNumber ?? '—'}</p>
+              </div>
+              <div className="field-stack">
+                <label className="field-label">Département</label>
+                <p className="input bg-slate-50">{teacher.department?.name ?? '—'}</p>
+              </div>
+              <div className="field-stack">
+                <label className="field-label">Filière</label>
+                <p className="input bg-slate-50">{teacher.filiere?.name ?? '—'}</p>
+              </div>
+              <div className="field-stack">
+                <label className="field-label">Grade académique</label>
+                <p className="input bg-slate-50">{teacher.grade?.name ?? '—'}</p>
+              </div>
+              <div className="field-stack">
                 <label className="field-label">Mis à jour le</label>
-                <p className="input bg-slate-50 dark:bg-slate-900">
-                  {new Date(teacher.updatedAt).toLocaleString()}
-                </p>
+                <p className="input bg-slate-50">{new Date(teacher.updatedAt).toLocaleString('fr-FR')}</p>
               </div>
             </div>
           </section>
 
-          {/* Class assignment history */}
+          {/* Cours affectés avec historique */}
           <section className="surface-card space-y-3">
-            <h2 className="text-sm font-semibold text-slate-700">Historique des affectations de classes</h2>
-            {classLogs.length === 0 ? (
-              <p className="text-sm text-slate-400">Aucun changement d'affectation enregistré.</p>
+            <div className="panel-header">
+              <div>
+                <h2 className="panel-title">Cours affectés</h2>
+                <p className="panel-copy">{coursHistory.length} cours affecté{coursHistory.length !== 1 ? 's' : ''}</p>
+              </div>
+            </div>
+
+            {coursHistory.length === 0 ? (
+              <p className="text-sm text-slate-400">Aucun cours affecté à cet enseignant.</p>
             ) : (
-              <div className="relative pl-5">
-                <div className="absolute left-[7px] top-2 bottom-2 w-px bg-emerald-200" />
-                <ol className="space-y-3">
-                  {classLogs.map((log, idx) => {
-                    const meta = log.metadata;
-                    return (
-                      <li key={log.id} className="relative flex items-start gap-3">
-                        <span
-                          className={`absolute -left-5 mt-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 ${
-                            idx === 0
-                              ? 'border-emerald-500 bg-emerald-500'
-                              : 'border-emerald-300 bg-white'
-                          }`}
-                        />
-                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm w-full">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <span className="text-xs text-slate-500">
-                              {new Date(log.timestamp).toLocaleString()}
+              <div className="data-table-wrap">
+                <div className="table-scroll">
+                  <table className="table-base">
+                    <thead>
+                      <tr>
+                        <th>Cours</th>
+                        <th>Type</th>
+                        <th>Classe</th>
+                        <th>Filière</th>
+                        <th>Groupe</th>
+                        <th>Date d&apos;affectation</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {coursHistory.map((a) => (
+                        <tr key={a.id}>
+                          <td className="font-medium text-slate-950">{a.cours.name}</td>
+                          <td>
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${TYPE_CHIP[a.cours.type] ?? 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                              {a.cours.type}
                             </span>
-                            {idx === 0 && (
-                              <span className="status-chip status-chip--ok text-xs">Dernier</span>
-                            )}
-                          </div>
-                          <div className="mt-1 grid gap-1 text-xs text-slate-600">
-                            <div>
-                              <span className="font-medium text-slate-400">Avant :</span>{' '}
-                              {meta.previousClassIds.length > 0
-                                ? meta.previousClassIds.join(', ')
-                                : 'aucune'}
-                            </div>
-                            <div>
-                              <span className="font-medium text-emerald-600">Après :</span>{' '}
-                              {meta.newClassIds.length > 0
-                                ? meta.newClassIds.join(', ')
-                                : 'aucune'}
-                            </div>
-                          </div>
-                          <p className="mt-1 text-xs text-slate-400">by {log.user.email}</p>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ol>
+                          </td>
+                          <td>{a.class.name} <span className="text-slate-400 text-xs">A{a.class.year}</span></td>
+                          <td>{a.class.filiere?.name ?? '—'}</td>
+                          <td>{a.groupLabel ?? '—'}</td>
+                          <td className="text-slate-600">{formatAffectationDate(a.createdAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </section>
