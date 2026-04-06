@@ -16,6 +16,16 @@ export declare class ElementModulesController {
                     id: number;
                     name: string;
                 } | null;
+                classes: ({
+                    class: {
+                        id: number;
+                        name: string;
+                        year: number;
+                    };
+                } & {
+                    classId: number;
+                    moduleId: number;
+                })[];
             } & {
                 id: number;
                 createdAt: Date;
@@ -71,6 +81,16 @@ export declare class ElementModulesController {
                 filiereId: number;
                 code: string | null;
             } | null;
+            classes: ({
+                class: {
+                    id: number;
+                    name: string;
+                    year: number;
+                };
+            } & {
+                classId: number;
+                moduleId: number;
+            })[];
         } & {
             id: number;
             createdAt: Date;
@@ -130,7 +150,31 @@ export declare class ElementModulesController {
         moduleId: number;
         volumeHoraire: number | null;
     }>;
-    create(dto: CreateElementDto): Promise<{
+    create(dto: CreateElementDto): Promise<({
+        module: {
+            classes: ({
+                class: {
+                    id: number;
+                    name: string;
+                    year: number;
+                };
+            } & {
+                classId: number;
+                moduleId: number;
+            })[];
+        } & {
+            id: number;
+            createdAt: Date;
+            updatedAt: Date;
+            name: string;
+            filiereId: number | null;
+            optionId: number | null;
+            semestre: string | null;
+        };
+        _count: {
+            sessions: number;
+        };
+    } & {
         id: number;
         createdAt: Date;
         updatedAt: Date;
@@ -139,7 +183,7 @@ export declare class ElementModulesController {
         type: import(".prisma/client").$Enums.ElementType;
         moduleId: number;
         volumeHoraire: number | null;
-    }>;
+    }) | null>;
     update(id: number, dto: UpdateElementDto): Promise<{
         id: number;
         createdAt: Date;

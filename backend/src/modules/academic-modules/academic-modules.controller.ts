@@ -3,6 +3,7 @@ import { AcademicModulesService } from './academic-modules.service';
 import { CreateModuleDto } from './dto/create-module.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
 import { ModuleQueryDto } from './dto/module-query.dto';
+import { AssignModuleClassDto } from './dto/assign-module-class.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -27,4 +28,16 @@ export class AcademicModulesController {
 
   @Delete(':id') @Roles(UserRole.ADMIN)
   remove(@Param('id', ParseIntPipe) id: number) { return this.service.remove(id); }
+
+  @Post(':id/classes') @Roles(UserRole.ADMIN, UserRole.STAFF)
+  assignClass(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AssignModuleClassDto,
+  ) { return this.service.assignClass(id, dto.classId); }
+
+  @Delete(':id/classes/:classId') @Roles(UserRole.ADMIN, UserRole.STAFF)
+  removeClass(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('classId', ParseIntPipe) classId: number,
+  ) { return this.service.removeClass(id, classId); }
 }

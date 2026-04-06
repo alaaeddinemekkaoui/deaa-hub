@@ -17,6 +17,7 @@ class CreateModuleDto {
     semestre;
     filiereId;
     optionId;
+    classIds;
 }
 exports.CreateModuleDto = CreateModuleDto;
 __decorate([
@@ -53,4 +54,12 @@ __decorate([
     (0, class_validator_1.Min)(1),
     __metadata("design:type", Object)
 ], CreateModuleDto.prototype, "optionId", void 0);
+__decorate([
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.ArrayMinSize)(1),
+    (0, class_validator_1.IsInt)({ each: true }),
+    (0, class_validator_1.Min)(1, { each: true }),
+    (0, class_transformer_1.Type)(() => Number),
+    __metadata("design:type", Array)
+], CreateModuleDto.prototype, "classIds", void 0);
 //# sourceMappingURL=create-module.dto.js.map

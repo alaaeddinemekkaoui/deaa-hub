@@ -1,10 +1,12 @@
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AcademicModulesService } from '../academic-modules/academic-modules.service';
 import { CreateElementDto } from './dto/create-element.dto';
 import { UpdateElementDto } from './dto/update-element.dto';
 import { ElementQueryDto } from './dto/element-query.dto';
 export declare class ElementModulesService {
     private readonly prisma;
-    constructor(prisma: PrismaService);
+    private readonly modulesService;
+    constructor(prisma: PrismaService, modulesService: AcademicModulesService);
     findAll(query: ElementQueryDto): Promise<{
         data: ({
             module: {
@@ -16,6 +18,16 @@ export declare class ElementModulesService {
                     id: number;
                     name: string;
                 } | null;
+                classes: ({
+                    class: {
+                        id: number;
+                        name: string;
+                        year: number;
+                    };
+                } & {
+                    classId: number;
+                    moduleId: number;
+                })[];
             } & {
                 id: number;
                 createdAt: Date;
@@ -71,6 +83,16 @@ export declare class ElementModulesService {
                 filiereId: number;
                 code: string | null;
             } | null;
+            classes: ({
+                class: {
+                    id: number;
+                    name: string;
+                    year: number;
+                };
+            } & {
+                classId: number;
+                moduleId: number;
+            })[];
         } & {
             id: number;
             createdAt: Date;
@@ -130,7 +152,31 @@ export declare class ElementModulesService {
         moduleId: number;
         volumeHoraire: number | null;
     }>;
-    create(dto: CreateElementDto): Promise<{
+    create(dto: CreateElementDto): Promise<({
+        module: {
+            classes: ({
+                class: {
+                    id: number;
+                    name: string;
+                    year: number;
+                };
+            } & {
+                classId: number;
+                moduleId: number;
+            })[];
+        } & {
+            id: number;
+            createdAt: Date;
+            updatedAt: Date;
+            name: string;
+            filiereId: number | null;
+            optionId: number | null;
+            semestre: string | null;
+        };
+        _count: {
+            sessions: number;
+        };
+    } & {
         id: number;
         createdAt: Date;
         updatedAt: Date;
@@ -139,7 +185,7 @@ export declare class ElementModulesService {
         type: import(".prisma/client").$Enums.ElementType;
         moduleId: number;
         volumeHoraire: number | null;
-    }>;
+    }) | null>;
     update(id: number, dto: UpdateElementDto): Promise<{
         id: number;
         createdAt: Date;
@@ -162,5 +208,4 @@ export declare class ElementModulesService {
     }>;
     private ensureExists;
     private ensureModuleExists;
-    private ensureClassExists;
 }

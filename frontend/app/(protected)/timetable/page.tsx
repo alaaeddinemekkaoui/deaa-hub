@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BookOpen, CalendarRange, Clock } from 'lucide-react';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
@@ -16,9 +16,14 @@ type ElementModule = { id: number; name: string; type: 'CM' | 'TD' | 'TP'; volum
 
 type Session = {
   id: number;
+  elementId: number;
+  classId: number;
+  teacherId: number | null;
+  roomId: number | null;
   dayOfWeek: number;
   startTime: string;
   endTime: string;
+  weekStart: string | null;
   element: { id: number; name: string; type: 'CM' | 'TD' | 'TP'; module: { name: string } };
   class: { id: number; name: string; year: number };
   teacher?: { id: number; firstName: string; lastName: string } | null;
@@ -42,19 +47,45 @@ const TYPE_BADGE: Record<string, string> = {
   TP: 'bg-amber-100 text-amber-700',
 };
 
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function toLocalDate(dateString: string): Date {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 // Returns Monday of the given date's week in YYYY-MM-DD
 function getWeekStart(date: Date): string {
-  const d = new Date(date);
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   d.setDate(diff);
-  return d.toISOString().split('T')[0];
+  return formatDateInput(d);
 }
 
-function addWeeks(weekStart: string, n: number): string {
-  const d = new Date(weekStart);
-  d.setDate(d.getDate() + n * 7);
-  return d.toISOString().split('T')[0];
+function addDays(dateValue: string, n: number): string {
+  const d = toLocalDate(dateValue);
+  d.setDate(d.getDate() + n);
+  return formatDateInput(d);
+}
+
+function addHoursToTime(time: string, hours: number): string {
+  const [h, m] = time.split(':').map(Number);
+  return `${String(h + hours).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function getSessionDate(weekStart: string, dayOfWeek: number): string {
+  return addDays(weekStart, dayOfWeek - 1);
+}
+
+function getDayOfWeekFromDate(dateValue: string): number {
+  const day = toLocalDate(dateValue).getDay();
+  return day === 0 ? 7 : day;
 }
 
 function timeToRow(time: string): number {
@@ -81,9 +112,12 @@ export default function TimetablePage() {
   const [loadingMeta, setLoadingMeta] = useState(true);
 
   const [selectedClassId, setSelectedClassId] = useState('');
-  const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
+  const [selectedDate, setSelectedDate] = useState(() => formatDateInput(new Date()));
   const [filterRoomId, setFilterRoomId] = useState('');
   const [filterTeacherId, setFilterTeacherId] = useState('');
+
+  const weekStart = useMemo(() => getWeekStart(toLocalDate(selectedDate)), [selectedDate]);
+  const weekEnd = useMemo(() => addDays(weekStart, 4), [weekStart]);
 
   // Unscheduled: elements not in any session this week for selected class
   const scheduledElementIds = useMemo(() => new Set(sessions.map((s) => s.element.id)), [sessions]);
@@ -104,6 +138,16 @@ export default function TimetablePage() {
   const [addTeacherId, setAddTeacherId] = useState('');
   const [addRoomId, setAddRoomId] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Session move modal
+  const [moveModal, setMoveModal] = useState(false);
+  const [movingSession, setMovingSession] = useState<Session | null>(null);
+  const [moveDate, setMoveDate] = useState('');
+  const [moveStart, setMoveStart] = useState('08:00');
+  const [moveEnd, setMoveEnd] = useState('10:00');
+  const [moveTeacherId, setMoveTeacherId] = useState('');
+  const [moveRoomId, setMoveRoomId] = useState('');
+  const [savingMove, setSavingMove] = useState(false);
 
   // Load reference data once
   useEffect(() => {
@@ -140,7 +184,7 @@ export default function TimetablePage() {
   }, [selectedClassId]);
 
   // Load timetable
-  const loadTimetable = async () => {
+  const loadTimetable = useCallback(async () => {
     if (!selectedClassId) return;
     setLoading(true);
     try {
@@ -154,7 +198,16 @@ export default function TimetablePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedClassId, weekStart]);
+
+  useEffect(() => {
+    if (!selectedClassId) {
+      setSessions([]);
+      setConflicts([]);
+      return;
+    }
+    void loadTimetable();
+  }, [loadTimetable, selectedClassId]);
 
   // Build the grid: grid[day][startRow] = session
   const grid = useMemo(() => {
@@ -212,6 +265,47 @@ export default function TimetablePage() {
     setAddModal(true);
   };
 
+  const openMoveModal = (session: Session) => {
+    const sessionDate = getSessionDate(session.weekStart ?? weekStart, session.dayOfWeek);
+    setMovingSession(session);
+    setMoveDate(sessionDate);
+    setMoveStart(session.startTime);
+    setMoveEnd(addHoursToTime(session.startTime, 2));
+    setMoveTeacherId(session.teacher?.id ? String(session.teacher.id) : '');
+    setMoveRoomId(session.room?.id ? String(session.room.id) : '');
+    setMoveModal(true);
+  };
+
+  const saveMoveSession = async () => {
+    if (!movingSession || !moveDate) return;
+    const dayOfWeek = getDayOfWeekFromDate(moveDate);
+    if (dayOfWeek < 1 || dayOfWeek > 5) {
+      toast.error('Choisissez une date entre lundi et vendredi');
+      return;
+    }
+    setSavingMove(true);
+    try {
+      await api.patch(`/timetable/${movingSession.id}`, {
+        elementId: movingSession.elementId,
+        classId: movingSession.classId,
+        teacherId: moveTeacherId ? Number(moveTeacherId) : null,
+        roomId: moveRoomId ? Number(moveRoomId) : null,
+        dayOfWeek,
+        startTime: moveStart,
+        endTime: moveEnd,
+        weekStart: getWeekStart(toLocalDate(moveDate)),
+      });
+      toast.success('Session déplacée');
+      setMoveModal(false);
+      setMovingSession(null);
+      await loadTimetable();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erreur lors du déplacement'));
+    } finally {
+      setSavingMove(false);
+    }
+  };
+
   const selectedClass = classes.find((c) => String(c.id) === selectedClassId);
 
   return (
@@ -233,8 +327,8 @@ export default function TimetablePage() {
             </select>
           </div>
           <div className="field-stack">
-            <label className="field-label">Semaine</label>
-            <input type="date" className="input" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
+            <label className="field-label">Date de référence</label>
+            <input type="date" className="input" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
           </div>
           <div className="field-stack">
             <label className="field-label">Salle</label>
@@ -262,9 +356,12 @@ export default function TimetablePage() {
 
         {/* Week nav */}
         <div className="mt-3 flex items-center gap-3">
-          <button type="button" className="btn-outline text-xs" onClick={() => setWeekStart(addWeeks(weekStart, -1))}>← Semaine préc.</button>
-          <span className="text-sm text-slate-600 font-medium">Semaine du {new Date(weekStart).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
-          <button type="button" className="btn-outline text-xs" onClick={() => setWeekStart(addWeeks(weekStart, 1))}>Semaine suiv. →</button>
+          <button type="button" className="btn-outline text-xs" onClick={() => setSelectedDate(addDays(selectedDate, -7))}>← Semaine préc.</button>
+          <span className="text-sm font-medium text-slate-600">
+            Semaine du {toLocalDate(weekStart).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+            {' '}au {toLocalDate(weekEnd).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+          </span>
+          <button type="button" className="btn-outline text-xs" onClick={() => setSelectedDate(addDays(selectedDate, 7))}>Semaine suiv. →</button>
         </div>
       </section>
 
@@ -353,11 +450,20 @@ export default function TimetablePage() {
                               <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${TYPE_BADGE[session.element.type]}`}>{session.element.type}</span>
                               {session.teacher && <p className="mt-1 text-[10px] text-slate-500">{session.teacher.firstName} {session.teacher.lastName}</p>}
                               {session.room && <p className="inline-block rounded-full bg-white/60 px-1.5 py-0.5 text-[10px] text-slate-600">{session.room.name}</p>}
-                              <button
-                                type="button"
-                                className="absolute bottom-1 right-1 text-[10px] text-slate-400 hover:text-red-500"
-                                onClick={(e) => { e.stopPropagation(); void deleteSession(session.id); }}
-                              >✕</button>
+                              <div className="mt-2 flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  className="rounded bg-white/70 px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-white"
+                                  onClick={(e) => { e.stopPropagation(); openMoveModal(session); }}
+                                >
+                                  Déplacer
+                                </button>
+                                <button
+                                  type="button"
+                                  className="absolute bottom-1 right-1 text-[10px] text-slate-400 hover:text-red-500"
+                                  onClick={(e) => { e.stopPropagation(); void deleteSession(session.id); }}
+                                >✕</button>
+                              </div>
                             </div>
                           )}
                         </td>
@@ -428,7 +534,7 @@ export default function TimetablePage() {
       <ModalShell
         open={addModal}
         title="Planifier une session"
-        description={selectedClass ? `Classe : ${selectedClass.name} · Semaine du ${new Date(weekStart).toLocaleDateString('fr-FR')}` : ''}
+        description={selectedClass ? `Classe : ${selectedClass.name} · Semaine du ${toLocalDate(weekStart).toLocaleDateString('fr-FR')}` : ''}
         onClose={() => setAddModal(false)}
         footer={
           <>
@@ -485,6 +591,76 @@ export default function TimetablePage() {
               </select>
             </div>
           </div>
+        </div>
+      </ModalShell>
+
+      {/* ── Move Session modal ── */}
+      <ModalShell
+        open={moveModal}
+        title="Déplacer une session"
+        description={movingSession ? `${movingSession.element.name} · ${movingSession.element.module.name}` : ''}
+        onClose={() => setMoveModal(false)}
+        footer={
+          <>
+            <button className="btn-primary" type="button" onClick={saveMoveSession} disabled={savingMove || !movingSession}>
+              {savingMove ? 'Déplacement...' : 'Déplacer'}
+            </button>
+            <button className="btn-outline" type="button" onClick={() => setMoveModal(false)}>Annuler</button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="field-stack">
+            <label className="field-label">Date</label>
+            <input type="date" className="input" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="field-stack">
+              <label className="field-label">Début</label>
+              <select
+                className="input"
+                value={moveStart}
+                onChange={(e) => {
+                  const nextStart = e.target.value;
+                  setMoveStart(nextStart);
+                  setMoveEnd(addHoursToTime(nextStart, 2));
+                }}
+              >
+                {HOURS.map((h) => <option key={h} value={`${String(h).padStart(2, '0')}:00`}>{String(h).padStart(2, '0')}h00</option>)}
+              </select>
+            </div>
+            <div className="field-stack">
+              <label className="field-label">Fin</label>
+              <select className="input" value={moveEnd} onChange={(e) => setMoveEnd(e.target.value)}>
+                {HOURS.slice(1).map((h) => <option key={h} value={`${String(h).padStart(2, '0')}:00`}>{String(h).padStart(2, '0')}h00</option>)}
+              </select>
+            </div>
+            <div className="field-stack">
+              <label className="field-label">Jour</label>
+              <input
+                className="input"
+                value={moveDate ? ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'][getDayOfWeekFromDate(moveDate) - 1] ?? '' : ''}
+                readOnly
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="field-stack">
+              <label className="field-label">Enseignant</label>
+              <select className="input" value={moveTeacherId} onChange={(e) => setMoveTeacherId(e.target.value)}>
+                <option value="">Aucun</option>
+                {teachers.map((t) => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
+              </select>
+            </div>
+            <div className="field-stack">
+              <label className="field-label">Salle</label>
+              <select className="input" value={moveRoomId} onChange={(e) => setMoveRoomId(e.target.value)}>
+                <option value="">Aucune</option>
+                {rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <p className="text-xs text-slate-400">La durée est initialisée à 2h par défaut lors du déplacement.</p>
         </div>
       </ModalShell>
     </div>

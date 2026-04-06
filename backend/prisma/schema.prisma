@@ -238,6 +238,7 @@ model AcademicClass {
   cours       CoursClass[]
   sessions    TimetableSession[]
   elements    ElementModule[]
+  modules     ModuleClass[]
   accreditationAssignments ClassAccreditationAssignment[]
 
   @@index([year])
@@ -245,6 +246,17 @@ model AcademicClass {
   @@index([optionId])
   @@index([cycleId])
   @@unique([name, year])
+}
+
+model ModuleClass {
+  moduleId  Int
+  classId   Int
+  module    Module        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  class     AcademicClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@id([moduleId, classId])
+  @@index([moduleId])
+  @@index([classId])
 }
 
 model TeacherClass {
@@ -454,6 +466,7 @@ model Module {
   filiere   Filiere?        @relation(fields: [filiereId], references: [id], onDelete: SetNull)
   option    Option?         @relation(fields: [optionId], references: [id], onDelete: SetNull)
   elements  ElementModule[]
+  classes   ModuleClass[]
   accreditationLines AccreditationPlanLine[]
 
   @@index([filiereId])

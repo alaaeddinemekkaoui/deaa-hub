@@ -10,10 +10,15 @@ exports.ElementModulesModule = void 0;
 const common_1 = require("@nestjs/common");
 const element_modules_controller_1 = require("./element-modules.controller");
 const element_modules_service_1 = require("./element-modules.service");
+const academic_modules_module_1 = require("../academic-modules/academic-modules.module");
 let ElementModulesModule = class ElementModulesModule {
 };
 exports.ElementModulesModule = ElementModulesModule;
 exports.ElementModulesModule = ElementModulesModule = __decorate([
-    (0, common_1.Module)({ controllers: [element_modules_controller_1.ElementModulesController], providers: [element_modules_service_1.ElementModulesService] })
+    (0, common_1.Module)({
+        imports: [academic_modules_module_1.AcademicModulesModule],
+        controllers: [element_modules_controller_1.ElementModulesController],
+        providers: [element_modules_service_1.ElementModulesService],
+    })
 ], ElementModulesModule);
 //# sourceMappingURL=element-modules.module.js.map

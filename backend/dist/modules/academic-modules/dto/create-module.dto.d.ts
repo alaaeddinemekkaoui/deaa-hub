@@ -3,4 +3,5 @@ export declare class CreateModuleDto {
     semestre?: string | null;
     filiereId?: number | null;
     optionId?: number | null;
+    classIds: number[];
 }

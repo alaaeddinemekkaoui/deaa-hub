@@ -125,6 +125,28 @@ export default function TeachersPage() {
     [rows],
   );
 
+  const permanentRoleId = useMemo(
+    () => roles.find((r) => /permanent/i.test(r.name))?.id,
+    [roles],
+  );
+  const vacataireRoleId = useMemo(
+    () => roles.find((r) => /vacataire/i.test(r.name))?.id,
+    [roles],
+  );
+  const activeTypeTab = useMemo<'all' | 'permanent' | 'vacataire'>(() => {
+    if (!filterRoleId) return 'all';
+    if (permanentRoleId && String(permanentRoleId) === filterRoleId) return 'permanent';
+    if (vacataireRoleId && String(vacataireRoleId) === filterRoleId) return 'vacataire';
+    return 'all';
+  }, [filterRoleId, permanentRoleId, vacataireRoleId]);
+
+  const onTypeTabChange = (tab: 'all' | 'permanent' | 'vacataire') => {
+    if (tab === 'all') setFilterRoleId('');
+    else if (tab === 'permanent') setFilterRoleId(permanentRoleId ? String(permanentRoleId) : '');
+    else setFilterRoleId(vacataireRoleId ? String(vacataireRoleId) : '');
+    setPage(1);
+  };
+
   const fetchAllPaginatedRows = async <T,>(
     endpoint: string,
     params: Record<string, string | number | undefined> = {},
@@ -440,6 +462,24 @@ export default function TeachersPage() {
               Recherchez les facultés par identité, structure, rôle et grade.
             </p>
           </div>
+        </div>
+
+        {/* ── Type tabs ── */}
+        <div className="flex gap-1 rounded-lg bg-slate-100 p-1 w-fit">
+          {(['all', 'permanent', 'vacataire'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                activeTypeTab === tab
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+              onClick={() => onTypeTabChange(tab)}
+            >
+              {tab === 'all' ? 'Tous' : tab === 'permanent' ? 'Permanents' : 'Vacataires'}
+            </button>
+          ))}
         </div>
 
         <div className="toolbar-shell">

@@ -1,13 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ElementType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AcademicModulesService } from '../academic-modules/academic-modules.service';
 import { CreateElementDto } from './dto/create-element.dto';
 import { UpdateElementDto } from './dto/update-element.dto';
 import { ElementQueryDto } from './dto/element-query.dto';
 
 @Injectable()
 export class ElementModulesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly modulesService: AcademicModulesService,
+  ) {}
 
   async findAll(query: ElementQueryDto) {
     const { page, limit, search, moduleId, classId, type, sortBy, sortOrder } = query;
@@ -24,7 +28,13 @@ export class ElementModulesService {
       this.prisma.elementModule.findMany({
         where,
         include: {
-          module: { include: { filiere: { select: { id: true, name: true } }, option: { select: { id: true, name: true } } } },
+          module: {
+            include: {
+              filiere: { select: { id: true, name: true } },
+              option: { select: { id: true, name: true } },
+              classes: { include: { class: { select: { id: true, name: true, year: true } } } },
+            },
+          },
           class: { select: { id: true, name: true, year: true } },
           _count: { select: { sessions: true } },
         },
@@ -42,9 +52,21 @@ export class ElementModulesService {
     const el = await this.prisma.elementModule.findUnique({
       where: { id },
       include: {
-        module: { include: { filiere: true, option: true } },
+        module: {
+          include: {
+            filiere: true,
+            option: true,
+            classes: { include: { class: { select: { id: true, name: true, year: true } } } },
+          },
+        },
         class: { select: { id: true, name: true, year: true } },
-        sessions: { include: { class: true, teacher: { select: { id: true, firstName: true, lastName: true } }, room: { select: { id: true, name: true } } } },
+        sessions: {
+          include: {
+            class: true,
+            teacher: { select: { id: true, firstName: true, lastName: true } },
+            room: { select: { id: true, name: true } },
+          },
+        },
       },
     });
     if (!el) throw new NotFoundException(`ElementModule ${id} not found`);
@@ -53,63 +75,42 @@ export class ElementModulesService {
 
   async create(dto: CreateElementDto) {
     await this.ensureModuleExists(dto.moduleId);
-    if (dto.classId) await this.ensureClassExists(dto.classId);
 
     const element = await this.prisma.elementModule.create({
-      data: { name: dto.name, moduleId: dto.moduleId, volumeHoraire: dto.volumeHoraire ?? null, type: dto.type ?? 'CM', classId: dto.classId ?? null },
+      data: {
+        name: dto.name,
+        moduleId: dto.moduleId,
+        volumeHoraire: dto.volumeHoraire ?? null,
+        type: dto.type ?? 'CM',
+        // classId kept nullable; class context comes from ModuleClass
+        classId: null,
+      },
+      select: { id: true, name: true, cours: { select: { id: true } } },
     });
 
-    // Auto-link/create a matching Cours while avoiding duplicate unique names.
-    const existingCours = await this.prisma.cours.findFirst({
-      where: { name: { equals: dto.name, mode: 'insensitive' } },
-      select: { id: true, elementModuleId: true },
+    // Get all classes this module is assigned to
+    const moduleClasses = await this.prisma.moduleClass.findMany({
+      where: { moduleId: dto.moduleId },
+      select: { classId: true },
     });
 
-    if (existingCours) {
-      // Link only if cours is currently unlinked.
-      if (!existingCours.elementModuleId) {
-        await this.prisma.cours.update({
-          where: { id: existingCours.id },
-          data: { elementModuleId: element.id },
-        });
-      }
-
-      if (dto.classId) {
-        const existingClassAssignment = await this.prisma.coursClass.findFirst({
-          where: {
-            coursId: existingCours.id,
-            classId: dto.classId,
-            teacherId: null,
-          },
-          select: { id: true },
-        });
-
-        if (!existingClassAssignment) {
-          await this.prisma.coursClass.create({
-            data: { coursId: existingCours.id, classId: dto.classId, teacherId: null },
-          });
-        }
-      }
-    } else {
-      // Create a new cours linked to this element
-      const cours = await this.prisma.cours.create({
-        data: { name: dto.name, elementModuleId: element.id },
-      });
-      // If the element is linked to a class, assign the cours to that class too
-      if (dto.classId) {
-        await this.prisma.coursClass.create({
-          data: { coursId: cours.id, classId: dto.classId },
-        });
-      }
+    // Auto-create Cours + CoursClass for each assigned class
+    for (const { classId } of moduleClasses) {
+      await this.modulesService.ensureCoursAndCoursClass(element, classId);
     }
 
-    return element;
+    return this.prisma.elementModule.findUnique({
+      where: { id: element.id },
+      include: {
+        module: { include: { classes: { include: { class: { select: { id: true, name: true, year: true } } } } } },
+        _count: { select: { sessions: true } },
+      },
+    });
   }
 
   async update(id: number, dto: UpdateElementDto) {
     await this.ensureExists(id);
     if (dto.moduleId) await this.ensureModuleExists(dto.moduleId);
-    if (dto.classId) await this.ensureClassExists(dto.classId);
     return this.prisma.elementModule.update({
       where: { id },
       data: {
@@ -117,7 +118,6 @@ export class ElementModulesService {
         ...(dto.moduleId !== undefined ? { moduleId: dto.moduleId } : {}),
         ...(dto.volumeHoraire !== undefined ? { volumeHoraire: dto.volumeHoraire ?? null } : {}),
         ...(dto.type !== undefined ? { type: dto.type } : {}),
-        ...(dto.classId !== undefined ? { classId: dto.classId ?? null } : {}),
       },
     });
   }
@@ -135,10 +135,5 @@ export class ElementModulesService {
   private async ensureModuleExists(id: number) {
     const m = await this.prisma.module.findUnique({ where: { id }, select: { id: true } });
     if (!m) throw new NotFoundException(`Module ${id} not found`);
-  }
-
-  private async ensureClassExists(id: number) {
-    const c = await this.prisma.academicClass.findUnique({ where: { id }, select: { id: true } });
-    if (!c) throw new NotFoundException(`Class ${id} not found`);
   }
 }
