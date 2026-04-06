@@ -13,11 +13,18 @@ exports.DocumentsService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../common/prisma/prisma.service");
 const fs_1 = require("fs");
+const os_1 = require("os");
 const path_1 = require("path");
 let DocumentsService = class DocumentsService {
     prisma;
     constructor(prisma) {
         this.prisma = prisma;
+    }
+    getUploadBaseDir() {
+        if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+            return (0, path_1.join)((0, os_1.tmpdir)(), 'deaa-hub', 'uploads');
+        }
+        return (0, path_1.join)(process.cwd(), 'uploads');
     }
     findAll() {
         return this.prisma.document.findMany({
@@ -58,7 +65,7 @@ let DocumentsService = class DocumentsService {
         if (!student) {
             throw new common_1.NotFoundException('Student not found');
         }
-        const studentDir = (0, path_1.join)(process.cwd(), 'uploads', student.codeMassar);
+        const studentDir = (0, path_1.join)(this.getUploadBaseDir(), student.codeMassar);
         if (!(0, fs_1.existsSync)(studentDir)) {
             (0, fs_1.mkdirSync)(studentDir, { recursive: true });
         }

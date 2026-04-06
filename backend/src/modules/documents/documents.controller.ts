@@ -12,8 +12,10 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { mkdirSync } from 'fs';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { tmpdir } from 'os';
+import { extname, join } from 'path';
 import { DocumentsService } from './documents.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -25,6 +27,14 @@ import { UserRole } from '../../common/types/role.type';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
+
+  private static getTempUploadDir() {
+    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+      return join(tmpdir(), 'deaa-hub', 'uploads', 'tmp');
+    }
+
+    return join(process.cwd(), 'uploads', 'tmp');
+  }
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
@@ -43,7 +53,11 @@ export class DocumentsController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
-        destination: 'uploads/tmp',
+        destination: (_, __, callback) => {
+          const uploadDir = DocumentsController.getTempUploadDir();
+          mkdirSync(uploadDir, { recursive: true });
+          callback(null, uploadDir);
+        },
         filename: (_, file, callback) => {
           const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
           callback(null, `${uniqueSuffix}${extname(file.originalname)}`);

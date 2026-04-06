@@ -3,6 +3,7 @@ import { CreateDocumentDto } from './dto/create-document.dto';
 export declare class DocumentsController {
     private readonly documentsService;
     constructor(documentsService: DocumentsService);
+    private static getTempUploadDir;
     findAll(): import(".prisma/client").Prisma.PrismaPromise<({
         student: {
             fullName: string;

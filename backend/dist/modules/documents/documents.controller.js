@@ -15,7 +15,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DocumentsController = void 0;
 const common_1 = require("@nestjs/common");
 const platform_express_1 = require("@nestjs/platform-express");
+const fs_1 = require("fs");
 const multer_1 = require("multer");
+const os_1 = require("os");
 const path_1 = require("path");
 const documents_service_1 = require("./documents.service");
 const create_document_dto_1 = require("./dto/create-document.dto");
@@ -27,6 +29,12 @@ let DocumentsController = class DocumentsController {
     documentsService;
     constructor(documentsService) {
         this.documentsService = documentsService;
+    }
+    static getTempUploadDir() {
+        if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+            return (0, path_1.join)((0, os_1.tmpdir)(), 'deaa-hub', 'uploads', 'tmp');
+        }
+        return (0, path_1.join)(process.cwd(), 'uploads', 'tmp');
     }
     findAll() {
         return this.documentsService.findAll();
@@ -71,7 +79,11 @@ __decorate([
     (0, roles_decorator_1.Roles)(role_type_1.UserRole.ADMIN, role_type_1.UserRole.STAFF),
     (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', {
         storage: (0, multer_1.diskStorage)({
-            destination: 'uploads/tmp',
+            destination: (_, __, callback) => {
+                const uploadDir = DocumentsController.getTempUploadDir();
+                (0, fs_1.mkdirSync)(uploadDir, { recursive: true });
+                callback(null, uploadDir);
+            },
             filename: (_, file, callback) => {
                 const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
                 callback(null, `${uniqueSuffix}${(0, path_1.extname)(file.originalname)}`);

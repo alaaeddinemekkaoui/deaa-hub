@@ -6,11 +6,20 @@ import {
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { existsSync, mkdirSync, renameSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
 
 @Injectable()
 export class DocumentsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private getUploadBaseDir() {
+    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+      return join(tmpdir(), 'deaa-hub', 'uploads');
+    }
+
+    return join(process.cwd(), 'uploads');
+  }
 
   findAll() {
     return this.prisma.document.findMany({
@@ -56,7 +65,7 @@ export class DocumentsService {
       throw new NotFoundException('Student not found');
     }
 
-    const studentDir = join(process.cwd(), 'uploads', student.codeMassar);
+    const studentDir = join(this.getUploadBaseDir(), student.codeMassar);
     if (!existsSync(studentDir)) {
       mkdirSync(studentDir, { recursive: true });
     }
