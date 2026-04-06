@@ -7,6 +7,17 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsersModule } from '../modules/users/users.module';
 
+function resolveJwtExpiresIn(configService: ConfigService): string | number {
+  const raw = configService.get<string>('JWT_EXPIRES_IN', '1d');
+  const normalized = String(raw ?? '').trim();
+
+  if (!normalized) {
+    return '1d';
+  }
+
+  return normalized;
+}
+
 @Module({
   imports: [
     UsersModule,
@@ -16,7 +27,7 @@ import { UsersModule } from '../modules/users/users.module';
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET', 'change-me'),
         signOptions: {
-          expiresIn: configService.get<string>('JWT_EXPIRES_IN', '1d') as never,
+          expiresIn: resolveJwtExpiresIn(configService) as never,
         },
       }),
     }),
