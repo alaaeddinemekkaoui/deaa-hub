@@ -239,11 +239,11 @@ export default function AcademicPage() {
       <section className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           <select className="input xl:max-w-48" value={filterFiliereId} onChange={(e) => { setFilterFiliereId(e.target.value); setFilterOptionId(''); }}>
-            <option value="">Toutes les filières</option>
+            <option value="">Toutes les filières ({filieres.length})</option>
             {filieres.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
           <select className="input xl:max-w-48" value={filterOptionId} onChange={(e) => setFilterOptionId(e.target.value)} disabled={filteredOptions.length === 0}>
-            <option value="">Toutes les options</option>
+            <option value="">Toutes les options ({filteredOptions.length})</option>
             {filteredOptions.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
         </div>

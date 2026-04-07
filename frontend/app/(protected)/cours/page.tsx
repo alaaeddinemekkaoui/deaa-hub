@@ -267,28 +267,28 @@ export default function CoursPage() {
             <div className="field-stack">
               <label className="field-label">Département</label>
               <select className="input" value={filterDeptId} onChange={(e) => handleDeptChange(e.target.value)}>
-                <option value="">Tous les départements</option>
+                <option value="">Tous les départements ({departments.length})</option>
                 {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
             <div className="field-stack">
               <label className="field-label">Filière</label>
               <select className="input" value={filterFiliereId} onChange={(e) => handleFiliereChange(e.target.value)} disabled={filteredFilieres.length === 0}>
-                <option value="">Toutes les filières</option>
+                <option value="">Toutes les filières ({filteredFilieres.length})</option>
                 {filteredFilieres.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             </div>
             <div className="field-stack">
               <label className="field-label">Option</label>
               <select className="input" value={filterOptionId} onChange={(e) => handleOptionChange(e.target.value)} disabled={!filterFiliereId}>
-                <option value="">Toutes les options</option>
+                <option value="">Toutes les options ({filteredOptions.length})</option>
                 {filteredOptions.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
             </div>
             <div className="field-stack">
               <label className="field-label">Classe <span className="text-red-500">*</span></label>
               <select className="input" value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)} disabled={!filterFiliereId || filteredClasses.length === 0}>
-                <option value="">Sélectionner une classe</option>
+                <option value="">Sélectionner une classe ({filteredClasses.length})</option>
                 {filteredClasses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>

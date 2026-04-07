@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { toast } from 'sonner';
+import { getMockResponse } from './mock-data';
 
 type ApiErrorPayload = {
   message?: string | string[];
@@ -45,6 +46,20 @@ api.interceptors.response.use(
         error.message === 'Network Error';
 
       if (isNetworkError) {
+        // Try to serve mock/demo data before showing an error
+        const mockData = getMockResponse(
+          error.config?.url ?? '',
+          error.config?.params as Record<string, unknown> | undefined,
+        );
+        if (mockData !== null) {
+          const now = Date.now();
+          if (now - lastNetworkToastAt > NETWORK_TOAST_COOLDOWN_MS) {
+            lastNetworkToastAt = now;
+            toast.info('Mode démo — données fictives affichées (backend hors ligne)');
+          }
+          return Promise.resolve({ data: mockData, status: 200, statusText: 'OK (Demo)', headers: {}, config: error.config! });
+        }
+
         const now = Date.now();
         if (now - lastNetworkToastAt > NETWORK_TOAST_COOLDOWN_MS) {
           lastNetworkToastAt = now;

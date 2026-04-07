@@ -331,7 +331,7 @@ export default function ClassesCoursPage() {
               value={filterDeptId}
               onChange={(e) => setFilterDeptId(e.target.value)}
             >
-              <option value="">Tous les départements</option>
+              <option value="">Tous les départements ({departments.length})</option>
               {departments.map((d) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
@@ -341,7 +341,7 @@ export default function ClassesCoursPage() {
               value={filterFiliereId}
               onChange={(e) => setFilterFiliereId(e.target.value)}
             >
-              <option value="">Toutes les filières</option>
+              <option value="">Toutes les filières ({filteredFilieres.length})</option>
               {filteredFilieres.map((f) => (
                 <option key={f.id} value={f.id}>{f.name}</option>
               ))}
@@ -352,7 +352,7 @@ export default function ClassesCoursPage() {
               onChange={(e) => setFilterOptionId(e.target.value)}
               disabled={filteredOptions.length === 0}
             >
-              <option value="">Toutes les options</option>
+              <option value="">Toutes les options ({filteredOptions.length})</option>
               {filteredOptions.map((o) => (
                 <option key={o.id} value={o.id}>{o.name}</option>
               ))}
@@ -362,7 +362,7 @@ export default function ClassesCoursPage() {
               value={selectedClassId}
               onChange={(e) => setSelectedClassId(e.target.value)}
             >
-              <option value="">— Choisir une classe —</option>
+              <option value="">— Choisir une classe ({filteredClasses.length}) —</option>
               {filteredClasses.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} (A{c.year})

@@ -124,7 +124,7 @@ function ClassSelector({
           onChange={(e) => handleDeptChange(e.target.value)}
           disabled={disabled}
         >
-          <option value="">Tous les départements</option>
+          <option value="">Tous les départements ({departments.length})</option>
           {departments.map((d) => (
             <option key={d.id} value={d.id}>{d.name}</option>
           ))}
@@ -136,7 +136,7 @@ function ClassSelector({
           onChange={(e) => handleFiliereChange(e.target.value)}
           disabled={disabled}
         >
-          <option value="">Toutes les filières</option>
+          <option value="">Toutes les filières ({filteredFilieres.length})</option>
           {filteredFilieres.map((f) => (
             <option key={f.id} value={f.id}>{f.name}</option>
           ))}
@@ -150,7 +150,7 @@ function ClassSelector({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
       >
-        <option value="">— choisir une classe —</option>
+        <option value="">— choisir une classe ({filteredClasses.length}) —</option>
         {filteredClasses.map((c) => (
           <option key={c.id} value={String(c.id)}>
             {c.name}

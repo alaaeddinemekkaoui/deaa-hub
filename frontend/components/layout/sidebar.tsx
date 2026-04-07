@@ -76,7 +76,7 @@ const navigation: NavGroup[] = [
   {
     heading: 'Emploi du Temps et Gestion des Salles',
     items: [
-      { href: '/timetable', label: 'Générateur', caption: 'Planification hebdomadaire', icon: CalendarDays },
+      { href: '/timetable', label: 'Emploi du temps', caption: 'Planification hebdomadaire', icon: CalendarDays },
       { href: '/rooms', label: 'Gestion des salles', caption: 'Espaces et équipements', icon: DoorOpen },
    
     ],

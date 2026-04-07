@@ -373,7 +373,7 @@ export default function ClassesPage() {
                 value={filterDepartmentId}
                 onChange={(event) => setFilterDepartmentId(event.target.value)}
               >
-                <option value="">Tous les départements</option>
+                <option value="">Tous les départements ({departments.length})</option>
                 {departments.map((department) => (
                   <option key={department.id} value={department.id}>
                     {department.name}
@@ -385,7 +385,7 @@ export default function ClassesPage() {
                 value={filterFiliereId}
                 onChange={(event) => setFilterFiliereId(event.target.value)}
               >
-                <option value="">Toutes les filières</option>
+                <option value="">Toutes les filières ({filterFilieresByDepartment.length})</option>
                 {filterFilieresByDepartment.map((filiere) => (
                   <option key={filiere.id} value={filiere.id}>
                     {filiere.name}

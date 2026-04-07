@@ -15,6 +15,14 @@ const auth_service_1 = require("./auth.service");
 const auth_controller_1 = require("./auth.controller");
 const jwt_strategy_1 = require("./strategies/jwt.strategy");
 const users_module_1 = require("../modules/users/users.module");
+function resolveJwtExpiresIn(configService) {
+    const raw = configService.get('JWT_EXPIRES_IN', '1d');
+    const normalized = String(raw ?? '').trim();
+    if (!normalized) {
+        return '1d';
+    }
+    return normalized;
+}
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -28,7 +36,7 @@ exports.AuthModule = AuthModule = __decorate([
                 useFactory: (configService) => ({
                     secret: configService.get('JWT_SECRET', 'change-me'),
                     signOptions: {
-                        expiresIn: configService.get('JWT_EXPIRES_IN', '1d'),
+                        expiresIn: resolveJwtExpiresIn(configService),
                     },
                 }),
             }),

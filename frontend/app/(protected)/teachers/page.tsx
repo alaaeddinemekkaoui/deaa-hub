@@ -534,7 +534,7 @@ export default function TeachersPage() {
                 value={filterDepartmentId}
                 onChange={(event) => setFilterDepartmentId(event.target.value)}
               >
-                <option value="">Tous les départements</option>
+                <option value="">Tous les départements ({departments.length})</option>
                 {departments.map((department) => (
                   <option key={department.id} value={department.id}>
                     {department.name}
@@ -546,7 +546,7 @@ export default function TeachersPage() {
                 value={filterFiliereId}
                 onChange={(event) => setFilterFiliereId(event.target.value)}
               >
-                <option value="">Toutes les filières</option>
+                <option value="">Toutes les filières ({filterFilieresByDepartment.length})</option>
                 {filterFilieresByDepartment.map((filiere) => (
                   <option key={filiere.id} value={filiere.id}>
                     {filiere.name}
@@ -558,7 +558,7 @@ export default function TeachersPage() {
                 value={filterRoleId}
                 onChange={(event) => setFilterRoleId(event.target.value)}
               >
-                <option value="">Tous les rôles</option>
+                <option value="">Tous les rôles ({roles.length})</option>
                 {roles.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
@@ -570,7 +570,7 @@ export default function TeachersPage() {
                 value={filterGradeId}
                 onChange={(event) => setFilterGradeId(event.target.value)}
               >
-                <option value="">Tous les grades</option>
+                <option value="">Tous les grades ({grades.length})</option>
                 {grades.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
