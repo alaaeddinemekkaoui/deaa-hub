@@ -8,3 +8,8 @@
 backend/.env
 .vercel
 .env*.local
+**/node_modules/
+**/dist/
+backend/api/**/*.js
+backend/api/**/*.js.map
+backend/api/**/*.d.ts
