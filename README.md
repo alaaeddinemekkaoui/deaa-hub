@@ -98,6 +98,8 @@ Frontend default URL: `http://localhost:3000`
 ### Frontend → Vercel
 
 - Import `frontend` project into Vercel
+- If deploying from repository root, keep Vercel project `Root Directory` set to `frontend`
+- CLI deploy command from repo root: `vercel --cwd frontend`
 - Set env var:
   - `NEXT_PUBLIC_API_URL=<your-backend-api-url>/api`
 
