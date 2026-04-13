@@ -1,4 +1,7 @@
-type CorsOrigin = boolean | string[];
+type CorsOrigin = boolean | Array<string | RegExp>;
+
+const LOCALHOST_ORIGINS = ['http://localhost:3000', 'http://localhost:3001'];
+const VERCEL_ORIGIN_REGEX = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i;
 
 function parseCorsOrigins(value: string): string[] {
   return value
@@ -17,7 +20,17 @@ export function resolveCorsOrigins(): CorsOrigin {
     return true;
   }
 
-  return parseCorsOrigins(corsOriginConfig);
+  const configuredOrigins = parseCorsOrigins(corsOriginConfig);
+  const mergedOrigins = Array.from(
+    new Set([...configuredOrigins, ...LOCALHOST_ORIGINS]),
+  );
+  const allowVercelOrigins = process.env.ALLOW_VERCEL_APP_ORIGINS !== 'false';
+
+  if (!allowVercelOrigins) {
+    return mergedOrigins;
+  }
+
+  return [...mergedOrigins, VERCEL_ORIGIN_REGEX];
 }
 
 export function getCorsOptions() {
@@ -28,4 +41,3 @@ export function getCorsOptions() {
     credentials: origin === true ? false : true,
   };
 }
-
