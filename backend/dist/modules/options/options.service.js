@@ -21,17 +21,26 @@ let OptionsService = class OptionsService {
         const { page, limit, search, filiereId, departmentId, sortBy, sortOrder } = query;
         const filters = [];
         if (search)
-            filters.push({ OR: [{ name: { contains: search, mode: 'insensitive' } }, { code: { contains: search, mode: 'insensitive' } }] });
+            filters.push({
+                OR: [
+                    { name: { contains: search, mode: 'insensitive' } },
+                    { code: { contains: search, mode: 'insensitive' } },
+                ],
+            });
         if (filiereId)
             filters.push({ filiereId });
         if (departmentId)
             filters.push({ filiere: { is: { departmentId } } });
-        const where = filters.length ? { AND: filters } : {};
+        const where = filters.length
+            ? { AND: filters }
+            : {};
         const [data, total] = await Promise.all([
             this.prisma.option.findMany({
                 where,
                 include: {
-                    filiere: { include: { department: { select: { id: true, name: true } } } },
+                    filiere: {
+                        include: { department: { select: { id: true, name: true } } },
+                    },
                     _count: { select: { classes: true, modules: true } },
                 },
                 skip: (page - 1) * limit,
@@ -40,7 +49,17 @@ let OptionsService = class OptionsService {
             }),
             this.prisma.option.count({ where }),
         ]);
-        return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1, hasNextPage: page * limit < total, hasPreviousPage: page > 1 } };
+        return {
+            data,
+            meta: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit) || 1,
+                hasNextPage: page * limit < total,
+                hasPreviousPage: page > 1,
+            },
+        };
     }
     async findOne(id) {
         const opt = await this.prisma.option.findUnique({
@@ -59,11 +78,18 @@ let OptionsService = class OptionsService {
         await this.ensureFiliereExists(dto.filiereId);
         await this.ensureNameAvailable(dto.name, dto.filiereId);
         return this.prisma.option.create({
-            data: { name: dto.name, code: dto.code ?? null, filiereId: dto.filiereId },
+            data: {
+                name: dto.name,
+                code: dto.code ?? null,
+                filiereId: dto.filiereId,
+            },
         });
     }
     async update(id, dto) {
-        const existing = await this.prisma.option.findUnique({ where: { id }, select: { id: true, name: true, filiereId: true } });
+        const existing = await this.prisma.option.findUnique({
+            where: { id },
+            select: { id: true, name: true, filiereId: true },
+        });
         if (!existing)
             throw new common_1.NotFoundException(`Option ${id} not found`);
         const nextFiliereId = dto.filiereId ?? existing.filiereId;
@@ -81,19 +107,32 @@ let OptionsService = class OptionsService {
         });
     }
     async remove(id) {
-        const opt = await this.prisma.option.findUnique({ where: { id }, select: { id: true, _count: { select: { classes: true, modules: true } } } });
+        const opt = await this.prisma.option.findUnique({
+            where: { id },
+            select: {
+                id: true,
+                _count: { select: { classes: true, modules: true } },
+            },
+        });
         if (!opt)
             throw new common_1.NotFoundException(`Option ${id} not found`);
         return this.prisma.option.delete({ where: { id } });
     }
     async ensureFiliereExists(id) {
-        const f = await this.prisma.filiere.findUnique({ where: { id }, select: { id: true } });
+        const f = await this.prisma.filiere.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!f)
             throw new common_1.NotFoundException(`Filiere ${id} not found`);
     }
     async ensureNameAvailable(name, filiereId, excludeId) {
         const ex = await this.prisma.option.findFirst({
-            where: { name: { equals: name, mode: 'insensitive' }, filiereId, ...(excludeId ? { id: { not: excludeId } } : {}) },
+            where: {
+                name: { equals: name, mode: 'insensitive' },
+                filiereId,
+                ...(excludeId ? { id: { not: excludeId } } : {}),
+            },
             select: { id: true },
         });
         if (ex)

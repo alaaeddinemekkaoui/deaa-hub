@@ -184,7 +184,9 @@ let DepartmentsService = class DepartmentsService {
     async importFromBuffer(buffer) {
         const workbook = XLSX.read(buffer, { type: 'buffer' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+        const rows = XLSX.utils.sheet_to_json(sheet, {
+            defval: null,
+        });
         let imported = 0;
         const errors = [];
         for (let i = 0; i < rows.length; i++) {

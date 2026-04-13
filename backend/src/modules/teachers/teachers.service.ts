@@ -330,7 +330,9 @@ export class TeachersService {
         cours: { select: { id: true, name: true, type: true } },
         class: {
           select: {
-            id: true, name: true, year: true,
+            id: true,
+            name: true,
+            year: true,
             filiere: { select: { id: true, name: true } },
           },
         },
@@ -705,10 +707,14 @@ export class TeachersService {
     }
   }
 
-  async importFromBuffer(buffer: Buffer): Promise<{ imported: number; errors: string[] }> {
+  async importFromBuffer(
+    buffer: Buffer,
+  ): Promise<{ imported: number; errors: string[] }> {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null });
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: null,
+    });
 
     let imported = 0;
     const errors: string[] = [];
@@ -720,7 +726,9 @@ export class TeachersService {
         const roleId = Number(row['roleId'] ?? 0);
         const gradeId = Number(row['gradeId'] ?? 0);
         if (!departmentId || !roleId || !gradeId) {
-          errors.push(`Row ${i + 2}: departmentId, roleId, and gradeId are required`);
+          errors.push(
+            `Row ${i + 2}: departmentId, roleId, and gradeId are required`,
+          );
           continue;
         }
         await this.create({
@@ -728,12 +736,16 @@ export class TeachersService {
           lastName: String(row['lastName'] ?? '').trim(),
           cin: row['cin'] ? String(row['cin']).trim() : undefined,
           email: row['email'] ? String(row['email']).trim() : undefined,
-          phoneNumber: row['phoneNumber'] ? String(row['phoneNumber']).trim() : undefined,
+          phoneNumber: row['phoneNumber']
+            ? String(row['phoneNumber']).trim()
+            : undefined,
           departmentId,
           filiereId: row['filiereId'] ? Number(row['filiereId']) : undefined,
           roleId,
           gradeId,
-          dateInscription: row['dateInscription'] ? String(row['dateInscription']).trim() : undefined,
+          dateInscription: row['dateInscription']
+            ? String(row['dateInscription']).trim()
+            : undefined,
         });
         imported++;
       } catch (err: unknown) {

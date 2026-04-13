@@ -18,16 +18,21 @@ export class CoursService {
     const { page, limit, search, classId, sortBy, sortOrder } = query;
 
     const filters: Prisma.CoursWhereInput[] = [];
-    if (search) filters.push({ name: { contains: search, mode: 'insensitive' } });
+    if (search)
+      filters.push({ name: { contains: search, mode: 'insensitive' } });
     if (classId) filters.push({ classes: { some: { classId } } });
 
-    const where: Prisma.CoursWhereInput = filters.length ? { AND: filters } : {};
+    const where: Prisma.CoursWhereInput = filters.length
+      ? { AND: filters }
+      : {};
 
     const [data, total] = await Promise.all([
       this.prisma.cours.findMany({
         where,
         include: {
-          elementModule: { select: { id: true, name: true, type: true, volumeHoraire: true } },
+          elementModule: {
+            select: { id: true, name: true, type: true, volumeHoraire: true },
+          },
           _count: { select: { classes: true } },
         },
         skip: (page - 1) * limit,
@@ -54,12 +59,22 @@ export class CoursService {
     const cours = await this.prisma.cours.findUnique({
       where: { id },
       include: {
-        elementModule: { select: { id: true, name: true, type: true, volumeHoraire: true, module: { select: { id: true, name: true } } } },
+        elementModule: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            volumeHoraire: true,
+            module: { select: { id: true, name: true } },
+          },
+        },
         classes: {
           include: {
             class: {
               include: {
-                filiere: { include: { department: { select: { id: true, name: true } } } },
+                filiere: {
+                  include: { department: { select: { id: true, name: true } } },
+                },
               },
             },
             teacher: { select: { id: true, firstName: true, lastName: true } },
@@ -74,7 +89,8 @@ export class CoursService {
 
   async create(dto: CreateCoursDto) {
     await this.ensureNameAvailable(dto.name);
-    if (dto.elementModuleId) await this.ensureElementModuleAvailable(dto.elementModuleId);
+    if (dto.elementModuleId)
+      await this.ensureElementModuleAvailable(dto.elementModuleId);
 
     const cours = await this.prisma.cours.create({
       data: {
@@ -102,13 +118,16 @@ export class CoursService {
   async update(id: number, dto: UpdateCoursDto) {
     await this.ensureExists(id);
     if (dto.name) await this.ensureNameAvailable(dto.name, id);
-    if (dto.elementModuleId) await this.ensureElementModuleAvailable(dto.elementModuleId, id);
+    if (dto.elementModuleId)
+      await this.ensureElementModuleAvailable(dto.elementModuleId, id);
     return this.prisma.cours.update({
       where: { id },
       data: {
         ...(dto.name ? { name: dto.name } : {}),
         ...(dto.type !== undefined ? { type: dto.type } : {}),
-        ...(dto.elementModuleId !== undefined ? { elementModuleId: dto.elementModuleId ?? null } : {}),
+        ...(dto.elementModuleId !== undefined
+          ? { elementModuleId: dto.elementModuleId ?? null }
+          : {}),
       },
     });
   }
@@ -123,11 +142,11 @@ export class CoursService {
     await this.ensureClassExists(dto.classId);
     const teacherIds = Array.from(
       new Set(
-        (dto.teacherIds?.length
+        dto.teacherIds?.length
           ? dto.teacherIds
           : dto.teacherId
             ? [dto.teacherId]
-            : []) as number[],
+            : [],
       ),
     );
 
@@ -200,8 +219,14 @@ export class CoursService {
       ...(teacherId ? { teacherId } : {}),
     };
 
-    const existing = await this.prisma.coursClass.findFirst({ where, select: { id: true } });
-    if (!existing) throw new NotFoundException(`Cours ${coursId} is not assigned to class ${classId}`);
+    const existing = await this.prisma.coursClass.findFirst({
+      where,
+      select: { id: true },
+    });
+    if (!existing)
+      throw new NotFoundException(
+        `Cours ${coursId} is not assigned to class ${classId}`,
+      );
 
     if (teacherId) {
       return this.prisma.coursClass.delete({ where: { id: existing.id } });
@@ -215,7 +240,9 @@ export class CoursService {
    * creates a Cours for each one that doesn't have one yet, and assigns all to the class.
    * Returns counts of created and already-existing cours.
    */
-  async importFromClass(classId: number): Promise<{ created: number; existing: number; total: number }> {
+  async importFromClass(
+    classId: number,
+  ): Promise<{ created: number; existing: number; total: number }> {
     const cls = await this.prisma.academicClass.findUnique({
       where: { id: classId },
       select: { id: true, filiereId: true },
@@ -286,7 +313,10 @@ export class CoursService {
   }
 
   private async ensureExists(id: number) {
-    const cours = await this.prisma.cours.findUnique({ where: { id }, select: { id: true } });
+    const cours = await this.prisma.cours.findUnique({
+      where: { id },
+      select: { id: true },
+    });
     if (!cours) throw new NotFoundException(`Cours ${id} not found`);
   }
 
@@ -298,12 +328,20 @@ export class CoursService {
       },
       select: { id: true },
     });
-    if (existing) throw new ConflictException(`A cours named "${name}" already exists`);
+    if (existing)
+      throw new ConflictException(`A cours named "${name}" already exists`);
   }
 
-  private async ensureElementModuleAvailable(elementModuleId: number, excludeCoursId?: number) {
-    const el = await this.prisma.elementModule.findUnique({ where: { id: elementModuleId }, select: { id: true } });
-    if (!el) throw new NotFoundException(`ElementModule ${elementModuleId} not found`);
+  private async ensureElementModuleAvailable(
+    elementModuleId: number,
+    excludeCoursId?: number,
+  ) {
+    const el = await this.prisma.elementModule.findUnique({
+      where: { id: elementModuleId },
+      select: { id: true },
+    });
+    if (!el)
+      throw new NotFoundException(`ElementModule ${elementModuleId} not found`);
     const linked = await this.prisma.cours.findFirst({
       where: {
         elementModuleId,
@@ -311,16 +349,25 @@ export class CoursService {
       },
       select: { id: true },
     });
-    if (linked) throw new ConflictException(`ElementModule ${elementModuleId} already has a linked cours`);
+    if (linked)
+      throw new ConflictException(
+        `ElementModule ${elementModuleId} already has a linked cours`,
+      );
   }
 
   private async ensureClassExists(classId: number) {
-    const cls = await this.prisma.academicClass.findUnique({ where: { id: classId }, select: { id: true } });
+    const cls = await this.prisma.academicClass.findUnique({
+      where: { id: classId },
+      select: { id: true },
+    });
     if (!cls) throw new NotFoundException(`Class ${classId} not found`);
   }
 
   private async ensureTeacherExists(teacherId: number) {
-    const teacher = await this.prisma.teacher.findUnique({ where: { id: teacherId }, select: { id: true } });
+    const teacher = await this.prisma.teacher.findUnique({
+      where: { id: teacherId },
+      select: { id: true },
+    });
     if (!teacher) throw new NotFoundException(`Teacher ${teacherId} not found`);
   }
 }

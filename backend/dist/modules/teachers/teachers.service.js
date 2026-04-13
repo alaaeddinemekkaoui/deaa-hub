@@ -316,7 +316,9 @@ let TeachersService = class TeachersService {
                 cours: { select: { id: true, name: true, type: true } },
                 class: {
                     select: {
-                        id: true, name: true, year: true,
+                        id: true,
+                        name: true,
+                        year: true,
                         filiere: { select: { id: true, name: true } },
                     },
                 },
@@ -646,7 +648,9 @@ let TeachersService = class TeachersService {
     async importFromBuffer(buffer) {
         const workbook = XLSX.read(buffer, { type: 'buffer' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+        const rows = XLSX.utils.sheet_to_json(sheet, {
+            defval: null,
+        });
         let imported = 0;
         const errors = [];
         for (let i = 0; i < rows.length; i++) {
@@ -664,12 +668,16 @@ let TeachersService = class TeachersService {
                     lastName: String(row['lastName'] ?? '').trim(),
                     cin: row['cin'] ? String(row['cin']).trim() : undefined,
                     email: row['email'] ? String(row['email']).trim() : undefined,
-                    phoneNumber: row['phoneNumber'] ? String(row['phoneNumber']).trim() : undefined,
+                    phoneNumber: row['phoneNumber']
+                        ? String(row['phoneNumber']).trim()
+                        : undefined,
                     departmentId,
                     filiereId: row['filiereId'] ? Number(row['filiereId']) : undefined,
                     roleId,
                     gradeId,
-                    dateInscription: row['dateInscription'] ? String(row['dateInscription']).trim() : undefined,
+                    dateInscription: row['dateInscription']
+                        ? String(row['dateInscription']).trim()
+                        : undefined,
                 });
                 imported++;
             }

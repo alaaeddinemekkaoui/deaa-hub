@@ -23,7 +23,7 @@ class UpdateElementDto {
 exports.UpdateElementDto = UpdateElementDto;
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => (typeof value === 'string' ? value.trim() : value)),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? value.trim() : value),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.MaxLength)(120),
@@ -38,8 +38,11 @@ __decorate([
 ], UpdateElementDto.prototype, "moduleId", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => { if (value === null || value === undefined || value === '')
-        return null; return Number(value); }),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        if (value === null || value === undefined || value === '')
+            return null;
+        return Number(value);
+    }),
     (0, class_validator_1.ValidateIf)((_, v) => v !== null),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(1),

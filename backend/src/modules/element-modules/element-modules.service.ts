@@ -14,15 +14,19 @@ export class ElementModulesService {
   ) {}
 
   async findAll(query: ElementQueryDto) {
-    const { page, limit, search, moduleId, classId, type, sortBy, sortOrder } = query;
+    const { page, limit, search, moduleId, classId, type, sortBy, sortOrder } =
+      query;
     const filters: Prisma.ElementModuleWhereInput[] = [];
 
-    if (search) filters.push({ name: { contains: search, mode: 'insensitive' } });
+    if (search)
+      filters.push({ name: { contains: search, mode: 'insensitive' } });
     if (moduleId) filters.push({ moduleId });
     if (classId) filters.push({ classId });
-    if (type) filters.push({ type: type as ElementType });
+    if (type) filters.push({ type: type });
 
-    const where: Prisma.ElementModuleWhereInput = filters.length ? { AND: filters } : {};
+    const where: Prisma.ElementModuleWhereInput = filters.length
+      ? { AND: filters }
+      : {};
 
     const [data, total] = await Promise.all([
       this.prisma.elementModule.findMany({
@@ -32,7 +36,11 @@ export class ElementModulesService {
             include: {
               filiere: { select: { id: true, name: true } },
               option: { select: { id: true, name: true } },
-              classes: { include: { class: { select: { id: true, name: true, year: true } } } },
+              classes: {
+                include: {
+                  class: { select: { id: true, name: true, year: true } },
+                },
+              },
             },
           },
           class: { select: { id: true, name: true, year: true } },
@@ -45,7 +53,17 @@ export class ElementModulesService {
       this.prisma.elementModule.count({ where }),
     ]);
 
-    return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1, hasNextPage: page * limit < total, hasPreviousPage: page > 1 } };
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+        hasNextPage: page * limit < total,
+        hasPreviousPage: page > 1,
+      },
+    };
   }
 
   async findOne(id: number) {
@@ -56,7 +74,11 @@ export class ElementModulesService {
           include: {
             filiere: true,
             option: true,
-            classes: { include: { class: { select: { id: true, name: true, year: true } } } },
+            classes: {
+              include: {
+                class: { select: { id: true, name: true, year: true } },
+              },
+            },
           },
         },
         class: { select: { id: true, name: true, year: true } },
@@ -102,7 +124,15 @@ export class ElementModulesService {
     return this.prisma.elementModule.findUnique({
       where: { id: element.id },
       include: {
-        module: { include: { classes: { include: { class: { select: { id: true, name: true, year: true } } } } } },
+        module: {
+          include: {
+            classes: {
+              include: {
+                class: { select: { id: true, name: true, year: true } },
+              },
+            },
+          },
+        },
         _count: { select: { sessions: true } },
       },
     });
@@ -116,7 +146,9 @@ export class ElementModulesService {
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.moduleId !== undefined ? { moduleId: dto.moduleId } : {}),
-        ...(dto.volumeHoraire !== undefined ? { volumeHoraire: dto.volumeHoraire ?? null } : {}),
+        ...(dto.volumeHoraire !== undefined
+          ? { volumeHoraire: dto.volumeHoraire ?? null }
+          : {}),
         ...(dto.type !== undefined ? { type: dto.type } : {}),
       },
     });
@@ -128,12 +160,18 @@ export class ElementModulesService {
   }
 
   private async ensureExists(id: number) {
-    const e = await this.prisma.elementModule.findUnique({ where: { id }, select: { id: true } });
+    const e = await this.prisma.elementModule.findUnique({
+      where: { id },
+      select: { id: true },
+    });
     if (!e) throw new NotFoundException(`ElementModule ${id} not found`);
   }
 
   private async ensureModuleExists(id: number) {
-    const m = await this.prisma.module.findUnique({ where: { id }, select: { id: true } });
+    const m = await this.prisma.module.findUnique({
+      where: { id },
+      select: { id: true },
+    });
     if (!m) throw new NotFoundException(`Module ${id} not found`);
   }
 }

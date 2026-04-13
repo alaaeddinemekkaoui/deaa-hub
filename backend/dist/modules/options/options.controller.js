@@ -27,11 +27,21 @@ let OptionsController = class OptionsController {
     constructor(optionsService) {
         this.optionsService = optionsService;
     }
-    findAll(query) { return this.optionsService.findAll(query); }
-    findOne(id) { return this.optionsService.findOne(id); }
-    create(dto) { return this.optionsService.create(dto); }
-    update(id, dto) { return this.optionsService.update(id, dto); }
-    remove(id) { return this.optionsService.remove(id); }
+    findAll(query) {
+        return this.optionsService.findAll(query);
+    }
+    findOne(id) {
+        return this.optionsService.findOne(id);
+    }
+    create(dto) {
+        return this.optionsService.create(dto);
+    }
+    update(id, dto) {
+        return this.optionsService.update(id, dto);
+    }
+    remove(id) {
+        return this.optionsService.remove(id);
+    }
 };
 exports.OptionsController = OptionsController;
 __decorate([

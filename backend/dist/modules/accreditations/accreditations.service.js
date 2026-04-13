@@ -19,7 +19,7 @@ let AccreditationsService = class AccreditationsService {
         this.prisma = prisma;
     }
     async findPlans(query) {
-        const { page, limit, search, academicYear, filiereId, sortBy, sortOrder, } = query;
+        const { page, limit, search, academicYear, filiereId, sortBy, sortOrder } = query;
         const filters = [];
         if (search) {
             filters.push({

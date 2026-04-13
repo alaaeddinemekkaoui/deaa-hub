@@ -52,18 +52,47 @@ let RoomsService = class RoomsService {
         this.prisma = prisma;
     }
     findAll() {
-        return this.prisma.room.findMany({ orderBy: { name: 'asc' } });
+        return this.prisma.room.findMany({
+            include: {
+                department: {
+                    select: {
+                        id: true,
+                        name: true,
+                    },
+                },
+            },
+            orderBy: { name: 'asc' },
+        });
     }
     findOne(id) {
-        return this.prisma.room.findUnique({ where: { id } });
+        return this.prisma.room.findUnique({
+            where: { id },
+            include: {
+                department: {
+                    select: {
+                        id: true,
+                        name: true,
+                    },
+                },
+            },
+        });
     }
     create(dto) {
         return this.prisma.room.create({
             data: {
                 name: dto.name,
+                departmentId: dto.departmentId,
                 capacity: dto.capacity,
                 equipment: dto.equipment,
                 availability: dto.availability,
+            },
+            include: {
+                department: {
+                    select: {
+                        id: true,
+                        name: true,
+                    },
+                },
             },
         });
     }
@@ -76,7 +105,9 @@ let RoomsService = class RoomsService {
     async importFromBuffer(buffer) {
         const workbook = XLSX.read(buffer, { type: 'buffer' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+        const rows = XLSX.utils.sheet_to_json(sheet, {
+            defval: null,
+        });
         let imported = 0;
         const errors = [];
         for (let i = 0; i < rows.length; i++) {
@@ -91,6 +122,9 @@ let RoomsService = class RoomsService {
                     data: {
                         name,
                         capacity: row['capacity'] ? Number(row['capacity']) : 0,
+                        departmentId: row['departmentId']
+                            ? Number(row['departmentId'])
+                            : undefined,
                         availability: row['availability'] !== null && row['availability'] !== undefined
                             ? String(row['availability']).toLowerCase() !== 'false'
                             : true,

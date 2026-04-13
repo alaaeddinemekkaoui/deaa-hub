@@ -50,6 +50,7 @@ api.interceptors.response.use(
         const mockData = getMockResponse(
           error.config?.url ?? '',
           error.config?.params as Record<string, unknown> | undefined,
+          error.config?.method,
         );
         if (mockData !== null) {
           const now = Date.now();

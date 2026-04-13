@@ -26,12 +26,18 @@ export class StudentObservationsService {
       where: { id, studentId },
       select: { id: true },
     });
-    if (!obs) throw new NotFoundException(`Observation ${id} not found for student ${studentId}`);
+    if (!obs)
+      throw new NotFoundException(
+        `Observation ${id} not found for student ${studentId}`,
+      );
     return this.prisma.studentObservation.delete({ where: { id } });
   }
 
   private async ensureStudentExists(id: number) {
-    const s = await this.prisma.student.findUnique({ where: { id }, select: { id: true } });
+    const s = await this.prisma.student.findUnique({
+      where: { id },
+      select: { id: true },
+    });
     if (!s) throw new NotFoundException(`Student ${id} not found`);
   }
 }

@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { OptionsService } from './options.service';
 import { CreateOptionDto } from './dto/create-option.dto';
 import { UpdateOptionDto } from './dto/update-option.dto';
@@ -13,18 +24,33 @@ import { UserRole } from '../../common/types/role.type';
 export class OptionsController {
   constructor(private readonly optionsService: OptionsService) {}
 
-  @Get() @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
-  findAll(@Query() query: OptionQueryDto) { return this.optionsService.findAll(query); }
+  @Get()
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  findAll(@Query() query: OptionQueryDto) {
+    return this.optionsService.findAll(query);
+  }
 
-  @Get(':id') @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
-  findOne(@Param('id', ParseIntPipe) id: number) { return this.optionsService.findOne(id); }
+  @Get(':id')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.optionsService.findOne(id);
+  }
 
-  @Post() @Roles(UserRole.ADMIN, UserRole.STAFF)
-  create(@Body() dto: CreateOptionDto) { return this.optionsService.create(dto); }
+  @Post()
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  create(@Body() dto: CreateOptionDto) {
+    return this.optionsService.create(dto);
+  }
 
-  @Patch(':id') @Roles(UserRole.ADMIN, UserRole.STAFF)
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateOptionDto) { return this.optionsService.update(id, dto); }
+  @Patch(':id')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateOptionDto) {
+    return this.optionsService.update(id, dto);
+  }
 
-  @Delete(':id') @Roles(UserRole.ADMIN)
-  remove(@Param('id', ParseIntPipe) id: number) { return this.optionsService.remove(id); }
+  @Delete(':id')
+  @Roles(UserRole.ADMIN)
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.optionsService.remove(id);
+  }
 }

@@ -141,7 +141,10 @@ let LaureatesService = class LaureatesService {
         });
         if (!existing)
             throw new common_1.NotFoundException(`Laureate ${id} not found`);
-        const updated = await this.prisma.laureate.update({ where: { id }, data: dto });
+        const updated = await this.prisma.laureate.update({
+            where: { id },
+            data: dto,
+        });
         if (userId) {
             await this.log(userId, `Updated laureate: ${existing.student.fullName}`, {
                 laureateId: id,

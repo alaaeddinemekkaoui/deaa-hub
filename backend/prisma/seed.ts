@@ -6,6 +6,7 @@ import {
   PrepaYear,
   ElementType,
   DiplomaStatus,
+  RoomReservationPurpose,
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
@@ -41,6 +42,15 @@ async function findOrCreateElement(
   return prisma.elementModule.create({
     data: { name, moduleId, classId, type, volumeHoraire },
   });
+}
+
+function getCurrentWeekDate(dayOfWeek: number) {
+  const today = new Date();
+  const currentDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const currentDay = currentDate.getUTCDay();
+  const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay;
+  currentDate.setUTCDate(currentDate.getUTCDate() + mondayOffset + (dayOfWeek - 1));
+  return currentDate.toISOString().slice(0, 10);
 }
 
 async function main() {
@@ -281,6 +291,50 @@ async function main() {
   for (const r of roomDefs) {
     await prisma.room.upsert({ where: { name: r.name }, update: r, create: r });
   }
+
+  const upsertRoomReservation = async (
+    roomName: string,
+    dayOfWeek: number,
+    startTime: string,
+    endTime: string,
+    reservedBy: string,
+    purpose: RoomReservationPurpose,
+    notes: string | null,
+  ) => {
+    const room = await prisma.room.findUnique({
+      where: { name: roomName },
+      select: { id: true },
+    });
+
+    if (!room) return;
+
+    const date = getCurrentWeekDate(dayOfWeek);
+    const existing = await prisma.roomReservation.findFirst({
+      where: { roomId: room.id, date, startTime, endTime },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.roomReservation.update({
+        where: { id: existing.id },
+        data: { reservedBy, purpose, notes, dayOfWeek },
+      });
+      return;
+    }
+
+    await prisma.roomReservation.create({
+      data: {
+        roomId: room.id,
+        date,
+        dayOfWeek,
+        startTime,
+        endTime,
+        reservedBy,
+        purpose,
+        notes,
+      },
+    });
+  };
 
   // ─── Teachers ─────────────────────────────────────────────────────────────
   type TeacherDef = {
@@ -836,6 +890,14 @@ async function main() {
   await upsertSession('Hydraulique Générale', classGR1.id, 4, '14:00', '16:00', teacher('DD404040'), 'Salle 201');
   await upsertSession('Microbiologie Générale', classIAA1.id, 5, '08:30', '10:30', teacher('GG707070'), 'Labo Biologie');
 
+  // ─── Room reservations (current week demo data) ─────────────────────────
+  await upsertRoomReservation('Amphi A', 1, '08:00', '10:00', 'Pr. Alaoui', RoomReservationPurpose.cours, 'Biologie végétale IAG1');
+  await upsertRoomReservation('Amphi A', 3, '14:00', '16:00', 'Pr. Fennich', RoomReservationPurpose.examen, 'Examen mi-parcours IGR');
+  await upsertRoomReservation('Amphi C', 2, '10:00', '12:00', 'Pr. Benali', RoomReservationPurpose.cours, 'TD Chimie organique IAG2');
+  await upsertRoomReservation('Salle de Conférences', 4, '09:00', '11:00', 'Direction', RoomReservationPurpose.reunion, 'Réunion pédagogique mensuelle');
+  await upsertRoomReservation('Labo Informatique 1', 5, '08:00', '10:00', 'Pr. Fennich', RoomReservationPurpose.cours, 'TP Informatique IAG1');
+  await upsertRoomReservation('Amphi B', 1, '14:00', '16:00', 'Pr. Chakroun', RoomReservationPurpose.cours, 'Cours Anatomie MV2');
+
   // ─── Activity logs and workflow tasks ────────────────────────────────────
   const adminUser = await prisma.user.findUnique({ where: { email: 'admin' }, select: { id: true } });
 
@@ -902,6 +964,7 @@ async function main() {
   console.log(`   Students: ${studentDefs.length} + 3 laureates`);
   console.log('   Accreditation plans: 2 (published)');
   console.log('   Timetable sessions: seeded sample weekly grid');
+  console.log('   Room reservations: seeded current-week room booking demo');
   console.log('   Workflow + activity logs: seeded');
 }
 

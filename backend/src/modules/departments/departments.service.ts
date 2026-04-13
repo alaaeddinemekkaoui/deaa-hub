@@ -163,10 +163,14 @@ export class DepartmentsService {
     }
   }
 
-  async importFromBuffer(buffer: Buffer): Promise<{ imported: number; errors: string[] }> {
+  async importFromBuffer(
+    buffer: Buffer,
+  ): Promise<{ imported: number; errors: string[] }> {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null });
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: null,
+    });
 
     let imported = 0;
     const errors: string[] = [];
@@ -175,7 +179,10 @@ export class DepartmentsService {
       const row = rows[i];
       try {
         const name = String(row['name'] ?? row['Nom'] ?? '').trim();
-        if (!name) { errors.push(`Row ${i + 2}: name is required`); continue; }
+        if (!name) {
+          errors.push(`Row ${i + 2}: name is required`);
+          continue;
+        }
         await this.create({ name });
         imported++;
       } catch (err: unknown) {

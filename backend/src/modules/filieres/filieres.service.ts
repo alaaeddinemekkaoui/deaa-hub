@@ -230,10 +230,14 @@ export class FilieresService {
     }
   }
 
-  async importFromBuffer(buffer: Buffer): Promise<{ imported: number; errors: string[] }> {
+  async importFromBuffer(
+    buffer: Buffer,
+  ): Promise<{ imported: number; errors: string[] }> {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null });
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: null,
+    });
 
     let imported = 0;
     const errors: string[] = [];
@@ -245,7 +249,9 @@ export class FilieresService {
         const name = String(row['name'] ?? row['Nom'] ?? '').trim();
         const departmentId = Number(row['departmentId'] ?? 0);
         if (!code || !name || !departmentId) {
-          errors.push(`Row ${i + 2}: code, name, and departmentId are required`);
+          errors.push(
+            `Row ${i + 2}: code, name, and departmentId are required`,
+          );
           continue;
         }
         await this.prisma.filiere.create({
@@ -253,7 +259,9 @@ export class FilieresService {
             code,
             name,
             departmentId,
-            filiereType: row['filiereType'] ? String(row['filiereType']).trim() : null,
+            filiereType: row['filiereType']
+              ? String(row['filiereType']).trim()
+              : null,
           },
         });
         imported++;

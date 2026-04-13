@@ -26,14 +26,20 @@ let AcademicModulesService = class AcademicModulesService {
             filters.push({ filiereId });
         if (optionId)
             filters.push({ optionId });
-        const where = filters.length ? { AND: filters } : {};
+        const where = filters.length
+            ? { AND: filters }
+            : {};
         const [data, total] = await Promise.all([
             this.prisma.module.findMany({
                 where,
                 include: {
                     filiere: { select: { id: true, name: true } },
                     option: { select: { id: true, name: true } },
-                    classes: { include: { class: { select: { id: true, name: true, year: true } } } },
+                    classes: {
+                        include: {
+                            class: { select: { id: true, name: true, year: true } },
+                        },
+                    },
                     _count: { select: { elements: true } },
                 },
                 skip: (page - 1) * limit,
@@ -42,7 +48,17 @@ let AcademicModulesService = class AcademicModulesService {
             }),
             this.prisma.module.count({ where }),
         ]);
-        return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1, hasNextPage: page * limit < total, hasPreviousPage: page > 1 } };
+        return {
+            data,
+            meta: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit) || 1,
+                hasNextPage: page * limit < total,
+                hasPreviousPage: page > 1,
+            },
+        };
     }
     async findOne(id) {
         const mod = await this.prisma.module.findUnique({
@@ -50,7 +66,19 @@ let AcademicModulesService = class AcademicModulesService {
             include: {
                 filiere: { select: { id: true, name: true } },
                 option: { select: { id: true, name: true } },
-                classes: { include: { class: { select: { id: true, name: true, year: true, filiereId: true, optionId: true } } } },
+                classes: {
+                    include: {
+                        class: {
+                            select: {
+                                id: true,
+                                name: true,
+                                year: true,
+                                filiereId: true,
+                                optionId: true,
+                            },
+                        },
+                    },
+                },
                 elements: { orderBy: { name: 'asc' } },
             },
         });
@@ -77,7 +105,9 @@ let AcademicModulesService = class AcademicModulesService {
                 },
             },
             include: {
-                classes: { include: { class: { select: { id: true, name: true, year: true } } } },
+                classes: {
+                    include: { class: { select: { id: true, name: true, year: true } } },
+                },
                 _count: { select: { elements: true } },
             },
         });
@@ -93,9 +123,15 @@ let AcademicModulesService = class AcademicModulesService {
             where: { id },
             data: {
                 ...(dto.name !== undefined ? { name: dto.name } : {}),
-                ...(dto.semestre !== undefined ? { semestre: dto.semestre ?? null } : {}),
-                ...(dto.filiereId !== undefined ? { filiereId: dto.filiereId ?? null } : {}),
-                ...(dto.optionId !== undefined ? { optionId: dto.optionId ?? null } : {}),
+                ...(dto.semestre !== undefined
+                    ? { semestre: dto.semestre ?? null }
+                    : {}),
+                ...(dto.filiereId !== undefined
+                    ? { filiereId: dto.filiereId ?? null }
+                    : {}),
+                ...(dto.optionId !== undefined
+                    ? { optionId: dto.optionId ?? null }
+                    : {}),
             },
         });
     }
@@ -121,7 +157,11 @@ let AcademicModulesService = class AcademicModulesService {
         }
         return this.prisma.module.findUnique({
             where: { id: moduleId },
-            include: { classes: { include: { class: { select: { id: true, name: true, year: true } } } } },
+            include: {
+                classes: {
+                    include: { class: { select: { id: true, name: true, year: true } } },
+                },
+            },
         });
     }
     async removeClass(moduleId, classId) {
@@ -131,7 +171,9 @@ let AcademicModulesService = class AcademicModulesService {
         });
         if (!existing)
             throw new common_1.NotFoundException(`Class ${classId} is not assigned to module ${moduleId}`);
-        await this.prisma.moduleClass.delete({ where: { moduleId_classId: { moduleId, classId } } });
+        await this.prisma.moduleClass.delete({
+            where: { moduleId_classId: { moduleId, classId } },
+        });
         return { success: true };
     }
     async ensureCoursAndCoursClass(el, classId) {
@@ -146,14 +188,20 @@ let AcademicModulesService = class AcademicModulesService {
             });
             if (existing) {
                 if (!existing.elementModuleId) {
-                    await this.prisma.cours.update({ where: { id: existing.id }, data: { elementModuleId: el.id } });
+                    await this.prisma.cours.update({
+                        where: { id: existing.id },
+                        data: { elementModuleId: el.id },
+                    });
                 }
                 coursId = existing.id;
             }
             else {
                 let coursName = el.name;
                 const conflict = await this.prisma.cours.findFirst({
-                    where: { name: { equals: coursName, mode: 'insensitive' }, elementModuleId: { not: null } },
+                    where: {
+                        name: { equals: coursName, mode: 'insensitive' },
+                        elementModuleId: { not: null },
+                    },
                 });
                 if (conflict)
                     coursName = `${el.name} (${el.id})`;
@@ -167,26 +215,40 @@ let AcademicModulesService = class AcademicModulesService {
             where: { coursId, classId, teacherId: null },
         });
         if (!existingCC) {
-            await this.prisma.coursClass.create({ data: { coursId, classId, teacherId: null } });
+            await this.prisma.coursClass.create({
+                data: { coursId, classId, teacherId: null },
+            });
         }
     }
     async ensureExists(id) {
-        const m = await this.prisma.module.findUnique({ where: { id }, select: { id: true } });
+        const m = await this.prisma.module.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!m)
             throw new common_1.NotFoundException(`Module ${id} not found`);
     }
     async ensureFiliereExists(id) {
-        const f = await this.prisma.filiere.findUnique({ where: { id }, select: { id: true } });
+        const f = await this.prisma.filiere.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!f)
             throw new common_1.NotFoundException(`Filiere ${id} not found`);
     }
     async ensureOptionExists(id) {
-        const o = await this.prisma.option.findUnique({ where: { id }, select: { id: true } });
+        const o = await this.prisma.option.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!o)
             throw new common_1.NotFoundException(`Option ${id} not found`);
     }
     async ensureClassExists(id) {
-        const c = await this.prisma.academicClass.findUnique({ where: { id }, select: { id: true } });
+        const c = await this.prisma.academicClass.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!c)
             throw new common_1.NotFoundException(`Class ${id} not found`);
     }

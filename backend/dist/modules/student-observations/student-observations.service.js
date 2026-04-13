@@ -40,7 +40,10 @@ let StudentObservationsService = class StudentObservationsService {
         return this.prisma.studentObservation.delete({ where: { id } });
     }
     async ensureStudentExists(id) {
-        const s = await this.prisma.student.findUnique({ where: { id }, select: { id: true } });
+        const s = await this.prisma.student.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!s)
             throw new common_1.NotFoundException(`Student ${id} not found`);
     }

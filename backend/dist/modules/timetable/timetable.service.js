@@ -36,7 +36,9 @@ let TimetableService = class TimetableService {
             filters.push({ dayOfWeek });
         if (weekStart)
             filters.push({ weekStart: new Date(weekStart) });
-        const where = filters.length ? { AND: filters } : {};
+        const where = filters.length
+            ? { AND: filters }
+            : {};
         const [data, total] = await Promise.all([
             this.prisma.timetableSession.findMany({
                 where,
@@ -47,7 +49,17 @@ let TimetableService = class TimetableService {
             }),
             this.prisma.timetableSession.count({ where }),
         ]);
-        return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1, hasNextPage: page * limit < total, hasPreviousPage: page > 1 } };
+        return {
+            data,
+            meta: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit) || 1,
+                hasNextPage: page * limit < total,
+                hasPreviousPage: page > 1,
+            },
+        };
     }
     async findWeek(classId, weekStart) {
         const sessions = await this.prisma.timetableSession.findMany({
@@ -95,12 +107,16 @@ let TimetableService = class TimetableService {
             data: {
                 ...(dto.elementId !== undefined ? { elementId: dto.elementId } : {}),
                 ...(dto.classId !== undefined ? { classId: dto.classId } : {}),
-                ...(dto.teacherId !== undefined ? { teacherId: dto.teacherId ?? null } : {}),
+                ...(dto.teacherId !== undefined
+                    ? { teacherId: dto.teacherId ?? null }
+                    : {}),
                 ...(dto.roomId !== undefined ? { roomId: dto.roomId ?? null } : {}),
                 ...(dto.dayOfWeek !== undefined ? { dayOfWeek: dto.dayOfWeek } : {}),
                 ...(dto.startTime !== undefined ? { startTime: dto.startTime } : {}),
                 ...(dto.endTime !== undefined ? { endTime: dto.endTime } : {}),
-                ...(dto.weekStart !== undefined ? { weekStart: dto.weekStart ? new Date(dto.weekStart) : null } : {}),
+                ...(dto.weekStart !== undefined
+                    ? { weekStart: dto.weekStart ? new Date(dto.weekStart) : null }
+                    : {}),
             },
             include: SESSION_INCLUDE,
         });
@@ -113,7 +129,10 @@ let TimetableService = class TimetableService {
         const where = { classId };
         if (weekStart)
             where.weekStart = new Date(weekStart);
-        const sessions = await this.prisma.timetableSession.findMany({ where, include: SESSION_INCLUDE });
+        const sessions = await this.prisma.timetableSession.findMany({
+            where,
+            include: SESSION_INCLUDE,
+        });
         return this.detectConflicts(sessions);
     }
     detectConflicts(sessions) {
@@ -127,44 +146,71 @@ let TimetableService = class TimetableService {
                 if (!this.timesOverlap(a.startTime, a.endTime, b.startTime, b.endTime))
                     continue;
                 if (a.teacherId && b.teacherId && a.teacherId === b.teacherId) {
-                    conflicts.push({ sessionIds: [a.id, b.id], reason: 'Même enseignant en même temps' });
+                    conflicts.push({
+                        sessionIds: [a.id, b.id],
+                        reason: 'Même enseignant en même temps',
+                    });
                 }
                 if (a.roomId && b.roomId && a.roomId === b.roomId) {
-                    conflicts.push({ sessionIds: [a.id, b.id], reason: 'Même salle en même temps' });
+                    conflicts.push({
+                        sessionIds: [a.id, b.id],
+                        reason: 'Même salle en même temps',
+                    });
                 }
                 if (a.classId === b.classId) {
-                    conflicts.push({ sessionIds: [a.id, b.id], reason: 'Même classe en même temps' });
+                    conflicts.push({
+                        sessionIds: [a.id, b.id],
+                        reason: 'Même classe en même temps',
+                    });
                 }
             }
         }
         return conflicts;
     }
     timesOverlap(s1, e1, s2, e2) {
-        const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+        const toMin = (t) => {
+            const [h, m] = t.split(':').map(Number);
+            return h * 60 + m;
+        };
         return toMin(s1) < toMin(e2) && toMin(s2) < toMin(e1);
     }
     async ensureSessionExists(id) {
-        const s = await this.prisma.timetableSession.findUnique({ where: { id }, select: { id: true } });
+        const s = await this.prisma.timetableSession.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!s)
             throw new common_1.NotFoundException(`Session ${id} not found`);
     }
     async ensureElementExists(id) {
-        const e = await this.prisma.elementModule.findUnique({ where: { id }, select: { id: true } });
+        const e = await this.prisma.elementModule.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!e)
             throw new common_1.NotFoundException(`ElementModule ${id} not found`);
     }
     async ensureClassExists(id) {
-        const c = await this.prisma.academicClass.findUnique({ where: { id }, select: { id: true } });
+        const c = await this.prisma.academicClass.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!c)
             throw new common_1.NotFoundException(`Class ${id} not found`);
     }
     async ensureTeacherExists(id) {
-        const t = await this.prisma.teacher.findUnique({ where: { id }, select: { id: true } });
+        const t = await this.prisma.teacher.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!t)
             throw new common_1.NotFoundException(`Teacher ${id} not found`);
     }
     async ensureRoomExists(id) {
-        const r = await this.prisma.room.findUnique({ where: { id }, select: { id: true } });
+        const r = await this.prisma.room.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!r)
             throw new common_1.NotFoundException(`Room ${id} not found`);
     }

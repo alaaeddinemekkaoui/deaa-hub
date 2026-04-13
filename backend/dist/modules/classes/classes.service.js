@@ -179,10 +179,16 @@ let ClassesService = class ClassesService {
             data: {
                 ...(dto.name !== undefined ? { name: dto.name } : {}),
                 ...(dto.year !== undefined ? { year: dto.year } : {}),
-                ...(dto.classType !== undefined ? { classType: dto.classType ?? null } : {}),
+                ...(dto.classType !== undefined
+                    ? { classType: dto.classType ?? null }
+                    : {}),
                 ...(dto.cycleId !== undefined ? { cycleId: dto.cycleId ?? null } : {}),
-                ...(dto.optionId !== undefined ? { optionId: dto.optionId ?? null } : {}),
-                ...(dto.filiereId !== undefined ? { filiereId: dto.filiereId ?? null } : {}),
+                ...(dto.optionId !== undefined
+                    ? { optionId: dto.optionId ?? null }
+                    : {}),
+                ...(dto.filiereId !== undefined
+                    ? { filiereId: dto.filiereId ?? null }
+                    : {}),
             },
         });
     }
@@ -196,23 +202,33 @@ let ClassesService = class ClassesService {
         });
         if (!academicClass)
             throw new common_1.NotFoundException(`Class ${id} not found`);
-        if (academicClass._count.students > 0 || academicClass._count.teachers > 0) {
+        if (academicClass._count.students > 0 ||
+            academicClass._count.teachers > 0) {
             throw new common_1.BadRequestException('Class cannot be deleted while students or teachers are still attached');
         }
         return this.prisma.academicClass.delete({ where: { id } });
     }
     async ensureFiliereExists(id) {
-        const f = await this.prisma.filiere.findUnique({ where: { id }, select: { id: true } });
+        const f = await this.prisma.filiere.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!f)
             throw new common_1.NotFoundException(`Filiere ${id} not found`);
     }
     async ensureCycleExists(id) {
-        const c = await this.prisma.cycle.findUnique({ where: { id }, select: { id: true } });
+        const c = await this.prisma.cycle.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!c)
             throw new common_1.NotFoundException(`Cycle ${id} not found`);
     }
     async ensureOptionExists(id) {
-        const o = await this.prisma.option.findUnique({ where: { id }, select: { id: true } });
+        const o = await this.prisma.option.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!o)
             throw new common_1.NotFoundException(`Option ${id} not found`);
     }
@@ -232,7 +248,9 @@ let ClassesService = class ClassesService {
     async importFromBuffer(buffer) {
         const workbook = XLSX.read(buffer, { type: 'buffer' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+        const rows = XLSX.utils.sheet_to_json(sheet, {
+            defval: null,
+        });
         let imported = 0;
         const errors = [];
         for (let i = 0; i < rows.length; i++) {
@@ -248,7 +266,9 @@ let ClassesService = class ClassesService {
                     name,
                     year,
                     filiereId: row['filiereId'] ? Number(row['filiereId']) : undefined,
-                    classType: row['classType'] ? String(row['classType']).trim() : undefined,
+                    classType: row['classType']
+                        ? String(row['classType']).trim()
+                        : undefined,
                 });
                 imported++;
             }

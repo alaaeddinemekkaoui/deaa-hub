@@ -3,4 +3,5 @@ export declare class CreateRoomDto {
     capacity: number;
     equipment: string[];
     availability: boolean;
+    departmentId?: number;
 }

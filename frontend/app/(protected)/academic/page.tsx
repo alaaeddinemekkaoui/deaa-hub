@@ -48,6 +48,8 @@ export default function AcademicPage() {
 
   const [filterFiliereId, setFilterFiliereId] = useState('');
   const [filterOptionId, setFilterOptionId] = useState('');
+  // Filter modules by the year of their assigned classes
+  const [filterClassYear, setFilterClassYear] = useState('');
 
   // ── Module modal ──
   const [modModal, setModModal] = useState(false);
@@ -57,7 +59,8 @@ export default function AcademicPage() {
   const [modFiliereId, setModFiliereId] = useState('');
   const [modOptionId, setModOptionId] = useState('');
   const [savingMod, setSavingMod] = useState(false);
-  // Class picker within module modal
+  // Class picker: filter by year + filiere + option
+  const [pickerYear, setPickerYear] = useState('');
   const [pickerFiliereId, setPickerFiliereId] = useState('');
   const [pickerOptionId, setPickerOptionId] = useState('');
   const [pickerClassId, setPickerClassId] = useState('');
@@ -79,7 +82,12 @@ export default function AcademicPage() {
         setLoading(true);
         const [mRes, fRes, oRes, cRes] = await Promise.all([
           api.get<PaginatedResponse<AcademicModule>>('/academic-modules', {
-            params: { page: 1, limit: 200, sortBy: 'name', sortOrder: 'asc', filiereId: filterFiliereId || undefined, optionId: filterOptionId || undefined },
+            params: {
+              page: 1, limit: 200, sortBy: 'name', sortOrder: 'asc',
+              filiereId: filterFiliereId || undefined,
+              optionId: filterOptionId || undefined,
+              classYear: filterClassYear || undefined,
+            },
           }),
           api.get<PaginatedResponse<Filiere>>('/filieres', { params: { page: 1, limit: 200, sortBy: 'name', sortOrder: 'asc' } }),
           api.get<PaginatedResponse<Option>>('/options', { params: { page: 1, limit: 200, sortBy: 'name', sortOrder: 'asc' } }),
@@ -96,7 +104,7 @@ export default function AcademicPage() {
       }
     };
     void load();
-  }, [filterFiliereId, filterOptionId, refreshKey]);
+  }, [filterFiliereId, filterOptionId, filterClassYear, refreshKey]);
 
   useEffect(() => {
     if (!selectedModule) { setElements([]); return; }
@@ -114,6 +122,11 @@ export default function AcademicPage() {
   }, [selectedModule, refreshKey]);
 
   // ── Computed ──
+  const availableYears = useMemo(() => {
+    const yrs = [...new Set(classes.map((c) => c.year))].sort((a, b) => b - a);
+    return yrs;
+  }, [classes]);
+
   const filteredOptions = useMemo(
     () => filterFiliereId ? options.filter((o) => String(o.filiereId) === filterFiliereId) : options,
     [filterFiliereId, options],
@@ -124,23 +137,27 @@ export default function AcademicPage() {
   );
   const pickerClasses = useMemo(() => {
     let list = classes;
+    if (pickerYear) list = list.filter((c) => String(c.year) === pickerYear);
     if (pickerFiliereId) list = list.filter((c) => String(c.filiereId) === pickerFiliereId);
     if (pickerOptionId) list = list.filter((c) => String(c.optionId) === pickerOptionId);
     return list.filter((c) => !selectedClassIds.includes(c.id));
-  }, [pickerFiliereId, pickerOptionId, classes, selectedClassIds]);
+  }, [pickerYear, pickerFiliereId, pickerOptionId, classes, selectedClassIds]);
 
-  const getClassName = (id: number) => classes.find((c) => c.id === id)?.name ?? `Classe ${id}`;
+  const getClassName = (id: number) => {
+    const c = classes.find((cl) => cl.id === id);
+    return c ? `${c.name} (${c.year})` : `Classe ${id}`;
+  };
 
   // ── Module CRUD ──
   const openCreateMod = () => {
     setEditingModId(null); setModName(''); setModSemestre(''); setModFiliereId(''); setModOptionId('');
-    setPickerFiliereId(''); setPickerOptionId(''); setPickerClassId(''); setSelectedClassIds([]);
+    setPickerYear(''); setPickerFiliereId(''); setPickerOptionId(''); setPickerClassId(''); setSelectedClassIds([]);
     setModModal(true);
   };
   const openEditMod = (m: AcademicModule) => {
     setEditingModId(m.id); setModName(m.name); setModSemestre(m.semestre ?? '');
     setModFiliereId(String(m.filiereId ?? '')); setModOptionId(String(m.optionId ?? ''));
-    setPickerFiliereId(''); setPickerOptionId(''); setPickerClassId('');
+    setPickerYear(''); setPickerFiliereId(''); setPickerOptionId(''); setPickerClassId('');
     setSelectedClassIds(m.classes.map((mc) => mc.class.id));
     setModModal(true);
   };
@@ -233,11 +250,22 @@ export default function AcademicPage() {
       <PageHeader
         eyebrow="Curriculum"
         title="Structure Académique"
-        description="Gérez les modules et leurs éléments. Chaque module est affecté à une ou plusieurs classes — les cours sont générés automatiquement."
+        description="Gérez les modules et leurs éléments. Filtrez par année pour voir les modules d'une promotion spécifique."
       />
 
       <section className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
+          {/* Year filter — filters modules by the year of their assigned classes */}
+          <select
+            className="input xl:max-w-40"
+            value={filterClassYear}
+            onChange={(e) => setFilterClassYear(e.target.value)}
+          >
+            <option value="">Toutes les années</option>
+            {availableYears.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
           <select className="input xl:max-w-48" value={filterFiliereId} onChange={(e) => { setFilterFiliereId(e.target.value); setFilterOptionId(''); }}>
             <option value="">Toutes les filières ({filieres.length})</option>
             {filieres.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
@@ -254,12 +282,14 @@ export default function AcademicPage() {
         {/* Modules panel */}
         <div className="surface-card overflow-hidden">
           <div className="border-b border-slate-100 px-4 py-3">
-            <p className="font-semibold text-slate-800">Modules ({modules.length})</p>
+            <p className="font-semibold text-slate-800">
+              Modules ({modules.length}){filterClassYear ? ` — Promo ${filterClassYear}` : ''}
+            </p>
           </div>
           {loading ? (
             <div className="empty-note">Chargement...</div>
           ) : modules.length === 0 ? (
-            <EmptyState title="Aucun module" description="Créez un module pour commencer." />
+            <EmptyState title="Aucun module" description="Créez un module ou modifiez les filtres." />
           ) : (
             <div className="divide-y divide-slate-50 overflow-y-auto" style={{ maxHeight: '70vh' }}>
               {modules.map((mod) => {
@@ -282,7 +312,7 @@ export default function AcademicPage() {
                       <div className="mt-1 flex flex-wrap gap-1">
                         {mod.classes.slice(0, 3).map((mc) => (
                           <span key={mc.class.id} className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                            {mc.class.name}
+                            {mc.class.name} ({mc.class.year})
                           </span>
                         ))}
                         {mod.classes.length > 3 && (
@@ -342,7 +372,7 @@ export default function AcademicPage() {
                     <div className="mt-1 flex flex-wrap gap-1">
                       {selectedModule.classes.map((mc) => (
                         <span key={mc.class.id} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
-                          {mc.class.name}
+                          {mc.class.name} ({mc.class.year})
                         </span>
                       ))}
                     </div>
@@ -362,7 +392,7 @@ export default function AcademicPage() {
       <ModalShell
         open={modModal}
         title={editingModId ? 'Modifier le module' : 'Ajouter un module'}
-        description={editingModId ? 'Modifiez les informations et les classes affectées.' : 'Un module doit être affecté à au moins une classe.'}
+        description={editingModId ? 'Modifiez les informations et les classes affectées.' : 'Affectez ce module à une ou plusieurs classes (filtrez par année si besoin).'}
         onClose={() => setModModal(false)}
         footer={
           <>
@@ -397,7 +427,7 @@ export default function AcademicPage() {
           <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
             <p className="field-label">
               Classes affectées <span className="text-red-500">*</span>
-              <span className="ml-1 font-normal normal-case text-slate-400">— le module sera dispensé dans toutes ces classes</span>
+              <span className="ml-1 font-normal normal-case text-slate-400">— filtrez par année pour choisir une promotion</span>
             </p>
 
             {selectedClassIds.length > 0 && (
@@ -413,7 +443,14 @@ export default function AcademicPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              <div className="field-stack">
+                <label className="field-label text-[10px]">Année</label>
+                <select className="input text-xs" value={pickerYear} onChange={(e) => { setPickerYear(e.target.value); setPickerClassId(''); }}>
+                  <option value="">Toutes</option>
+                  {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
               <div className="field-stack">
                 <label className="field-label text-[10px]">Filière</label>
                 <select className="input text-xs" value={pickerFiliereId} onChange={(e) => { setPickerFiliereId(e.target.value); setPickerOptionId(''); setPickerClassId(''); }}>
@@ -430,9 +467,9 @@ export default function AcademicPage() {
               </div>
               <div className="field-stack">
                 <label className="field-label text-[10px]">Classe</label>
-                <select className="input text-xs" value={pickerClassId} onChange={(e) => setPickerClassId(e.target.value)} disabled={!pickerFiliereId || pickerClasses.length === 0}>
+                <select className="input text-xs" value={pickerClassId} onChange={(e) => setPickerClassId(e.target.value)} disabled={pickerClasses.length === 0}>
                   <option value="">—</option>
-                  {pickerClasses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {pickerClasses.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.year})</option>)}
                 </select>
               </div>
               <div className="field-stack">
@@ -485,7 +522,7 @@ export default function AcademicPage() {
               <div className="flex flex-wrap gap-1">
                 {selectedModule.classes.map((mc) => (
                   <span key={mc.class.id} className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
-                    {mc.class.name}
+                    {mc.class.name} ({mc.class.year})
                   </span>
                 ))}
               </div>

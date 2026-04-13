@@ -34,10 +34,15 @@ let CyclesService = class CyclesService {
     }
     async create(dto) {
         await this.ensureNameAvailable(dto.name);
-        return this.prisma.cycle.create({ data: { name: dto.name, code: dto.code ?? null } });
+        return this.prisma.cycle.create({
+            data: { name: dto.name, code: dto.code ?? null },
+        });
     }
     async update(id, dto) {
-        const existing = await this.prisma.cycle.findUnique({ where: { id }, select: { id: true } });
+        const existing = await this.prisma.cycle.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!existing)
             throw new common_1.NotFoundException(`Cycle ${id} not found`);
         if (dto.name)
@@ -51,14 +56,20 @@ let CyclesService = class CyclesService {
         });
     }
     async remove(id) {
-        const cycle = await this.prisma.cycle.findUnique({ where: { id }, select: { id: true } });
+        const cycle = await this.prisma.cycle.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!cycle)
             throw new common_1.NotFoundException(`Cycle ${id} not found`);
         return this.prisma.cycle.delete({ where: { id } });
     }
     async ensureNameAvailable(name, excludeId) {
         const ex = await this.prisma.cycle.findFirst({
-            where: { name: { equals: name, mode: 'insensitive' }, ...(excludeId ? { id: { not: excludeId } } : {}) },
+            where: {
+                name: { equals: name, mode: 'insensitive' },
+                ...(excludeId ? { id: { not: excludeId } } : {}),
+            },
             select: { id: true },
         });
         if (ex)

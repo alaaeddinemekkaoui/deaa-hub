@@ -37,7 +37,12 @@ export class DepartmentsController {
 
   @Post('import')
   @Roles(UserRole.ADMIN, UserRole.STAFF)
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
   importFile(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file uploaded');
     return this.departmentsService.importFromBuffer(file.buffer);

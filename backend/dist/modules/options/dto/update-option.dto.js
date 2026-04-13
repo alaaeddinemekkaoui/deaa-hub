@@ -20,7 +20,7 @@ class UpdateOptionDto {
 exports.UpdateOptionDto = UpdateOptionDto;
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => (typeof value === 'string' ? value.trim() : value)),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? value.trim() : value),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.MaxLength)(120),
@@ -28,7 +28,7 @@ __decorate([
 ], UpdateOptionDto.prototype, "name", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => (typeof value === 'string' ? value.trim() : value)),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? value.trim() : value),
     (0, class_validator_1.ValidateIf)((_, v) => v !== null),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MaxLength)(20),

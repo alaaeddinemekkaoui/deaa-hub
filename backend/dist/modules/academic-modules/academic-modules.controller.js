@@ -28,13 +28,27 @@ let AcademicModulesController = class AcademicModulesController {
     constructor(service) {
         this.service = service;
     }
-    findAll(query) { return this.service.findAll(query); }
-    findOne(id) { return this.service.findOne(id); }
-    create(dto) { return this.service.create(dto); }
-    update(id, dto) { return this.service.update(id, dto); }
-    remove(id) { return this.service.remove(id); }
-    assignClass(id, dto) { return this.service.assignClass(id, dto.classId); }
-    removeClass(id, classId) { return this.service.removeClass(id, classId); }
+    findAll(query) {
+        return this.service.findAll(query);
+    }
+    findOne(id) {
+        return this.service.findOne(id);
+    }
+    create(dto) {
+        return this.service.create(dto);
+    }
+    update(id, dto) {
+        return this.service.update(id, dto);
+    }
+    remove(id) {
+        return this.service.remove(id);
+    }
+    assignClass(id, dto) {
+        return this.service.assignClass(id, dto.classId);
+    }
+    removeClass(id, classId) {
+        return this.service.removeClass(id, classId);
+    }
 };
 exports.AcademicModulesController = AcademicModulesController;
 __decorate([

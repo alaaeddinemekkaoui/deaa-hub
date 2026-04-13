@@ -85,7 +85,9 @@ let StudentsService = class StudentsService {
                             academicYear: 'desc',
                         },
                     },
-                    laureate: { select: { id: true, graduationYear: true, diplomaStatus: true } },
+                    laureate: {
+                        select: { id: true, graduationYear: true, diplomaStatus: true },
+                    },
                 },
                 skip: (pagination.page - 1) * pagination.limit,
                 take: pagination.limit,
@@ -199,9 +201,7 @@ let StudentsService = class StudentsService {
                 ? { telephone: dto.telephone ?? null }
                 : {}),
             ...(dto.cycle !== undefined ? { cycle: dto.cycle } : {}),
-            ...(dto.bacType !== undefined
-                ? { bacType: dto.bacType ?? null }
-                : {}),
+            ...(dto.bacType !== undefined ? { bacType: dto.bacType ?? null } : {}),
             ...(dto.firstYearEntry !== undefined
                 ? { firstYearEntry: dto.firstYearEntry }
                 : {}),
@@ -249,7 +249,8 @@ let StudentsService = class StudentsService {
             const nextLastName = trimmedLastName ?? null;
             const nextFullName = trimmedFullName
                 ? trimmedFullName
-                : [nextFirstName, nextLastName].filter(Boolean).join(' ').trim() || null;
+                : [nextFirstName, nextLastName].filter(Boolean).join(' ').trim() ||
+                    null;
             return {
                 firstName: nextFirstName,
                 lastName: nextLastName,
@@ -533,7 +534,9 @@ let StudentsService = class StudentsService {
     async importFromBuffer(buffer) {
         const workbook = XLSX.read(buffer, { type: 'buffer' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+        const rows = XLSX.utils.sheet_to_json(sheet, {
+            defval: null,
+        });
         let imported = 0;
         const errors = [];
         for (let i = 0; i < rows.length; i++) {
@@ -547,7 +550,9 @@ let StudentsService = class StudentsService {
                 const dto = {
                     firstName: String(row['firstName'] ?? row['Prénom'] ?? '').trim() || undefined,
                     lastName: String(row['lastName'] ?? row['Nom'] ?? '').trim() || undefined,
-                    fullName: row['fullName'] ? String(row['fullName']).trim() : undefined,
+                    fullName: row['fullName']
+                        ? String(row['fullName']).trim()
+                        : undefined,
                     cin: String(row['cin'] ?? row['CIN'] ?? '').trim(),
                     codeMassar: String(row['codeMassar'] ?? row['Code Massar'] ?? '').trim(),
                     sex: (['male', 'female'].includes(String(row['sex']).toLowerCase())
@@ -558,10 +563,16 @@ let StudentsService = class StudentsService {
                     classId: classIdRaw,
                     filiereId: row['filiereId'] ? Number(row['filiereId']) : undefined,
                     email: row['email'] ? String(row['email']).trim() : undefined,
-                    telephone: row['telephone'] ? String(row['telephone']).trim() : undefined,
+                    telephone: row['telephone']
+                        ? String(row['telephone']).trim()
+                        : undefined,
                     bacType: row['bacType'] ? String(row['bacType']).trim() : undefined,
-                    dateNaissance: row['dateNaissance'] ? String(row['dateNaissance']).trim() : '1990-01-01',
-                    dateInscription: row['dateInscription'] ? String(row['dateInscription']).trim() : new Date().toISOString().split('T')[0],
+                    dateNaissance: row['dateNaissance']
+                        ? String(row['dateNaissance']).trim()
+                        : '1990-01-01',
+                    dateInscription: row['dateInscription']
+                        ? String(row['dateInscription']).trim()
+                        : new Date().toISOString().split('T')[0],
                 };
                 await this.create(dto);
                 imported++;

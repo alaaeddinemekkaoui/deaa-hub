@@ -17,6 +17,7 @@ class CreateRoomDto {
     capacity;
     equipment;
     availability;
+    departmentId;
 }
 exports.CreateRoomDto = CreateRoomDto;
 __decorate([
@@ -36,4 +37,15 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], CreateRoomDto.prototype, "availability", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        if (value === '' || value === null || value === undefined)
+            return undefined;
+        return Number(value);
+    }),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    __metadata("design:type", Number)
+], CreateRoomDto.prototype, "departmentId", void 0);
 //# sourceMappingURL=create-room.dto.js.map

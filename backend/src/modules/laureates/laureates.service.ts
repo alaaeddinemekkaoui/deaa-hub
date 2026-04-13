@@ -95,13 +95,17 @@ export class LaureatesService {
     });
 
     if (userId) {
-      await this.log(userId, `Added laureate: ${student.fullName} (${dto.graduationYear})`, {
-        laureateId: laureate.id,
-        studentId: dto.studentId,
-        studentName: student.fullName,
-        graduationYear: dto.graduationYear,
-        diplomaStatus: laureate.diplomaStatus,
-      });
+      await this.log(
+        userId,
+        `Added laureate: ${student.fullName} (${dto.graduationYear})`,
+        {
+          laureateId: laureate.id,
+          studentId: dto.studentId,
+          studentName: student.fullName,
+          graduationYear: dto.graduationYear,
+          diplomaStatus: laureate.diplomaStatus,
+        },
+      );
     }
 
     return laureate;
@@ -114,7 +118,10 @@ export class LaureatesService {
     });
     if (!existing) throw new NotFoundException(`Laureate ${id} not found`);
 
-    const updated = await this.prisma.laureate.update({ where: { id }, data: dto });
+    const updated = await this.prisma.laureate.update({
+      where: { id },
+      data: dto,
+    });
 
     if (userId) {
       await this.log(userId, `Updated laureate: ${existing.student.fullName}`, {

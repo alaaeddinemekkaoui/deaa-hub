@@ -132,7 +132,9 @@ describe('CoursService', () => {
 
     const result = await service.removeFromClass(10, 20, 3);
 
-    expect(prisma.coursClass.delete).toHaveBeenCalledWith({ where: { id: 99 } });
+    expect(prisma.coursClass.delete).toHaveBeenCalledWith({
+      where: { id: 99 },
+    });
     expect(prisma.coursClass.deleteMany).not.toHaveBeenCalled();
     expect(result).toEqual({ id: 99 });
   });
@@ -152,7 +154,9 @@ describe('CoursService', () => {
   it('removeFromClass should throw when assignment does not exist', async () => {
     prisma.coursClass.findFirst.mockResolvedValue(null);
 
-    await expect(service.removeFromClass(10, 20, 3)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.removeFromClass(10, 20, 3)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
     expect(prisma.coursClass.delete).not.toHaveBeenCalled();
     expect(prisma.coursClass.deleteMany).not.toHaveBeenCalled();
   });
@@ -162,7 +166,10 @@ describe('CoursService', () => {
     prisma.elementModule.findMany.mockResolvedValue([
       { id: 500, name: 'Biostatistiques — CM', cours: null },
     ]);
-    prisma.cours.findFirst.mockResolvedValue({ id: 600, elementModuleId: null });
+    prisma.cours.findFirst.mockResolvedValue({
+      id: 600,
+      elementModuleId: null,
+    });
     prisma.cours.update.mockResolvedValue({ id: 600, elementModuleId: 500 });
     prisma.coursClass.findFirst.mockResolvedValue(null);
     prisma.coursClass.create.mockResolvedValue({ id: 700 });
@@ -183,7 +190,9 @@ describe('CoursService', () => {
   it('importFromClass should throw when class does not exist', async () => {
     prisma.academicClass.findUnique.mockResolvedValue(null);
 
-    await expect(service.importFromClass(999)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.importFromClass(999)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it('importFromClass should avoid duplicate class assignment when unassigned row already exists', async () => {

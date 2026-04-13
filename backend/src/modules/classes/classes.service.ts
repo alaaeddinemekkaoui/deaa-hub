@@ -10,24 +10,14 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateClassDto } from './dto/create-class.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
 import { ClassQueryDto } from './dto/class-query.dto';
+import { TransferClassDto } from './dto/transfer-class.dto';
 
 @Injectable()
 export class ClassesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: ClassQueryDto) {
-    const {
-      page,
-      limit,
-      search,
-      filiereId,
-      departmentId,
-      year,
-      cycleId,
-      optionId,
-      sortBy,
-      sortOrder,
-    } = query;
+    const { page, limit, search, filiereId, departmentId, year, cycleId, optionId, sortBy, sortOrder } = query;
 
     const filters: Prisma.AcademicClassWhereInput[] = [];
 
@@ -46,23 +36,16 @@ export class ClassesService {
     if (cycleId) filters.push({ cycleId });
     if (optionId) filters.push({ optionId });
 
-    const where: Prisma.AcademicClassWhereInput =
-      filters.length > 0 ? { AND: filters } : {};
+    const where: Prisma.AcademicClassWhereInput = filters.length > 0 ? { AND: filters } : {};
 
     const [data, total] = await Promise.all([
       this.prisma.academicClass.findMany({
         where,
         include: {
-          filiere: {
-            include: {
-              department: { select: { id: true, name: true } },
-            },
-          },
+          filiere: { include: { department: { select: { id: true, name: true } } } },
           academicOption: { select: { id: true, name: true, code: true } },
           cycle: { select: { id: true, name: true, code: true } },
-          _count: {
-            select: { students: true, teachers: true, cours: true },
-          },
+          _count: { select: { students: true, teachers: true, cours: true } },
         },
         skip: (page - 1) * limit,
         take: limit,
@@ -77,9 +60,7 @@ export class ClassesService {
     return {
       data,
       meta: {
-        page,
-        limit,
-        total,
+        page, limit, total,
         totalPages: Math.ceil(total / limit) || 1,
         hasNextPage: page * limit < total,
         hasPreviousPage: page > 1,
@@ -171,10 +152,7 @@ export class ClassesService {
   async remove(id: number) {
     const academicClass = await this.prisma.academicClass.findUnique({
       where: { id },
-      select: {
-        id: true,
-        _count: { select: { students: true, teachers: true } },
-      },
+      select: { id: true, _count: { select: { students: true, teachers: true } } },
     });
 
     if (!academicClass) throw new NotFoundException(`Class ${id} not found`);
@@ -186,6 +164,99 @@ export class ClassesService {
     }
 
     return this.prisma.academicClass.delete({ where: { id } });
+  }
+
+  /**
+   * Transfer modules, elements, and teachers FROM source class TO an existing target class.
+   *
+   * For each module assigned to the source class:
+   *   - Clones the Module record (same name/semestre/filiere/option)
+   *   - Clones all ElementModule records of that module
+   *   - Assigns the cloned module to the target class (skips if already assigned)
+   * Also copies TeacherClass assignments to the target class (skips duplicates).
+   *
+   * The source class is left untouched. Each class remains fully independent.
+   */
+  async transfer(id: number, dto: TransferClassDto) {
+    if (id === dto.targetClassId) {
+      throw new BadRequestException('Source and target class cannot be the same');
+    }
+
+    const [source, target] = await Promise.all([
+      this.prisma.academicClass.findUnique({
+        where: { id },
+        include: {
+          modules: {
+            include: {
+              module: { include: { elements: true } },
+            },
+          },
+          teachers: true,
+        },
+      }),
+      this.prisma.academicClass.findUnique({
+        where: { id: dto.targetClassId },
+        select: { id: true, name: true, year: true },
+      }),
+    ]);
+
+    if (!source) throw new NotFoundException(`Source class ${id} not found`);
+    if (!target) throw new NotFoundException(`Target class ${dto.targetClassId} not found`);
+
+    return this.prisma.$transaction(async (tx) => {
+      // Clone each module + its elements, then assign to the target class
+      for (const mc of source.modules) {
+        const srcModule = mc.module;
+
+        const newModule = await tx.module.create({
+          data: {
+            name: srcModule.name,
+            semestre: srcModule.semestre,
+            filiereId: srcModule.filiereId,
+            optionId: srcModule.optionId,
+          },
+        });
+
+        for (const el of srcModule.elements) {
+          await tx.elementModule.create({
+            data: {
+              name: el.name,
+              moduleId: newModule.id,
+              volumeHoraire: el.volumeHoraire,
+              type: el.type,
+            },
+          });
+        }
+
+        // Assign cloned module to target class
+        await tx.moduleClass.create({
+          data: { moduleId: newModule.id, classId: target.id },
+        });
+      }
+
+      // Copy teacher assignments (skip duplicates)
+      for (const tc of source.teachers) {
+        const exists = await tx.teacherClass.findUnique({
+          where: { teacherId_classId: { teacherId: tc.teacherId, classId: target.id } },
+        });
+        if (!exists) {
+          await tx.teacherClass.create({
+            data: { teacherId: tc.teacherId, classId: target.id },
+          });
+        }
+      }
+
+      // Return the updated target class
+      return tx.academicClass.findUnique({
+        where: { id: target.id },
+        include: {
+          filiere: { include: { department: { select: { id: true, name: true } } } },
+          academicOption: { select: { id: true, name: true } },
+          cycle: { select: { id: true, name: true } },
+          _count: { select: { students: true, teachers: true, cours: true } },
+        },
+      });
+    });
   }
 
   private async ensureFiliereExists(id: number) {
@@ -203,11 +274,7 @@ export class ClassesService {
     if (!o) throw new NotFoundException(`Option ${id} not found`);
   }
 
-  private async ensureClassIdentityAvailable(
-    name: string,
-    year: number,
-    excludeId?: number,
-  ) {
+  private async ensureClassIdentityAvailable(name: string, year: number, excludeId?: number) {
     const existing = await this.prisma.academicClass.findFirst({
       where: {
         name: { equals: name, mode: 'insensitive' },
@@ -218,9 +285,7 @@ export class ClassesService {
     });
 
     if (existing) {
-      throw new ConflictException(
-        `A class named "${name}" already exists for year ${year}`,
-      );
+      throw new ConflictException(`A class named "${name}" already exists for year ${year}`);
     }
   }
 

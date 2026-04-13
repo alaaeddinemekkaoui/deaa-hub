@@ -21,7 +21,7 @@ class UpdateModuleDto {
 exports.UpdateModuleDto = UpdateModuleDto;
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => (typeof value === 'string' ? value.trim() : value)),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? value.trim() : value),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.MaxLength)(120),
@@ -29,7 +29,7 @@ __decorate([
 ], UpdateModuleDto.prototype, "name", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => (typeof value === 'string' ? value.trim() : value)),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? value.trim() : value),
     (0, class_validator_1.ValidateIf)((_, v) => v !== null),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.MaxLength)(10),
@@ -37,8 +37,11 @@ __decorate([
 ], UpdateModuleDto.prototype, "semestre", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => { if (value === null || value === undefined || value === '')
-        return null; return Number(value); }),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        if (value === null || value === undefined || value === '')
+            return null;
+        return Number(value);
+    }),
     (0, class_validator_1.ValidateIf)((_, v) => v !== null),
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsInt)(),
@@ -47,8 +50,11 @@ __decorate([
 ], UpdateModuleDto.prototype, "filiereId", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => { if (value === null || value === undefined || value === '')
-        return null; return Number(value); }),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        if (value === null || value === undefined || value === '')
+            return null;
+        return Number(value);
+    }),
     (0, class_validator_1.ValidateIf)((_, v) => v !== null),
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsInt)(),

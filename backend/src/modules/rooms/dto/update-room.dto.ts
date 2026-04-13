@@ -2,9 +2,11 @@ import {
   IsArray,
   IsBoolean,
   IsInt,
+  Min,
   IsOptional,
   IsString,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class UpdateRoomDto {
   @IsOptional()
@@ -22,4 +24,13 @@ export class UpdateRoomDto {
   @IsOptional()
   @IsBoolean()
   availability?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) return null;
+    return Number(value);
+  })
+  @IsInt()
+  @Min(1)
+  departmentId?: number | null;
 }

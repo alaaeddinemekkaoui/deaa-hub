@@ -26,11 +26,21 @@ let CyclesController = class CyclesController {
     constructor(cyclesService) {
         this.cyclesService = cyclesService;
     }
-    findAll() { return this.cyclesService.findAll(); }
-    findOne(id) { return this.cyclesService.findOne(id); }
-    create(dto) { return this.cyclesService.create(dto); }
-    update(id, dto) { return this.cyclesService.update(id, dto); }
-    remove(id) { return this.cyclesService.remove(id); }
+    findAll() {
+        return this.cyclesService.findAll();
+    }
+    findOne(id) {
+        return this.cyclesService.findOne(id);
+    }
+    create(dto) {
+        return this.cyclesService.create(dto);
+    }
+    update(id, dto) {
+        return this.cyclesService.update(id, dto);
+    }
+    remove(id) {
+        return this.cyclesService.remove(id);
+    }
 };
 exports.CyclesController = CyclesController;
 __decorate([

@@ -14,6 +14,10 @@ let AcademicModulesModule = class AcademicModulesModule {
 };
 exports.AcademicModulesModule = AcademicModulesModule;
 exports.AcademicModulesModule = AcademicModulesModule = __decorate([
-    (0, common_1.Module)({ controllers: [academic_modules_controller_1.AcademicModulesController], providers: [academic_modules_service_1.AcademicModulesService], exports: [academic_modules_service_1.AcademicModulesService] })
+    (0, common_1.Module)({
+        controllers: [academic_modules_controller_1.AcademicModulesController],
+        providers: [academic_modules_service_1.AcademicModulesService],
+        exports: [academic_modules_service_1.AcademicModulesService],
+    })
 ], AcademicModulesModule);
 //# sourceMappingURL=academic-modules.module.js.map

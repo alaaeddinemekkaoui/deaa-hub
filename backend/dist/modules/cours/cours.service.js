@@ -24,12 +24,16 @@ let CoursService = class CoursService {
             filters.push({ name: { contains: search, mode: 'insensitive' } });
         if (classId)
             filters.push({ classes: { some: { classId } } });
-        const where = filters.length ? { AND: filters } : {};
+        const where = filters.length
+            ? { AND: filters }
+            : {};
         const [data, total] = await Promise.all([
             this.prisma.cours.findMany({
                 where,
                 include: {
-                    elementModule: { select: { id: true, name: true, type: true, volumeHoraire: true } },
+                    elementModule: {
+                        select: { id: true, name: true, type: true, volumeHoraire: true },
+                    },
                     _count: { select: { classes: true } },
                 },
                 skip: (page - 1) * limit,
@@ -54,12 +58,22 @@ let CoursService = class CoursService {
         const cours = await this.prisma.cours.findUnique({
             where: { id },
             include: {
-                elementModule: { select: { id: true, name: true, type: true, volumeHoraire: true, module: { select: { id: true, name: true } } } },
+                elementModule: {
+                    select: {
+                        id: true,
+                        name: true,
+                        type: true,
+                        volumeHoraire: true,
+                        module: { select: { id: true, name: true } },
+                    },
+                },
                 classes: {
                     include: {
                         class: {
                             include: {
-                                filiere: { include: { department: { select: { id: true, name: true } } } },
+                                filiere: {
+                                    include: { department: { select: { id: true, name: true } } },
+                                },
                             },
                         },
                         teacher: { select: { id: true, firstName: true, lastName: true } },
@@ -105,7 +119,9 @@ let CoursService = class CoursService {
             data: {
                 ...(dto.name ? { name: dto.name } : {}),
                 ...(dto.type !== undefined ? { type: dto.type } : {}),
-                ...(dto.elementModuleId !== undefined ? { elementModuleId: dto.elementModuleId ?? null } : {}),
+                ...(dto.elementModuleId !== undefined
+                    ? { elementModuleId: dto.elementModuleId ?? null }
+                    : {}),
             },
         });
     }
@@ -116,11 +132,11 @@ let CoursService = class CoursService {
     async assignToClass(coursId, dto) {
         await this.ensureExists(coursId);
         await this.ensureClassExists(dto.classId);
-        const teacherIds = Array.from(new Set((dto.teacherIds?.length
+        const teacherIds = Array.from(new Set(dto.teacherIds?.length
             ? dto.teacherIds
             : dto.teacherId
                 ? [dto.teacherId]
-                : [])));
+                : []));
         for (const teacherId of teacherIds) {
             await this.ensureTeacherExists(teacherId);
         }
@@ -182,7 +198,10 @@ let CoursService = class CoursService {
             classId,
             ...(teacherId ? { teacherId } : {}),
         };
-        const existing = await this.prisma.coursClass.findFirst({ where, select: { id: true } });
+        const existing = await this.prisma.coursClass.findFirst({
+            where,
+            select: { id: true },
+        });
         if (!existing)
             throw new common_1.NotFoundException(`Cours ${coursId} is not assigned to class ${classId}`);
         if (teacherId) {
@@ -249,7 +268,10 @@ let CoursService = class CoursService {
         return { created, existing, total: elements.length };
     }
     async ensureExists(id) {
-        const cours = await this.prisma.cours.findUnique({ where: { id }, select: { id: true } });
+        const cours = await this.prisma.cours.findUnique({
+            where: { id },
+            select: { id: true },
+        });
         if (!cours)
             throw new common_1.NotFoundException(`Cours ${id} not found`);
     }
@@ -265,7 +287,10 @@ let CoursService = class CoursService {
             throw new common_1.ConflictException(`A cours named "${name}" already exists`);
     }
     async ensureElementModuleAvailable(elementModuleId, excludeCoursId) {
-        const el = await this.prisma.elementModule.findUnique({ where: { id: elementModuleId }, select: { id: true } });
+        const el = await this.prisma.elementModule.findUnique({
+            where: { id: elementModuleId },
+            select: { id: true },
+        });
         if (!el)
             throw new common_1.NotFoundException(`ElementModule ${elementModuleId} not found`);
         const linked = await this.prisma.cours.findFirst({
@@ -279,12 +304,18 @@ let CoursService = class CoursService {
             throw new common_1.ConflictException(`ElementModule ${elementModuleId} already has a linked cours`);
     }
     async ensureClassExists(classId) {
-        const cls = await this.prisma.academicClass.findUnique({ where: { id: classId }, select: { id: true } });
+        const cls = await this.prisma.academicClass.findUnique({
+            where: { id: classId },
+            select: { id: true },
+        });
         if (!cls)
             throw new common_1.NotFoundException(`Class ${classId} not found`);
     }
     async ensureTeacherExists(teacherId) {
-        const teacher = await this.prisma.teacher.findUnique({ where: { id: teacherId }, select: { id: true } });
+        const teacher = await this.prisma.teacher.findUnique({
+            where: { id: teacherId },
+            select: { id: true },
+        });
         if (!teacher)
             throw new common_1.NotFoundException(`Teacher ${teacherId} not found`);
     }

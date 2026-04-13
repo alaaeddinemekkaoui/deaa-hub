@@ -3,4 +3,5 @@ export declare class UpdateRoomDto {
     capacity?: number;
     equipment?: string[];
     availability?: boolean;
+    departmentId?: number | null;
 }

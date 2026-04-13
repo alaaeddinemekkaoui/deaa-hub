@@ -66,7 +66,10 @@ let AuthService = class AuthService {
         return user;
     }
     async login(dto) {
-        const identifier = (dto.identifier ?? dto.email ?? dto.username ?? '').trim();
+        const identifier = (dto.identifier ??
+            dto.email ??
+            dto.username ??
+            '').trim();
         if (!identifier) {
             throw new common_1.UnauthorizedException('Invalid credentials');
         }

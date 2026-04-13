@@ -11,11 +11,13 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UpdateRoomDto = void 0;
 const class_validator_1 = require("class-validator");
+const class_transformer_1 = require("class-transformer");
 class UpdateRoomDto {
     name;
     capacity;
     equipment;
     availability;
+    departmentId;
 }
 exports.UpdateRoomDto = UpdateRoomDto;
 __decorate([
@@ -38,4 +40,15 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], UpdateRoomDto.prototype, "availability", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        if (value === '' || value === null || value === undefined)
+            return null;
+        return Number(value);
+    }),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    __metadata("design:type", Object)
+], UpdateRoomDto.prototype, "departmentId", void 0);
 //# sourceMappingURL=update-room.dto.js.map

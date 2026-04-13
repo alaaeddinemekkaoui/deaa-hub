@@ -34,7 +34,10 @@ describe('ElementModulesService', () => {
     prisma.module.findUnique.mockResolvedValue({ id: 1 });
     prisma.academicClass.findUnique.mockResolvedValue({ id: 2 });
     prisma.elementModule.create.mockResolvedValue({ id: 100, name: 'Algo' });
-    prisma.cours.findFirst.mockResolvedValue({ id: 200, elementModuleId: null });
+    prisma.cours.findFirst.mockResolvedValue({
+      id: 200,
+      elementModuleId: null,
+    });
     prisma.cours.update.mockResolvedValue({ id: 200, elementModuleId: 100 });
     prisma.coursClass.findFirst.mockResolvedValue(null);
     prisma.coursClass.create.mockResolvedValue({ id: 300 });
@@ -61,7 +64,10 @@ describe('ElementModulesService', () => {
   it('create should create a new cours when no cours with same name exists', async () => {
     prisma.module.findUnique.mockResolvedValue({ id: 1 });
     prisma.academicClass.findUnique.mockResolvedValue({ id: 2 });
-    prisma.elementModule.create.mockResolvedValue({ id: 101, name: 'Hydrologie' });
+    prisma.elementModule.create.mockResolvedValue({
+      id: 101,
+      name: 'Hydrologie',
+    });
     prisma.cours.findFirst.mockResolvedValue(null);
     prisma.cours.create.mockResolvedValue({ id: 201, name: 'Hydrologie' });
     prisma.coursClass.create.mockResolvedValue({ id: 301 });
@@ -85,7 +91,10 @@ describe('ElementModulesService', () => {
   it('create should not relink or duplicate when existing cours is already linked and assignment exists', async () => {
     prisma.module.findUnique.mockResolvedValue({ id: 1 });
     prisma.academicClass.findUnique.mockResolvedValue({ id: 2 });
-    prisma.elementModule.create.mockResolvedValue({ id: 102, name: 'Biochimie' });
+    prisma.elementModule.create.mockResolvedValue({
+      id: 102,
+      name: 'Biochimie',
+    });
     prisma.cours.findFirst.mockResolvedValue({ id: 202, elementModuleId: 999 });
     prisma.coursClass.findFirst.mockResolvedValue({ id: 302 });
 
@@ -133,8 +142,14 @@ describe('ElementModulesService', () => {
 
   it('create should skip class assignment when classId is not provided', async () => {
     prisma.module.findUnique.mockResolvedValue({ id: 1 });
-    prisma.elementModule.create.mockResolvedValue({ id: 111, name: 'Cours Sans Classe' });
-    prisma.cours.findFirst.mockResolvedValue({ id: 211, elementModuleId: null });
+    prisma.elementModule.create.mockResolvedValue({
+      id: 111,
+      name: 'Cours Sans Classe',
+    });
+    prisma.cours.findFirst.mockResolvedValue({
+      id: 211,
+      elementModuleId: null,
+    });
     prisma.cours.update.mockResolvedValue({ id: 211, elementModuleId: 111 });
 
     await service.create({

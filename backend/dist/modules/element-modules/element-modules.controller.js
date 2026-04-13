@@ -27,11 +27,21 @@ let ElementModulesController = class ElementModulesController {
     constructor(service) {
         this.service = service;
     }
-    findAll(query) { return this.service.findAll(query); }
-    findOne(id) { return this.service.findOne(id); }
-    create(dto) { return this.service.create(dto); }
-    update(id, dto) { return this.service.update(id, dto); }
-    remove(id) { return this.service.remove(id); }
+    findAll(query) {
+        return this.service.findAll(query);
+    }
+    findOne(id) {
+        return this.service.findOne(id);
+    }
+    create(dto) {
+        return this.service.create(dto);
+    }
+    update(id, dto) {
+        return this.service.update(id, dto);
+    }
+    remove(id) {
+        return this.service.remove(id);
+    }
 };
 exports.ElementModulesController = ElementModulesController;
 __decorate([

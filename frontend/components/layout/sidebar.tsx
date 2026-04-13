@@ -11,14 +11,15 @@ import {
   Building2,
   CalendarRange,
   CalendarDays,
+  CopyPlus,
   DoorOpen,
   GraduationCap,
   Home,
   Layers,
   Medal,
+  MoveRight,
   NotebookPen,
   RefreshCw,
-  ShieldCheck,
   UserCog,
   Users,
   Workflow,
@@ -47,9 +48,9 @@ const navigation: NavGroup[] = [
   {
     heading: 'Étudiants',
     items: [
-      { href: '/students',  label: 'Étudiants',  caption: 'Profils et cohortes',   icon: GraduationCap },
-      { href: '/laureates', label: 'Lauréats',   caption: 'Diplômes et suivi',     icon: Medal },
-      { href: '/transfers', label: 'Transferts', caption: 'Changements de classe', icon: ArrowLeftRight },
+      { href: '/students',                label: 'Étudiants',               caption: 'Profils et cohortes',        icon: GraduationCap },
+      { href: '/laureates',               label: 'Lauréats',                caption: 'Diplômes et suivi',          icon: Medal },
+      { href: '/transfers',               label: 'Transferts',              caption: 'Passage inter-établissements', icon: ArrowLeftRight },
     ],
   },
   {
@@ -62,15 +63,15 @@ const navigation: NavGroup[] = [
     heading: 'Structure Académique',
     items: [
       { href: '/academic', label: 'Modules & Éléments', caption: 'Modules · CM · TD · TP', icon: BookOpenCheck },
-      { href: '/accreditations', label: 'Accréditations', caption: 'Plans annuels versionnés', icon: ShieldCheck },
     ],
   },
   
   {
     heading: 'Classes',
     items: [
-      { href: '/classes',       label: 'Gestion des Classes', caption: 'Cohortes et groupes', icon: CalendarRange },
-      { href: '/classes/cours', label: 'Gestion des cours',   caption: 'Cours par classe',    icon: NotebookPen },
+      { href: '/classes',          label: 'Gestion des Classes', caption: 'Cohortes et groupes',   icon: CalendarRange },
+      { href: '/classes/cours',    label: 'Cours par classe',    caption: 'Affectation des cours', icon: NotebookPen },
+      { href: '/classes/transfer', label: 'Transfert de classe', caption: 'Clonage inter-années',  icon: CopyPlus },
     ],
   },
   {
@@ -78,7 +79,7 @@ const navigation: NavGroup[] = [
     items: [
       { href: '/timetable', label: 'Emploi du temps', caption: 'Planification hebdomadaire', icon: CalendarDays },
       { href: '/rooms', label: 'Gestion des salles', caption: 'Espaces et équipements', icon: DoorOpen },
-   
+      { href: '/room-reservations', label: 'Réservation de salle', caption: 'Occupation des salles', icon: CalendarRange },
     ],
   },
 

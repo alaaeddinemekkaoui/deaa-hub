@@ -18,6 +18,7 @@ import { memoryStorage } from 'multer';
 import { ClassesService } from './classes.service';
 import { CreateClassDto } from './dto/create-class.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
+import { TransferClassDto } from './dto/transfer-class.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -37,7 +38,12 @@ export class ClassesController {
 
   @Post('import')
   @Roles(UserRole.ADMIN, UserRole.STAFF)
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
   importFile(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file uploaded');
     return this.classesService.importFromBuffer(file.buffer);
@@ -65,6 +71,15 @@ export class ClassesController {
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateClassDto) {
     return this.classesService.update(id, dto);
+  }
+
+  @Post(':id/transfer')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  transfer(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: TransferClassDto,
+  ) {
+    return this.classesService.transfer(id, dto);
   }
 
   @Delete(':id')

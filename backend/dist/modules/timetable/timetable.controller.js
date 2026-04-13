@@ -26,16 +26,24 @@ let TimetableController = class TimetableController {
     constructor(service) {
         this.service = service;
     }
-    findAll(query) { return this.service.findAll(query); }
+    findAll(query) {
+        return this.service.findAll(query);
+    }
     findWeek(classId, weekStart) {
         return this.service.findWeek(classId, weekStart);
     }
     checkConflicts(classId, weekStart) {
         return this.service.checkConflicts(classId, weekStart);
     }
-    create(dto) { return this.service.create(dto); }
-    update(id, dto) { return this.service.update(id, dto); }
-    remove(id) { return this.service.remove(id); }
+    create(dto) {
+        return this.service.create(dto);
+    }
+    update(id, dto) {
+        return this.service.update(id, dto);
+    }
+    remove(id) {
+        return this.service.remove(id);
+    }
 };
 exports.TimetableController = TimetableController;
 __decorate([

@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { StudentObservationsService } from './student-observations.service';
 import { CreateObservationDto } from './dto/create-observation.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -11,12 +20,14 @@ import { UserRole } from '../../common/types/role.type';
 export class StudentObservationsController {
   constructor(private readonly service: StudentObservationsService) {}
 
-  @Get() @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Get()
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
   findAll(@Param('studentId', ParseIntPipe) studentId: number) {
     return this.service.findAll(studentId);
   }
 
-  @Post() @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @Post()
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
   create(
     @Param('studentId', ParseIntPipe) studentId: number,
     @Body() dto: CreateObservationDto,
@@ -24,7 +35,8 @@ export class StudentObservationsController {
     return this.service.create(studentId, dto);
   }
 
-  @Delete(':id') @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @Delete(':id')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
   remove(
     @Param('studentId', ParseIntPipe) studentId: number,
     @Param('id', ParseIntPipe) id: number,

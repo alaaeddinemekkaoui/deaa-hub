@@ -75,7 +75,10 @@ export class StudentsController {
 
   @Post(':id/make-laureate')
   @Roles(UserRole.ADMIN, UserRole.STAFF)
-  makeLaureate(@Param('id', ParseIntPipe) id: number, @Body() body: { graduationYear: number }) {
+  makeLaureate(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { graduationYear: number },
+  ) {
     return this.studentsService.makeLaureate(id, body.graduationYear);
   }
 

@@ -33,7 +33,9 @@ export class AssignCoursClassDto {
   teacherIds?: number[];
 
   @IsOptional()
-  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
   @MaxLength(80)
   groupLabel?: string | null;
