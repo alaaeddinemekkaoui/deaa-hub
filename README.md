@@ -2,11 +2,17 @@
 
 Centralized administrative platform for **Direction de l’Enseignement et des Affaires Académiques (DEAA)**.
 
+## Full Manual
+
+For the complete product, setup, API, and operations guide, see:
+
+- [docs/deaa-hub-complete-manual.md](docs/deaa-hub-complete-manual.md)
+
 ## Stack
 
 - **Frontend**: Next.js (App Router), TypeScript, Tailwind CSS, shadcn-style UI components
 - **Backend**: NestJS (TypeScript), REST API, modular architecture
-- **Database**: MySQL + Prisma ORM
+- **Database**: PostgreSQL + Prisma ORM
 - **Security**: JWT auth, bcrypt password hashing, RBAC, DTO validation
 
 ## Monorepo Structure
@@ -45,28 +51,28 @@ deaa-hub/
 
 ## Database Notes
 
-- MySQL compatible schema (`backend/prisma/schema.prisma`)
-- InnoDB-compatible relational model with foreign keys
-- Indexes included for performance (`codeMassar`, `filiereId`, `departmentId`)
+- PostgreSQL schema managed through Prisma (`backend/prisma/schema.prisma`)
+- Relational model with foreign keys and indexed lookup fields
+- Core indexes include student, filiere, department, class, cycle, and reservation lookups
 
 ## Local Setup
 
 ### 1) Backend
 
-1. Copy env values in `backend/.env` (already scaffolded with placeholders).
-2. Ensure MySQL is running and database exists.
+1. Create backend environment values for at least `DATABASE_URL` and `JWT_SECRET`.
+2. Ensure PostgreSQL is running and the database exists.
 3. Install and run:
    - `npm install`
    - `npm run prisma:generate`
-   - `npm run prisma:migrate -- --name init`
+   - `npm run prisma:migrate`
    - `npm run prisma:seed`
    - `npm run start:dev`
 
 Backend default URL: `http://localhost:4000/api`
 
 Default admin account after seed:
-- Email: `admin@deaa.local`
-- Password: `Admin@123`
+- Identifier: `admin`
+- Password: `admin`
 
 ### 2) Frontend
 
@@ -106,15 +112,15 @@ Frontend default URL: `http://localhost:3000`
 ### Backend → Railway / Render
 
 - Deploy `backend` service
-- Set env vars from `backend/.env.example`
+- Set environment variables for at least `DATABASE_URL`, `JWT_SECRET`, and frontend CORS origins
 - Run post-deploy commands:
   - `npm run prisma:generate`
   - `npm run prisma:deploy`
   - `npm run prisma:seed`
 
-### Database → PlanetScale / Railway MySQL
+### Database → PostgreSQL provider
 
-- Provision MySQL instance
+- Provision PostgreSQL instance
 - Set `DATABASE_URL`
 - Run Prisma migrations
 

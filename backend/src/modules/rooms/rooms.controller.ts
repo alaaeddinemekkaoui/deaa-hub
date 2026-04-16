@@ -21,6 +21,9 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/types/role.type';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { deptScope } from '../../common/utils/dept-scope';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 
 @Controller('rooms')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -28,13 +31,13 @@ export class RoomsController {
   constructor(private readonly roomsService: RoomsService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
-  findAll() {
-    return this.roomsService.findAll();
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  findAll(@CurrentUser() user: JwtPayload) {
+    return this.roomsService.findAll(deptScope(user));
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.roomsService.findOne(id);
   }
@@ -53,20 +56,24 @@ export class RoomsController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
-  create(@Body() dto: CreateRoomDto) {
-    return this.roomsService.create(dto);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  create(@Body() dto: CreateRoomDto, @CurrentUser() user: JwtPayload) {
+    return this.roomsService.create(dto, user);
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateRoomDto) {
-    return this.roomsService.update(id, dto);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateRoomDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.roomsService.update(id, dto, user);
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.roomsService.remove(id);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: JwtPayload) {
+    return this.roomsService.remove(id, user);
   }
 }

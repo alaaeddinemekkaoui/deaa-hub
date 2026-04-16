@@ -21,7 +21,7 @@ export class StudentObservationsController {
   constructor(private readonly service: StudentObservationsService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findAll(@Param('studentId', ParseIntPipe) studentId: number) {
     return this.service.findAll(studentId);
   }

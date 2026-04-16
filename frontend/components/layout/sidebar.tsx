@@ -25,6 +25,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/features/auth/auth-context';
 
 type NavItem = {
   href: string;
@@ -36,6 +37,8 @@ type NavItem = {
 type NavGroup = {
   heading: string;
   items: NavItem[];
+  /** Roles that can see this group. Omit = everyone. */
+  roles?: string[];
 };
 
 const navigation: NavGroup[] = [
@@ -47,14 +50,17 @@ const navigation: NavGroup[] = [
   },
   {
     heading: 'Étudiants',
+    roles: ['admin', 'staff', 'viewer', 'user'],
     items: [
-      { href: '/students',                label: 'Étudiants',               caption: 'Profils et cohortes',        icon: GraduationCap },
-      { href: '/laureates',               label: 'Lauréats',                caption: 'Diplômes et suivi',          icon: Medal },
-      { href: '/transfers',               label: 'Transferts',              caption: 'Passage inter-établissements', icon: ArrowLeftRight },
+      { href: '/students',  label: 'Étudiants',  caption: 'Profils et cohortes',          icon: GraduationCap },
+      { href: '/grades',    label: 'Épreuves', caption: 'Notes par classe et module', icon: BookOpen },
+      { href: '/laureates', label: 'Lauréats',   caption: 'Diplômes et suivi',             icon: Medal },
+      { href: '/transfers', label: 'Transferts', caption: 'Passage inter-établissements',  icon: ArrowLeftRight },
     ],
   },
   {
     heading: 'Enseignants',
+    roles: ['admin', 'staff', 'viewer', 'user'],
     items: [
       { href: '/teachers', label: 'Professeurs', caption: 'Permanents et vacataires', icon: Users },
     ],
@@ -65,7 +71,6 @@ const navigation: NavGroup[] = [
       { href: '/academic', label: 'Modules & Éléments', caption: 'Modules · CM · TD · TP', icon: BookOpenCheck },
     ],
   },
-  
   {
     heading: 'Classes',
     items: [
@@ -77,12 +82,11 @@ const navigation: NavGroup[] = [
   {
     heading: 'Emploi du Temps et Gestion des Salles',
     items: [
-      { href: '/timetable', label: 'Emploi du temps', caption: 'Planification hebdomadaire', icon: CalendarDays },
-      { href: '/rooms', label: 'Gestion des salles', caption: 'Espaces et équipements', icon: DoorOpen },
-      { href: '/room-reservations', label: 'Réservation de salle', caption: 'Occupation des salles', icon: CalendarRange },
+      { href: '/timetable',        label: 'Emploi du temps',    caption: 'Planification hebdomadaire', icon: CalendarDays },
+      { href: '/rooms',            label: 'Gestion des salles', caption: 'Espaces et équipements',     icon: DoorOpen },
+      { href: '/room-reservations',label: 'Réservation de salle', caption: 'Occupation des salles',   icon: CalendarRange },
     ],
   },
-
   {
     heading: 'Structure Organisationnelle',
     items: [
@@ -92,9 +96,9 @@ const navigation: NavGroup[] = [
       { href: '/cycles',      label: 'Cycles',       caption: 'Cycles académiques',            icon: RefreshCw },
     ],
   },
-  
   {
     heading: 'Administration',
+    roles: ['admin', 'staff'],
     items: [
       { href: '/workflows',     label: 'Workflows',    caption: 'Suivi des dossiers',    icon: Workflow },
       { href: '/activity-logs', label: 'Journaux',     caption: "Historique d'activité", icon: Activity },
@@ -103,8 +107,19 @@ const navigation: NavGroup[] = [
   },
 ];
 
+// Suppress unused import warning — MoveRight is kept for potential future use
+void MoveRight;
+
 export function Sidebar() {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const role = user?.role ?? 'viewer';
+
+  const visibleGroups = navigation.filter(
+    (group) => !group.roles || group.roles.includes(role),
+  );
+
+  const allHrefs = navigation.flatMap((g) => g.items.map((i) => i.href));
 
   return (
     <aside
@@ -123,19 +138,32 @@ export function Sidebar() {
           </div>
         </div>
 
+        {/* Department badge for regular users */}
+        {role === 'user' && user?.departments && user.departments.length > 0 && (
+          <div className="mx-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Mes départements</p>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {user.departments.map((d) => (
+                <span key={d.id} className="rounded-full bg-emerald-800/60 px-2 py-0.5 text-[11px] font-medium text-emerald-200">
+                  {d.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Divider */}
         <div className="border-t border-white/8" />
 
         {/* Navigation groups */}
         <nav className="grid gap-3">
-          {navigation.map((group) => (
+          {visibleGroups.map((group) => (
             <div key={group.heading}>
               <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/35">
                 {group.heading}
               </p>
               <div className="grid gap-0.5">
                 {group.items.map(({ href, label, caption, icon: Icon }) => {
-                  const allHrefs = navigation.flatMap((g) => g.items.map((i) => i.href));
                   const bestMatch = allHrefs
                     .filter((h) => pathname === h || pathname.startsWith(`${h}/`))
                     .sort((a, b) => b.length - a.length)[0];

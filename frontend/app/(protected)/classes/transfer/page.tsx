@@ -7,6 +7,7 @@ import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
 import { PaginationControls } from '@/components/admin/pagination-controls';
+import { useAuth } from '@/features/auth/auth-context';
 import { api, getApiErrorMessage, PaginatedResponse } from '@/services/api';
 import { toast } from 'sonner';
 
@@ -25,6 +26,7 @@ type AcademicClass = {
 const PAGE_SIZE = 10;
 
 export default function ClassTransferPage() {
+  const { user } = useAuth();
   const [rows, setRows] = useState<AcademicClass[]>([]);
   const [allClasses, setAllClasses] = useState<AcademicClass[]>([]);
   const [search, setSearch] = useState('');
@@ -53,6 +55,13 @@ export default function ClassTransferPage() {
     return Array.from(s).sort((a, b) => b - a);
   }, [rows]);
 
+  const sessionDepartmentIds = useMemo(
+    () => user?.departments?.map((department) => department.id) ?? [],
+    [user],
+  );
+
+  const singleDepartmentId = sessionDepartmentIds.length === 1 ? sessionDepartmentIds[0] : undefined;
+
   // Candidates for target: all classes except source
   const targetCandidates = useMemo(() => {
     if (!selected) return allClasses;
@@ -77,16 +86,33 @@ export default function ClassTransferPage() {
               page, limit: PAGE_SIZE,
               search: query || undefined,
               year: filterYear || undefined,
+              departmentId: singleDepartmentId,
               sortBy: 'name', sortOrder: 'asc',
             },
           }),
           api.get<PaginatedResponse<AcademicClass>>('/classes', {
-            params: { page: 1, limit: 500, sortBy: 'name', sortOrder: 'asc' },
+            params: { page: 1, limit: 500, departmentId: singleDepartmentId, sortBy: 'name', sortOrder: 'asc' },
           }),
         ]);
-        setRows(pageRes.data.data);
-        setMeta(pageRes.data.meta);
-        setAllClasses(allRes.data.data);
+
+        const isClassInScope = (academicClass: AcademicClass) => {
+          if (sessionDepartmentIds.length === 0) return true;
+          const departmentId = academicClass.filiere?.department?.id;
+          return typeof departmentId === 'number' && sessionDepartmentIds.includes(departmentId);
+        };
+
+        const scopedPageRows = pageRes.data.data.filter(isClassInScope);
+        const scopedAllRows = allRes.data.data.filter(isClassInScope);
+
+        setRows(scopedPageRows);
+        setAllClasses(scopedAllRows);
+        setMeta({
+          ...pageRes.data.meta,
+          total: scopedAllRows.length,
+          totalPages: Math.max(1, Math.ceil(scopedAllRows.length / PAGE_SIZE)),
+          hasNextPage: page < Math.max(1, Math.ceil(scopedAllRows.length / PAGE_SIZE)),
+          hasPreviousPage: page > 1,
+        });
       } catch (err) {
         setError(getApiErrorMessage(err, 'Impossible de charger les classes.'));
       } finally {
@@ -94,7 +120,7 @@ export default function ClassTransferPage() {
       }
     };
     void load();
-  }, [page, query, filterYear, refreshKey]);
+  }, [page, query, filterYear, refreshKey, sessionDepartmentIds, singleDepartmentId]);
 
   const openModal = (item: AcademicClass) => {
     setSelected(item);

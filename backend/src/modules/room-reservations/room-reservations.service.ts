@@ -1,14 +1,17 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, RoomReservationPurpose } from '@prisma/client';
+import { Prisma, RoomReservationPurpose, ReservationStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateRoomReservationDto } from './dto/create-room-reservation.dto';
 import { UpdateRoomReservationDto } from './dto/update-room-reservation.dto';
 import { RoomReservationQueryDto } from './dto/room-reservation-query.dto';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { UserRole } from '../../common/types/role.type';
 
 const ROOM_RESERVATION_INCLUDE = {
   room: {
@@ -17,6 +20,8 @@ const ROOM_RESERVATION_INCLUDE = {
       name: true,
       capacity: true,
       availability: true,
+      departmentId: true,
+      department: { select: { id: true, name: true } },
     },
   },
   academicClass: {
@@ -29,24 +34,21 @@ const ROOM_RESERVATION_INCLUDE = {
           id: true,
           name: true,
           code: true,
-          department: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
+          department: { select: { id: true, name: true } },
         },
       },
     },
   },
+  requestedBy: { select: { id: true, fullName: true, email: true } },
+  approvedBy: { select: { id: true, fullName: true, email: true } },
 } as const;
 
 @Injectable()
 export class RoomReservationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: RoomReservationQueryDto) {
-    const where = this.buildWhere(query);
+  async findAll(query: RoomReservationQueryDto, currentUser?: JwtPayload) {
+    const where = this.buildWhere(query, currentUser);
 
     return this.prisma.roomReservation.findMany({
       where,
@@ -65,17 +67,34 @@ export class RoomReservationsService {
     return reservation;
   }
 
-  async create(dto: CreateRoomReservationDto) {
-    await this.ensureRoomExists(dto.roomId);
-    await this.ensureClassExists(dto.classId);
+  async create(dto: CreateRoomReservationDto, currentUser: JwtPayload) {
+    const room = await this.getRoomForReservation(dto.roomId);
+    const classDepartmentId = await this.getClassDepartmentId(dto.classId);
+
+    this.ensureCanCreateReservation(
+      currentUser,
+      room.departmentId,
+      classDepartmentId,
+    );
+
+    if (
+      dto.classId &&
+      room.departmentId &&
+      classDepartmentId &&
+      room.departmentId !== classDepartmentId
+    ) {
+      throw new BadRequestException(
+        'Class must belong to the same department as the selected room',
+      );
+    }
+
     this.ensureWeekdayMatches(dto.date, dto.dayOfWeek);
     this.ensureTimeRange(dto.startTime, dto.endTime);
-    await this.ensureNoOverlap(
-      dto.roomId,
-      dto.date,
-      dto.startTime,
-      dto.endTime,
-    );
+    await this.ensureNoOverlap(dto.roomId, dto.date, dto.startTime, dto.endTime);
+
+    // Admins get auto-approved; users get pending
+    const isAdmin = currentUser.role === UserRole.ADMIN;
+    const status: ReservationStatus = isAdmin ? 'approved' : 'pending';
 
     return this.prisma.roomReservation.create({
       data: {
@@ -88,6 +107,65 @@ export class RoomReservationsService {
         reservedBy: dto.reservedBy,
         purpose: dto.purpose,
         notes: dto.notes?.trim() ? dto.notes.trim() : null,
+        status,
+        requestedById: currentUser.sub,
+        ...(isAdmin
+          ? { approvedById: currentUser.sub, approvedAt: new Date() }
+          : {}),
+      },
+      include: ROOM_RESERVATION_INCLUDE,
+    });
+  }
+
+  async approve(id: number, currentUser: JwtPayload, note?: string) {
+    const reservation = await this.prisma.roomReservation.findUnique({
+      where: { id },
+      include: { room: { select: { departmentId: true } } },
+    });
+    if (!reservation)
+      throw new NotFoundException(`Room reservation ${id} not found`);
+
+    if (reservation.status !== 'pending') {
+      throw new BadRequestException(
+        `Reservation is already ${reservation.status}`,
+      );
+    }
+
+    await this.ensureCanApprove(reservation.room.departmentId, currentUser);
+
+    return this.prisma.roomReservation.update({
+      where: { id },
+      data: {
+        status: 'approved',
+        approvedById: currentUser.sub,
+        approvalNote: note ?? null,
+        approvedAt: new Date(),
+      },
+      include: ROOM_RESERVATION_INCLUDE,
+    });
+  }
+
+  async reject(id: number, currentUser: JwtPayload, note?: string) {
+    const reservation = await this.prisma.roomReservation.findUnique({
+      where: { id },
+      include: { room: { select: { departmentId: true } } },
+    });
+    if (!reservation)
+      throw new NotFoundException(`Room reservation ${id} not found`);
+
+    if (reservation.status === 'rejected') {
+      throw new BadRequestException('Reservation is already rejected');
+    }
+
+    await this.ensureCanApprove(reservation.room.departmentId, currentUser);
+
+    return this.prisma.roomReservation.update({
+      where: { id },
+      data: {
+        status: 'rejected',
+        approvedById: currentUser.sub,
+        approvalNote: note ?? null,
+        approvedAt: new Date(),
       },
       include: ROOM_RESERVATION_INCLUDE,
     });
@@ -146,10 +224,48 @@ export class RoomReservationsService {
     return this.prisma.roomReservation.delete({ where: { id } });
   }
 
+  // ── helpers ────────────────────────────────────────────────────────────────
+
+  private async ensureCanApprove(
+    roomDepartmentId: number | null,
+    currentUser: JwtPayload,
+  ) {
+    if (currentUser.role === UserRole.ADMIN) return;
+
+    // A user can approve if they are assigned to the room's department
+    if (
+      roomDepartmentId &&
+      currentUser.departmentIds.includes(roomDepartmentId)
+    ) {
+      return;
+    }
+
+    throw new ForbiddenException(
+      'Vous n\'êtes pas autorisé à approuver cette réservation',
+    );
+  }
+
   private buildWhere(
     query: RoomReservationQueryDto,
+    currentUser?: JwtPayload,
   ): Prisma.RoomReservationWhereInput {
     const filters: Prisma.RoomReservationWhereInput[] = [];
+
+    // Department scoping for regular users
+    if (
+      currentUser &&
+      currentUser.role === UserRole.USER &&
+      currentUser.departmentIds.length > 0
+    ) {
+      filters.push({
+        OR: [
+          // Reservations for rooms in their department
+          { room: { departmentId: { in: currentUser.departmentIds } } },
+          // Reservations they requested themselves
+          { requestedById: currentUser.sub },
+        ],
+      });
+    }
 
     if (query.roomId) filters.push({ roomId: query.roomId });
     if (query.classId) filters.push({ classId: query.classId });
@@ -157,7 +273,9 @@ export class RoomReservationsService {
       filters.push({ academicClass: { filiereId: query.filiereId } });
     }
     if (query.departmentId) {
-      filters.push({ academicClass: { filiere: { departmentId: query.departmentId } } });
+      filters.push({
+        academicClass: { filiere: { departmentId: query.departmentId } },
+      });
     }
     if (query.dayOfWeek) filters.push({ dayOfWeek: query.dayOfWeek });
     if (query.date) filters.push({ date: query.date });
@@ -201,6 +319,63 @@ export class RoomReservationsService {
     return value === 0 ? 7 : value;
   }
 
+  private ensureCanCreateReservation(
+    currentUser: JwtPayload,
+    roomDepartmentId: number | null,
+    classDepartmentId: number | null,
+  ) {
+    if (currentUser.role !== UserRole.USER) return;
+
+    const allowedDepartmentIds = currentUser.departmentIds ?? [];
+    if (allowedDepartmentIds.length === 0) {
+      throw new ForbiddenException(
+        'You are not assigned to any department for reservation creation',
+      );
+    }
+
+    if (
+      roomDepartmentId &&
+      !allowedDepartmentIds.includes(roomDepartmentId)
+    ) {
+      throw new ForbiddenException(
+        'You can only reserve rooms in your own department',
+      );
+    }
+
+    if (
+      classDepartmentId &&
+      !allowedDepartmentIds.includes(classDepartmentId)
+    ) {
+      throw new ForbiddenException(
+        'You can only link classes from your own department',
+      );
+    }
+  }
+
+  private async getRoomForReservation(roomId: number) {
+    const room = await this.prisma.room.findUnique({
+      where: { id: roomId },
+      select: { id: true, departmentId: true },
+    });
+
+    if (!room) throw new NotFoundException(`Room ${roomId} not found`);
+    return room;
+  }
+
+  private async getClassDepartmentId(classId?: number): Promise<number | null> {
+    if (!classId) return null;
+
+    const academicClass = await this.prisma.academicClass.findUnique({
+      where: { id: classId },
+      select: { id: true, filiere: { select: { departmentId: true } } },
+    });
+
+    if (!academicClass)
+      throw new NotFoundException(`Class ${classId} not found`);
+
+    return academicClass.filiere?.departmentId ?? null;
+  }
+
   private async ensureRoomExists(roomId: number) {
     const room = await this.prisma.room.findUnique({
       where: { id: roomId },
@@ -230,6 +405,7 @@ export class RoomReservationsService {
       where: {
         roomId,
         date,
+        status: { in: ['pending', 'approved'] },
         ...(excludeId ? { id: { not: excludeId } } : {}),
         startTime: { lt: endTime },
         endTime: { gt: startTime },

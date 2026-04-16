@@ -27,7 +27,8 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/types/role.type';
 import { StudentsQueryDto } from './dto/students-query.dto';
-import { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 type AuthRequest = Request & { user: JwtPayload };
 
@@ -37,15 +38,23 @@ export class StudentsController {
   constructor(private readonly studentsService: StudentsService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findAll(@Query() query: StudentsQueryDto) {
     return this.studentsService.findAll(query, query.search, query.filiereId);
   }
 
   @Get('by-class/:classId')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
-  findByClass(@Param('classId', ParseIntPipe) classId: number) {
-    return this.studentsService.findByClass(classId);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  findByClass(
+    @Param('classId', ParseIntPipe) classId: number,
+    @Query() query: StudentsQueryDto,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+  ) {
+    return this.studentsService.findByClass(
+      classId,
+      pageRaw || limitRaw ? query : undefined,
+    );
   }
 
   @Post('import')
@@ -89,26 +98,33 @@ export class StudentsController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.studentsService.findOne(id);
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
-  create(@Body() dto: CreateStudentDto) {
-    return this.studentsService.create(dto);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  create(@Body() dto: CreateStudentDto, @CurrentUser() user: JwtPayload) {
+    return this.studentsService.create(dto, user);
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateStudentDto) {
-    return this.studentsService.update(id, dto);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateStudentDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.studentsService.update(id, dto, user);
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.studentsService.remove(id);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.studentsService.remove(id, user);
   }
 }

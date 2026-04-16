@@ -1,12 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { TtlCache } from '../../common/utils/ttl-cache';
 import { CreateTeacherDto } from './dto/create-teacher.dto';
 import { UpdateTeacherDto } from './dto/update-teacher.dto';
 import { TeacherQueryDto } from './dto/teacher-query.dto';
@@ -14,9 +16,14 @@ import { CreateTeacherRoleDto } from './dto/create-teacher-role.dto';
 import { UpdateTeacherRoleDto } from './dto/update-teacher-role.dto';
 import { CreateTeacherGradeDto } from './dto/create-teacher-grade.dto';
 import { UpdateTeacherGradeDto } from './dto/update-teacher-grade.dto';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { UserRole } from '../../common/types/role.type';
 
 @Injectable()
 export class TeachersService {
+  private readonly rolesCache = new TtlCache<unknown[]>(5 * 60 * 1000);
+  private readonly gradesCache = new TtlCache<unknown[]>(5 * 60 * 1000);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: TeacherQueryDto) {
@@ -154,8 +161,10 @@ export class TeachersService {
     return teacher;
   }
 
-  async create(dto: CreateTeacherDto) {
+  async create(dto: CreateTeacherDto, currentUser?: JwtPayload) {
     const departmentId = dto.departmentId;
+    this.ensureCanManageDepartment(departmentId, currentUser);
+
     const filiereId = dto.filiereId ?? null;
     const classIds = await this.ensureClassAssignmentsExist(dto.classIds ?? []);
 
@@ -196,7 +205,7 @@ export class TeachersService {
     }
   }
 
-  async update(id: number, dto: UpdateTeacherDto, userId?: number) {
+  async update(id: number, dto: UpdateTeacherDto, currentUser?: JwtPayload) {
     const existing = await this.prisma.teacher.findUnique({
       where: { id },
       select: {
@@ -218,6 +227,8 @@ export class TeachersService {
     }
 
     const nextDepartmentId = dto.departmentId ?? existing.departmentId;
+    this.ensureCanManageDepartment(nextDepartmentId, currentUser);
+
     const nextFiliereId =
       dto.filiereId !== undefined
         ? (dto.filiereId ?? null)
@@ -300,10 +311,10 @@ export class TeachersService {
       throw error;
     }
 
-    if (userId && dto.classIds !== undefined) {
+    if (currentUser?.sub && dto.classIds !== undefined) {
       await this.prisma.activityLog.create({
         data: {
-          userId,
+          userId: currentUser.sub,
           action: 'UPDATE_TEACHER_CLASSES',
           metadata: {
             teacherId: id,
@@ -317,9 +328,38 @@ export class TeachersService {
     return result;
   }
 
-  async remove(id: number) {
-    await this.ensureTeacherExists(id);
+  async remove(id: number, currentUser?: JwtPayload) {
+    const teacher = await this.prisma.teacher.findUnique({
+      where: { id },
+      select: { id: true, departmentId: true },
+    });
+
+    if (!teacher) {
+      throw new NotFoundException(`Teacher ${id} not found`);
+    }
+
+    this.ensureCanManageDepartment(teacher.departmentId, currentUser);
+
     return this.prisma.teacher.delete({ where: { id } });
+  }
+
+  private ensureCanManageDepartment(
+    departmentId: number | null | undefined,
+    currentUser?: JwtPayload,
+  ) {
+    if (
+      !currentUser ||
+      (currentUser.role !== UserRole.USER &&
+        currentUser.role !== UserRole.VIEWER)
+    ) {
+      return;
+    }
+
+    if (!departmentId || !currentUser.departmentIds.includes(departmentId)) {
+      throw new ForbiddenException(
+        'You can only manage teachers in your own department',
+      );
+    }
   }
 
   async findCours(teacherId: number) {
@@ -362,33 +402,25 @@ export class TeachersService {
     });
   }
 
-  findRoles() {
-    return this.prisma.teacherRole.findMany({
-      include: {
-        _count: {
-          select: {
-            teachers: true,
-          },
-        },
-      },
+  async findRoles() {
+    const cached = this.rolesCache.get();
+    if (cached) return cached;
+    const data = await this.prisma.teacherRole.findMany({
+      include: { _count: { select: { teachers: true } } },
       orderBy: { name: 'asc' },
     });
+    this.rolesCache.set(data);
+    return data;
   }
 
   async createRole(dto: CreateTeacherRoleDto) {
     try {
-      return await this.prisma.teacherRole.create({
-        data: {
-          name: dto.name.trim(),
-        },
-        include: {
-          _count: {
-            select: {
-              teachers: true,
-            },
-          },
-        },
+      const result = await this.prisma.teacherRole.create({
+        data: { name: dto.name.trim() },
+        include: { _count: { select: { teachers: true } } },
       });
+      this.rolesCache.invalidate();
+      return result;
     } catch (error) {
       this.handleCatalogUniqueError(error, 'Teacher role');
       throw error;
@@ -397,21 +429,14 @@ export class TeachersService {
 
   async updateRole(id: number, dto: UpdateTeacherRoleDto) {
     await this.ensureRoleExists(id);
-
     try {
-      return await this.prisma.teacherRole.update({
+      const result = await this.prisma.teacherRole.update({
         where: { id },
-        data: {
-          ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
-        },
-        include: {
-          _count: {
-            select: {
-              teachers: true,
-            },
-          },
-        },
+        data: { ...(dto.name !== undefined ? { name: dto.name.trim() } : {}) },
+        include: { _count: { select: { teachers: true } } },
       });
+      this.rolesCache.invalidate();
+      return result;
     } catch (error) {
       this.handleCatalogUniqueError(error, 'Teacher role');
       throw error;
@@ -421,55 +446,40 @@ export class TeachersService {
   async removeRole(id: number) {
     const role = await this.prisma.teacherRole.findUnique({
       where: { id },
-      include: {
-        _count: {
-          select: {
-            teachers: true,
-          },
-        },
-      },
+      include: { _count: { select: { teachers: true } } },
     });
 
-    if (!role) {
-      throw new NotFoundException(`Teacher role ${id} not found`);
-    }
-
+    if (!role) throw new NotFoundException(`Teacher role ${id} not found`);
     if (role._count.teachers > 0) {
       throw new BadRequestException(
         'Teacher role cannot be deleted while teachers are still attached',
       );
     }
 
-    return this.prisma.teacherRole.delete({ where: { id } });
+    const result = await this.prisma.teacherRole.delete({ where: { id } });
+    this.rolesCache.invalidate();
+    return result;
   }
 
-  findGrades() {
-    return this.prisma.teacherGrade.findMany({
-      include: {
-        _count: {
-          select: {
-            teachers: true,
-          },
-        },
-      },
+  async findGrades() {
+    const cached = this.gradesCache.get();
+    if (cached) return cached;
+    const data = await this.prisma.teacherGrade.findMany({
+      include: { _count: { select: { teachers: true } } },
       orderBy: { name: 'asc' },
     });
+    this.gradesCache.set(data);
+    return data;
   }
 
   async createGrade(dto: CreateTeacherGradeDto) {
     try {
-      return await this.prisma.teacherGrade.create({
-        data: {
-          name: dto.name.trim(),
-        },
-        include: {
-          _count: {
-            select: {
-              teachers: true,
-            },
-          },
-        },
+      const result = await this.prisma.teacherGrade.create({
+        data: { name: dto.name.trim() },
+        include: { _count: { select: { teachers: true } } },
       });
+      this.gradesCache.invalidate();
+      return result;
     } catch (error) {
       this.handleCatalogUniqueError(error, 'Teacher grade');
       throw error;
@@ -478,21 +488,14 @@ export class TeachersService {
 
   async updateGrade(id: number, dto: UpdateTeacherGradeDto) {
     await this.ensureGradeExists(id);
-
     try {
-      return await this.prisma.teacherGrade.update({
+      const result = await this.prisma.teacherGrade.update({
         where: { id },
-        data: {
-          ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
-        },
-        include: {
-          _count: {
-            select: {
-              teachers: true,
-            },
-          },
-        },
+        data: { ...(dto.name !== undefined ? { name: dto.name.trim() } : {}) },
+        include: { _count: { select: { teachers: true } } },
       });
+      this.gradesCache.invalidate();
+      return result;
     } catch (error) {
       this.handleCatalogUniqueError(error, 'Teacher grade');
       throw error;
@@ -502,26 +505,19 @@ export class TeachersService {
   async removeGrade(id: number) {
     const grade = await this.prisma.teacherGrade.findUnique({
       where: { id },
-      include: {
-        _count: {
-          select: {
-            teachers: true,
-          },
-        },
-      },
+      include: { _count: { select: { teachers: true } } },
     });
 
-    if (!grade) {
-      throw new NotFoundException(`Teacher grade ${id} not found`);
-    }
-
+    if (!grade) throw new NotFoundException(`Teacher grade ${id} not found`);
     if (grade._count.teachers > 0) {
       throw new BadRequestException(
         'Teacher grade cannot be deleted while teachers are still attached',
       );
     }
 
-    return this.prisma.teacherGrade.delete({ where: { id } });
+    const result = await this.prisma.teacherGrade.delete({ where: { id } });
+    this.gradesCache.invalidate();
+    return result;
   }
 
   private buildTeacherInclude(): Prisma.TeacherInclude {

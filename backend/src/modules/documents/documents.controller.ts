@@ -37,13 +37,13 @@ export class DocumentsController {
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findAll() {
     return this.documentsService.findAll();
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.documentsService.findOne(id);
   }
@@ -83,13 +83,19 @@ export class DocumentsController {
   }
 
   @Get('student/:studentId')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findByStudent(@Param('studentId', ParseIntPipe) studentId: number) {
     return this.documentsService.findByStudent(studentId);
   }
 
+  @Get('teacher/:teacherId')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  findByTeacher(@Param('teacherId', ParseIntPipe) teacherId: number) {
+    return this.documentsService.findByTeacher(teacherId);
+  }
+
   @Get('student/:studentId/missing')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   missing(@Param('studentId', ParseIntPipe) studentId: number) {
     return this.documentsService.missingDocuments(studentId);
   }
@@ -98,7 +104,7 @@ export class DocumentsController {
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: { name?: string; studentId?: number },
+    @Body() dto: { name?: string; studentId?: number; teacherId?: number },
   ) {
     return this.documentsService.update(id, dto);
   }

@@ -23,13 +23,11 @@ export class CyclesController {
   constructor(private readonly cyclesService: CyclesService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
   findAll() {
     return this.cyclesService.findAll();
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.cyclesService.findOne(id);
   }

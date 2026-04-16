@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateDepartmentDto } from './dto/create-department.dto';
@@ -14,16 +15,14 @@ import { DepartmentQueryDto } from './dto/department-query.dto';
 export class DepartmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: DepartmentQueryDto) {
+  async findAll(query: DepartmentQueryDto, departmentIds?: number[]) {
     const { page, limit, search, sortBy, sortOrder } = query;
-    const where = search
-      ? {
-          name: {
-            contains: search,
-            mode: 'insensitive' as const,
-          },
-        }
-      : undefined;
+
+    const filters: Prisma.DepartmentWhereInput[] = [];
+    if (search) filters.push({ name: { contains: search, mode: 'insensitive' } });
+    if (departmentIds !== undefined) filters.push({ id: { in: departmentIds } });
+
+    const where: Prisma.DepartmentWhereInput = filters.length > 1 ? { AND: filters } : filters[0] ?? {};
 
     const [data, total] = await Promise.all([
       this.prisma.department.findMany({

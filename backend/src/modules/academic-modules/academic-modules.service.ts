@@ -1,24 +1,28 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateModuleDto } from './dto/create-module.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
 import { ModuleQueryDto } from './dto/module-query.dto';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { UserRole } from '../../common/types/role.type';
 
 @Injectable()
 export class AcademicModulesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: ModuleQueryDto) {
+  async findAll(query: ModuleQueryDto, departmentIds?: number[]) {
     const { page, limit, search, filiereId, optionId, classYear, sortBy, sortOrder } = query;
     const filters: Prisma.ModuleWhereInput[] = [];
 
     if (search) filters.push({ name: { contains: search, mode: 'insensitive' } });
     if (filiereId) filters.push({ filiereId });
     if (optionId) filters.push({ optionId });
-    // Filter modules that are assigned to classes of a specific year
     if (classYear) {
       filters.push({ classes: { some: { class: { year: classYear } } } });
+    }
+    if (departmentIds !== undefined) {
+      filters.push({ filiere: { is: { departmentId: { in: departmentIds } } } });
     }
 
     const where: Prisma.ModuleWhereInput = filters.length ? { AND: filters } : {};
@@ -72,12 +76,19 @@ export class AcademicModulesService {
     return mod;
   }
 
-  async create(dto: CreateModuleDto) {
+  async create(dto: CreateModuleDto, currentUser?: JwtPayload) {
     if (dto.filiereId) await this.ensureFiliereExists(dto.filiereId);
     if (dto.optionId) await this.ensureOptionExists(dto.optionId);
     for (const classId of dto.classIds) {
       await this.ensureClassExists(classId);
     }
+
+    if (dto.filiereId) {
+      const moduleDepartmentId = await this.getDepartmentIdFromFiliereId(dto.filiereId);
+      this.ensureCanManageDepartment(moduleDepartmentId, currentUser);
+    }
+
+    await this.ensureCanManageClassAssignments(dto.classIds, currentUser);
 
     return this.prisma.module.create({
       data: {
@@ -94,10 +105,25 @@ export class AcademicModulesService {
     });
   }
 
-  async update(id: number, dto: UpdateModuleDto) {
-    await this.ensureExists(id);
+  async update(id: number, dto: UpdateModuleDto, currentUser?: JwtPayload) {
+    const existing = await this.prisma.module.findUnique({
+      where: { id },
+      select: { id: true, filiereId: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Module ${id} not found`);
+    }
+
     if (dto.filiereId) await this.ensureFiliereExists(dto.filiereId);
     if (dto.optionId) await this.ensureOptionExists(dto.optionId);
+
+    const nextFiliereId = dto.filiereId !== undefined ? dto.filiereId : existing.filiereId;
+    if (nextFiliereId) {
+      const moduleDepartmentId = await this.getDepartmentIdFromFiliereId(nextFiliereId);
+      this.ensureCanManageDepartment(moduleDepartmentId, currentUser);
+    }
+
     return this.prisma.module.update({
       where: { id },
       data: {
@@ -109,14 +135,17 @@ export class AcademicModulesService {
     });
   }
 
-  async remove(id: number) {
-    await this.ensureExists(id);
+  async remove(id: number, currentUser?: JwtPayload) {
+    await this.ensureModuleAccess(id, currentUser);
     return this.prisma.module.delete({ where: { id } });
   }
 
-  async assignClass(moduleId: number, classId: number) {
-    await this.ensureExists(moduleId);
+  async assignClass(moduleId: number, classId: number, currentUser?: JwtPayload) {
+    await this.ensureModuleAccess(moduleId, currentUser);
     await this.ensureClassExists(classId);
+
+    const classDepartmentId = await this.getDepartmentIdFromClassId(classId);
+    this.ensureCanManageDepartment(classDepartmentId, currentUser);
 
     const existing = await this.prisma.moduleClass.findUnique({
       where: { moduleId_classId: { moduleId, classId } },
@@ -142,8 +171,12 @@ export class AcademicModulesService {
     });
   }
 
-  async removeClass(moduleId: number, classId: number) {
-    await this.ensureExists(moduleId);
+  async removeClass(moduleId: number, classId: number, currentUser?: JwtPayload) {
+    await this.ensureModuleAccess(moduleId, currentUser);
+
+    const classDepartmentId = await this.getDepartmentIdFromClassId(classId);
+    this.ensureCanManageDepartment(classDepartmentId, currentUser);
+
     const existing = await this.prisma.moduleClass.findUnique({
       where: { moduleId_classId: { moduleId, classId } },
     });
@@ -192,6 +225,74 @@ export class AcademicModulesService {
   private async ensureExists(id: number) {
     const m = await this.prisma.module.findUnique({ where: { id }, select: { id: true } });
     if (!m) throw new NotFoundException(`Module ${id} not found`);
+  }
+
+  private async ensureModuleAccess(moduleId: number, currentUser?: JwtPayload) {
+    const moduleEntity = await this.prisma.module.findUnique({
+      where: { id: moduleId },
+      select: { id: true, filiere: { select: { departmentId: true } } },
+    });
+
+    if (!moduleEntity) {
+      throw new NotFoundException(`Module ${moduleId} not found`);
+    }
+
+    this.ensureCanManageDepartment(moduleEntity.filiere?.departmentId, currentUser);
+  }
+
+  private async ensureCanManageClassAssignments(
+    classIds: number[],
+    currentUser?: JwtPayload,
+  ) {
+    for (const classId of classIds) {
+      const classDepartmentId = await this.getDepartmentIdFromClassId(classId);
+      this.ensureCanManageDepartment(classDepartmentId, currentUser);
+    }
+  }
+
+  private async getDepartmentIdFromFiliereId(filiereId: number): Promise<number | null> {
+    const filiere = await this.prisma.filiere.findUnique({
+      where: { id: filiereId },
+      select: { departmentId: true },
+    });
+
+    if (!filiere) {
+      throw new NotFoundException(`Filiere ${filiereId} not found`);
+    }
+
+    return filiere.departmentId;
+  }
+
+  private async getDepartmentIdFromClassId(classId: number): Promise<number | null> {
+    const cls = await this.prisma.academicClass.findUnique({
+      where: { id: classId },
+      select: { filiere: { select: { departmentId: true } } },
+    });
+
+    if (!cls) {
+      throw new NotFoundException(`Class ${classId} not found`);
+    }
+
+    return cls.filiere?.departmentId ?? null;
+  }
+
+  private ensureCanManageDepartment(
+    departmentId: number | null | undefined,
+    currentUser?: JwtPayload,
+  ) {
+    if (
+      !currentUser ||
+      (currentUser.role !== UserRole.USER &&
+        currentUser.role !== UserRole.VIEWER)
+    ) {
+      return;
+    }
+
+    if (!departmentId || !currentUser.departmentIds.includes(departmentId)) {
+      throw new ForbiddenException(
+        'You can only manage modules in your own department',
+      );
+    }
   }
 
   private async ensureFiliereExists(id: number) {

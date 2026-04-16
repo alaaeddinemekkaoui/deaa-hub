@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -11,6 +12,8 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { UserRole } from '../../common/types/role.type';
 
 @Injectable()
 export class StudentsService {
@@ -20,21 +23,27 @@ export class StudentsService {
     pagination: PaginationDto,
     search?: string,
     filiereId?: number,
+    departmentIds?: number[],
   ) {
-    const where = {
-      ...(search
-        ? {
-            OR: [
-              { fullName: { contains: search } },
-              { firstName: { contains: search } },
-              { lastName: { contains: search } },
-              { codeMassar: { contains: search } },
-              { cin: { contains: search } },
-            ],
-          }
-        : {}),
-      ...(filiereId ? { filiereId } : {}),
-    };
+    const filters: Prisma.StudentWhereInput[] = [];
+    if (search) {
+      filters.push({
+        OR: [
+          { fullName: { contains: search } },
+          { firstName: { contains: search } },
+          { lastName: { contains: search } },
+          { codeMassar: { contains: search } },
+          { cin: { contains: search } },
+        ],
+      });
+    }
+    if (filiereId) filters.push({ filiereId });
+    if (departmentIds !== undefined) {
+      filters.push({ filiere: { departmentId: { in: departmentIds } } });
+    }
+
+    const where: Prisma.StudentWhereInput =
+      filters.length > 1 ? { AND: filters } : (filters[0] ?? {});
 
     const [data, total] = await Promise.all([
       this.prisma.student.findMany({
@@ -42,17 +51,21 @@ export class StudentsService {
         include: {
           filiere: { include: { department: true } },
           academicClass: {
-            include: {
-              filiere: true,
+            select: {
+              id: true,
+              name: true,
+              year: true,
+              filiere: { select: { id: true, name: true } },
             },
           },
           classHistory: {
-            include: {
-              academicClass: true,
+            select: {
+              id: true,
+              academicYear: true,
+              studyYear: true,
+              academicClass: { select: { id: true, name: true, year: true } },
             },
-            orderBy: {
-              academicYear: 'desc',
-            },
+            orderBy: { academicYear: 'desc' },
           },
           laureate: {
             select: { id: true, graduationYear: true, diplomaStatus: true },
@@ -98,7 +111,13 @@ export class StudentsService {
     });
   }
 
-  async create(dto: CreateStudentDto) {
+  async create(dto: CreateStudentDto, currentUser?: JwtPayload) {
+    const departmentId = await this.resolveStudentDepartmentId(
+      dto.filiereId,
+      dto.classId,
+    );
+    this.ensureCanManageDepartment(departmentId, currentUser);
+
     const payload = (await this.buildStudentPayload(
       dto,
     )) as Prisma.StudentUncheckedCreateInput;
@@ -117,7 +136,7 @@ export class StudentsService {
     return this.findOne(student.id);
   }
 
-  async update(id: number, dto: UpdateStudentDto) {
+  async update(id: number, dto: UpdateStudentDto, currentUser?: JwtPayload) {
     const existing = await this.prisma.student.findUnique({
       where: { id },
       select: {
@@ -137,6 +156,20 @@ export class StudentsService {
     if (!existing) {
       throw new NotFoundException(`Student ${id} not found`);
     }
+
+    const nextFiliereId =
+      dto.filiereId !== undefined
+        ? (dto.filiereId ?? null)
+        : (existing.filiereId ?? null);
+    const nextClassId =
+      dto.classId !== undefined
+        ? (dto.classId ?? null)
+        : (existing.classId ?? null);
+    const departmentId = await this.resolveStudentDepartmentId(
+      nextFiliereId,
+      nextClassId,
+    );
+    this.ensureCanManageDepartment(departmentId, currentUser);
 
     const payload = (await this.buildStudentPayload(
       dto,
@@ -162,8 +195,77 @@ export class StudentsService {
     return this.findOne(updated.id);
   }
 
-  remove(id: number) {
+  async remove(id: number, currentUser?: JwtPayload) {
+    const existing = await this.prisma.student.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        filiere: { select: { departmentId: true } },
+        academicClass: {
+          select: { filiere: { select: { departmentId: true } } },
+        },
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Student ${id} not found`);
+    }
+
+    const departmentId =
+      existing.academicClass?.filiere?.departmentId ??
+      existing.filiere?.departmentId ??
+      null;
+    this.ensureCanManageDepartment(departmentId, currentUser);
+
     return this.prisma.student.delete({ where: { id } });
+  }
+
+  private async resolveStudentDepartmentId(
+    filiereId?: number | null,
+    classId?: number | null,
+  ): Promise<number | null> {
+    if (classId) {
+      const cls = await this.prisma.academicClass.findUnique({
+        where: { id: classId },
+        select: { filiere: { select: { departmentId: true } } },
+      });
+      if (!cls) {
+        throw new NotFoundException(`Class ${classId} not found`);
+      }
+      return cls.filiere?.departmentId ?? null;
+    }
+
+    if (filiereId) {
+      const filiere = await this.prisma.filiere.findUnique({
+        where: { id: filiereId },
+        select: { departmentId: true },
+      });
+      if (!filiere) {
+        throw new NotFoundException(`Filiere ${filiereId} not found`);
+      }
+      return filiere.departmentId;
+    }
+
+    return null;
+  }
+
+  private ensureCanManageDepartment(
+    departmentId: number | null | undefined,
+    currentUser?: JwtPayload,
+  ) {
+    if (
+      !currentUser ||
+      (currentUser.role !== UserRole.USER &&
+        currentUser.role !== UserRole.VIEWER)
+    ) {
+      return;
+    }
+
+    if (!departmentId || !currentUser.departmentIds.includes(departmentId)) {
+      throw new ForbiddenException(
+        'You can only manage students in your own department',
+      );
+    }
   }
 
   private async buildStudentPayload(
@@ -416,8 +518,8 @@ export class StudentsService {
     return academicClass;
   }
 
-  async findByClass(classId: number) {
-    return this.prisma.student.findMany({
+  async findByClass(classId: number, pagination?: PaginationDto) {
+    const query = {
       where: { classId },
       select: {
         id: true,
@@ -428,7 +530,32 @@ export class StudentsService {
         filiere: { select: { id: true, name: true } },
       },
       orderBy: { fullName: 'asc' },
-    });
+    } satisfies Prisma.StudentFindManyArgs;
+
+    if (!pagination?.page || !pagination?.limit) {
+      return this.prisma.student.findMany(query);
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.student.findMany({
+        ...query,
+        skip: (pagination.page - 1) * pagination.limit,
+        take: pagination.limit,
+      }),
+      this.prisma.student.count({ where: { classId } }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page: pagination.page,
+        limit: pagination.limit,
+        total,
+        totalPages: Math.ceil(total / pagination.limit) || 1,
+        hasNextPage: pagination.page * pagination.limit < total,
+        hasPreviousPage: pagination.page > 1,
+      },
+    };
   }
 
   async transferStudents(
@@ -670,6 +797,12 @@ export class StudentsService {
 
     let imported = 0;
     const errors: string[] = [];
+    const cellString = (...values: unknown[]) => {
+      const value = values.find(
+        (item) => typeof item === 'string' || typeof item === 'number',
+      );
+      return value === undefined ? '' : String(value).trim();
+    };
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -680,39 +813,31 @@ export class StudentsService {
           continue;
         }
         const dto: CreateStudentDto = {
-          firstName:
-            String(row['firstName'] ?? row['Prénom'] ?? '').trim() || undefined,
-          lastName:
-            String(row['lastName'] ?? row['Nom'] ?? '').trim() || undefined,
-          fullName: row['fullName']
-            ? String(row['fullName']).trim()
-            : undefined,
-          cin: String(row['cin'] ?? row['CIN'] ?? '').trim(),
-          codeMassar: String(
-            row['codeMassar'] ?? row['Code Massar'] ?? '',
-          ).trim(),
-          sex: (['male', 'female'].includes(String(row['sex']).toLowerCase())
-            ? String(row['sex']).toLowerCase()
+          firstName: cellString(row['firstName'], row['Prénom']) || undefined,
+          lastName: cellString(row['lastName'], row['Nom']) || undefined,
+          fullName: cellString(row['fullName']) || undefined,
+          cin: cellString(row['cin'], row['CIN']),
+          codeMassar: cellString(row['codeMassar'], row['Code Massar']),
+          sex: (['male', 'female'].includes(
+            cellString(row['sex']).toLowerCase(),
+          )
+            ? cellString(row['sex']).toLowerCase()
             : 'male') as 'male' | 'female',
           firstYearEntry: Number(
             row['firstYearEntry'] ?? new Date().getFullYear(),
           ),
-          anneeAcademique: String(
-            row['anneeAcademique'] ?? row['Année Académique'] ?? '2025/2026',
-          ).trim(),
+          anneeAcademique:
+            cellString(row['anneeAcademique'], row['Année Académique']) ||
+            '2025/2026',
           classId: classIdRaw,
           filiereId: row['filiereId'] ? Number(row['filiereId']) : undefined,
-          email: row['email'] ? String(row['email']).trim() : undefined,
-          telephone: row['telephone']
-            ? String(row['telephone']).trim()
-            : undefined,
-          bacType: row['bacType'] ? String(row['bacType']).trim() : undefined,
-          dateNaissance: row['dateNaissance']
-            ? String(row['dateNaissance']).trim()
-            : '1990-01-01',
-          dateInscription: row['dateInscription']
-            ? String(row['dateInscription']).trim()
-            : new Date().toISOString().split('T')[0],
+          email: cellString(row['email']) || undefined,
+          telephone: cellString(row['telephone']) || undefined,
+          bacType: cellString(row['bacType']) || undefined,
+          dateNaissance: cellString(row['dateNaissance']) || '1990-01-01',
+          dateInscription:
+            cellString(row['dateInscription']) ||
+            new Date().toISOString().split('T')[0],
         };
         await this.create(dto);
         imported++;

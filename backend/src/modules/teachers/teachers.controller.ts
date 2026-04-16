@@ -16,10 +16,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { Request } from 'express';
-import { JwtPayload } from '../../auth/strategies/jwt.strategy';
-
-type AuthRequest = Request & { user: JwtPayload };
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TeachersService } from './teachers.service';
 import { CreateTeacherDto } from './dto/create-teacher.dto';
 import { UpdateTeacherDto } from './dto/update-teacher.dto';
@@ -39,13 +37,13 @@ export class TeachersController {
   constructor(private readonly teachersService: TeachersService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findAll(@Query() query: TeacherQueryDto) {
     return this.teachersService.findAll(query);
   }
 
   @Get('roles')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findRoles() {
     return this.teachersService.findRoles();
   }
@@ -72,7 +70,7 @@ export class TeachersController {
   }
 
   @Get('grades')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findGrades() {
     return this.teachersService.findGrades();
   }
@@ -112,42 +110,42 @@ export class TeachersController {
   }
 
   @Get(':id/class-logs')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findClassLogs(@Param('id', ParseIntPipe) id: number) {
     return this.teachersService.findClassLogs(id);
   }
 
   @Get(':id/cours')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findCours(@Param('id', ParseIntPipe) id: number) {
     return this.teachersService.findCours(id);
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.teachersService.findOne(id);
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
-  create(@Body() dto: CreateTeacherDto) {
-    return this.teachersService.create(dto);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  create(@Body() dto: CreateTeacherDto, @CurrentUser() user: JwtPayload) {
+    return this.teachersService.create(dto, user);
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateTeacherDto,
-    @Req() req: AuthRequest,
+    @CurrentUser() user: JwtPayload,
   ) {
-    return this.teachersService.update(id, dto, req.user.sub);
+    return this.teachersService.update(id, dto, user);
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.teachersService.remove(id);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: JwtPayload) {
+    return this.teachersService.remove(id, user);
   }
 }

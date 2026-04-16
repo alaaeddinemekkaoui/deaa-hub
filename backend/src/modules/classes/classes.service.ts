@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -11,12 +12,14 @@ import { CreateClassDto } from './dto/create-class.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
 import { ClassQueryDto } from './dto/class-query.dto';
 import { TransferClassDto } from './dto/transfer-class.dto';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { UserRole } from '../../common/types/role.type';
 
 @Injectable()
 export class ClassesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: ClassQueryDto) {
+  async findAll(query: ClassQueryDto, departmentIds?: number[]) {
     const { page, limit, search, filiereId, departmentId, year, cycleId, optionId, sortBy, sortOrder } = query;
 
     const filters: Prisma.AcademicClassWhereInput[] = [];
@@ -35,6 +38,10 @@ export class ClassesService {
     if (departmentId) filters.push({ filiere: { is: { departmentId } } });
     if (cycleId) filters.push({ cycleId });
     if (optionId) filters.push({ optionId });
+    // JWT-scoped department filter
+    if (departmentIds !== undefined) {
+      filters.push({ filiere: { is: { departmentId: { in: departmentIds } } } });
+    }
 
     const where: Prisma.AcademicClassWhereInput = filters.length > 0 ? { AND: filters } : {};
 
@@ -75,8 +82,22 @@ export class ClassesService {
         filiere: { include: { department: true } },
         academicOption: true,
         cycle: true,
-        students: true,
-        teachers: { include: { teacher: true } },
+        students: {
+          select: {
+            id: true,
+            fullName: true,
+            codeMassar: true,
+            cin: true,
+            anneeAcademique: true,
+            firstYearEntry: true,
+          },
+          orderBy: { fullName: 'asc' },
+        },
+        teachers: {
+          include: {
+            teacher: { select: { id: true, firstName: true, lastName: true } },
+          },
+        },
       },
     });
 
@@ -101,10 +122,15 @@ export class ClassesService {
     });
   }
 
-  async create(dto: CreateClassDto) {
+  async create(dto: CreateClassDto, currentUser?: JwtPayload) {
     if (dto.filiereId) await this.ensureFiliereExists(dto.filiereId);
     if (dto.cycleId) await this.ensureCycleExists(dto.cycleId);
     if (dto.optionId) await this.ensureOptionExists(dto.optionId);
+
+    const departmentId = dto.filiereId
+      ? await this.getDepartmentIdFromFiliereId(dto.filiereId)
+      : null;
+    this.ensureCanManageDepartment(departmentId, currentUser);
 
     await this.ensureClassIdentityAvailable(dto.name, dto.year);
 
@@ -120,10 +146,10 @@ export class ClassesService {
     });
   }
 
-  async update(id: number, dto: UpdateClassDto) {
+  async update(id: number, dto: UpdateClassDto, currentUser?: JwtPayload) {
     const existing = await this.prisma.academicClass.findUnique({
       where: { id },
-      select: { id: true, name: true, year: true },
+      select: { id: true, name: true, year: true, filiereId: true },
     });
 
     if (!existing) throw new NotFoundException(`Class ${id} not found`);
@@ -131,6 +157,12 @@ export class ClassesService {
     if (typeof dto.filiereId === 'number') await this.ensureFiliereExists(dto.filiereId);
     if (typeof dto.cycleId === 'number') await this.ensureCycleExists(dto.cycleId);
     if (typeof dto.optionId === 'number') await this.ensureOptionExists(dto.optionId);
+
+    const nextFiliereId = dto.filiereId !== undefined ? dto.filiereId : existing.filiereId;
+    const departmentId = nextFiliereId
+      ? await this.getDepartmentIdFromFiliereId(nextFiliereId)
+      : null;
+    this.ensureCanManageDepartment(departmentId, currentUser);
 
     const nextName = dto.name ?? existing.name;
     const nextYear = dto.year ?? existing.year;
@@ -149,13 +181,22 @@ export class ClassesService {
     });
   }
 
-  async remove(id: number) {
+  async remove(id: number, currentUser?: JwtPayload) {
     const academicClass = await this.prisma.academicClass.findUnique({
       where: { id },
-      select: { id: true, _count: { select: { students: true, teachers: true } } },
+      select: {
+        id: true,
+        filiere: { select: { departmentId: true } },
+        _count: { select: { students: true, teachers: true } },
+      },
     });
 
     if (!academicClass) throw new NotFoundException(`Class ${id} not found`);
+
+    this.ensureCanManageDepartment(
+      academicClass.filiere?.departmentId,
+      currentUser,
+    );
 
     if (academicClass._count.students > 0 || academicClass._count.teachers > 0) {
       throw new BadRequestException(
@@ -177,7 +218,7 @@ export class ClassesService {
    *
    * The source class is left untouched. Each class remains fully independent.
    */
-  async transfer(id: number, dto: TransferClassDto) {
+  async transfer(id: number, dto: TransferClassDto, currentUser?: JwtPayload) {
     if (id === dto.targetClassId) {
       throw new BadRequestException('Source and target class cannot be the same');
     }
@@ -202,6 +243,13 @@ export class ClassesService {
 
     if (!source) throw new NotFoundException(`Source class ${id} not found`);
     if (!target) throw new NotFoundException(`Target class ${dto.targetClassId} not found`);
+
+    const [sourceDepartmentId, targetDepartmentId] = await Promise.all([
+      this.getDepartmentIdFromClassId(source.id),
+      this.getDepartmentIdFromClassId(target.id),
+    ]);
+    this.ensureCanManageDepartment(sourceDepartmentId, currentUser);
+    this.ensureCanManageDepartment(targetDepartmentId, currentUser);
 
     return this.prisma.$transaction(async (tx) => {
       // Clone each module + its elements, then assign to the target class
@@ -286,6 +334,51 @@ export class ClassesService {
 
     if (existing) {
       throw new ConflictException(`A class named "${name}" already exists for year ${year}`);
+    }
+  }
+
+  private async getDepartmentIdFromFiliereId(filiereId: number): Promise<number | null> {
+    const filiere = await this.prisma.filiere.findUnique({
+      where: { id: filiereId },
+      select: { departmentId: true },
+    });
+
+    if (!filiere) {
+      throw new NotFoundException(`Filiere ${filiereId} not found`);
+    }
+
+    return filiere.departmentId;
+  }
+
+  private async getDepartmentIdFromClassId(classId: number): Promise<number | null> {
+    const academicClass = await this.prisma.academicClass.findUnique({
+      where: { id: classId },
+      select: { filiere: { select: { departmentId: true } } },
+    });
+
+    if (!academicClass) {
+      throw new NotFoundException(`Class ${classId} not found`);
+    }
+
+    return academicClass.filiere?.departmentId ?? null;
+  }
+
+  private ensureCanManageDepartment(
+    departmentId: number | null | undefined,
+    currentUser?: JwtPayload,
+  ) {
+    if (
+      !currentUser ||
+      (currentUser.role !== UserRole.USER &&
+        currentUser.role !== UserRole.VIEWER)
+    ) {
+      return;
+    }
+
+    if (!departmentId || !currentUser.departmentIds.includes(departmentId)) {
+      throw new ForbiddenException(
+        'You can only manage classes in your own department',
+      );
     }
   }
 

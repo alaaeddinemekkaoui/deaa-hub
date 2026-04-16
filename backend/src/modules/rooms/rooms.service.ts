@@ -1,15 +1,26 @@
-import { Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { UserRole } from '../../common/types/role.type';
 
 @Injectable()
 export class RoomsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll() {
+  findAll(departmentIds?: number[]) {
+    const where = departmentIds !== undefined
+      ? { departmentId: { in: departmentIds } }
+      : undefined;
+
     return this.prisma.room.findMany({
+      where,
       include: {
         department: {
           select: {
@@ -36,7 +47,9 @@ export class RoomsService {
     });
   }
 
-  create(dto: CreateRoomDto) {
+  create(dto: CreateRoomDto, currentUser?: JwtPayload) {
+    this.ensureCanManageDepartment(dto.departmentId, currentUser);
+
     return this.prisma.room.create({
       data: {
         name: dto.name,
@@ -56,11 +69,35 @@ export class RoomsService {
     });
   }
 
-  update(id: number, dto: UpdateRoomDto) {
+  async update(id: number, dto: UpdateRoomDto, currentUser?: JwtPayload) {
+    const existing = await this.prisma.room.findUnique({
+      where: { id },
+      select: { id: true, departmentId: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Room ${id} not found`);
+    }
+
+    const nextDepartmentId =
+      dto.departmentId !== undefined ? dto.departmentId : existing.departmentId;
+    this.ensureCanManageDepartment(nextDepartmentId, currentUser);
+
     return this.prisma.room.update({ where: { id }, data: dto });
   }
 
-  remove(id: number) {
+  async remove(id: number, currentUser?: JwtPayload) {
+    const existing = await this.prisma.room.findUnique({
+      where: { id },
+      select: { id: true, departmentId: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Room ${id} not found`);
+    }
+
+    this.ensureCanManageDepartment(existing.departmentId, currentUser);
+
     return this.prisma.room.delete({ where: { id } });
   }
 
@@ -106,5 +143,24 @@ export class RoomsService {
     }
 
     return { imported, errors };
+  }
+
+  private ensureCanManageDepartment(
+    departmentId: number | null | undefined,
+    currentUser?: JwtPayload,
+  ) {
+    if (
+      !currentUser ||
+      (currentUser.role !== UserRole.USER &&
+        currentUser.role !== UserRole.VIEWER)
+    ) {
+      return;
+    }
+
+    if (!departmentId || !currentUser.departmentIds.includes(departmentId)) {
+      throw new ForbiddenException(
+        'You can only manage rooms in your own department',
+      );
+    }
   }
 }

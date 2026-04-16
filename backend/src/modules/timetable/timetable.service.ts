@@ -19,7 +19,7 @@ const SESSION_INCLUDE = {
 export class TimetableService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: SessionQueryDto) {
+  async findAll(query: SessionQueryDto, departmentIds?: number[]) {
     const { page, limit, classId, teacherId, roomId, dayOfWeek, weekStart } =
       query;
     const filters: Prisma.TimetableSessionWhereInput[] = [];
@@ -29,6 +29,11 @@ export class TimetableService {
     if (roomId) filters.push({ roomId });
     if (dayOfWeek) filters.push({ dayOfWeek });
     if (weekStart) filters.push({ weekStart: new Date(weekStart) });
+    if (departmentIds !== undefined) {
+      filters.push({
+        class: { filiere: { is: { departmentId: { in: departmentIds } } } },
+      });
+    }
 
     const where: Prisma.TimetableSessionWhereInput = filters.length
       ? { AND: filters }

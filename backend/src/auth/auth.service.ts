@@ -38,11 +38,14 @@ export class AuthService {
     }
 
     const user = await this.validateUser(identifier, dto.password);
+    const departments = await this.usersService.getUserDepartments(user.id);
+    const departmentIds = departments.map((d) => d.id);
 
     const payload = {
       sub: user.id,
       email: user.email,
       role: user.role,
+      departmentIds,
     };
 
     return {
@@ -52,6 +55,7 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
+        departments,
       },
     };
   }

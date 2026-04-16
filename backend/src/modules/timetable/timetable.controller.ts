@@ -17,6 +17,9 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/types/role.type';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { deptScope } from '../../common/utils/dept-scope';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 
 @Controller('timetable')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -24,13 +27,13 @@ export class TimetableController {
   constructor(private readonly service: TimetableService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
-  findAll(@Query() query: SessionQueryDto) {
-    return this.service.findAll(query);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  findAll(@Query() query: SessionQueryDto, @CurrentUser() user: JwtPayload) {
+    return this.service.findAll(query, deptScope(user));
   }
 
   @Get('week')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findWeek(
     @Query('classId', ParseIntPipe) classId: number,
     @Query('weekStart') weekStart: string,
@@ -39,7 +42,7 @@ export class TimetableController {
   }
 
   @Get('conflicts')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   checkConflicts(
     @Query('classId', ParseIntPipe) classId: number,
     @Query('weekStart') weekStart?: string,

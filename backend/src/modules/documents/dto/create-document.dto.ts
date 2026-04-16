@@ -1,6 +1,11 @@
-import { IsInt } from 'class-validator';
+import { IsInt, IsOptional } from 'class-validator';
 
 export class CreateDocumentDto {
+  @IsOptional()
   @IsInt()
-  studentId: number;
+  studentId?: number;
+
+  @IsOptional()
+  @IsInt()
+  teacherId?: number;
 }

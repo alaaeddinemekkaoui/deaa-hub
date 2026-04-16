@@ -24,6 +24,7 @@ import { TimetableModule } from './modules/timetable/timetable.module';
 import { CyclesModule } from './modules/cycles/cycles.module';
 import { StudentObservationsModule } from './modules/student-observations/student-observations.module';
 import { RoomReservationsModule } from './modules/room-reservations/room-reservations.module';
+import { GradesModule } from './modules/grades/grades.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { RoomReservationsModule } from './modules/room-reservations/room-reserva
     CyclesModule,
     StudentObservationsModule,
     RoomReservationsModule,
+    GradesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

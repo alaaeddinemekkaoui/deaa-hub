@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { api, getApiErrorMessage } from '@/services/api';
 import { PageHeader } from '@/components/admin/page-header';
+import { toast } from 'sonner';
 
 type TeacherProfile = {
   id: number;
@@ -30,6 +31,13 @@ type CoursAssignment = {
   class: { id: number; name: string; year: number; filiere?: { id: number; name: string } | null };
 };
 
+type DocumentItem = {
+  id: number;
+  name: string;
+  mimeType: string;
+  createdAt: string;
+};
+
 const TYPE_CHIP: Record<string, string> = {
   CM: 'bg-blue-50 text-blue-700 border-blue-200',
   TD: 'bg-violet-50 text-violet-700 border-violet-200',
@@ -45,8 +53,11 @@ export default function TeacherProfilePage() {
   const params = useParams<{ id: string }>();
   const [teacher, setTeacher] = useState<TeacherProfile | null>(null);
   const [coursHistory, setCoursHistory] = useState<CoursAssignment[]>([]);
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -59,12 +70,14 @@ export default function TeacherProfilePage() {
       try {
         setLoading(true);
         setError(null);
-        const [teacherRes, coursRes] = await Promise.all([
+        const [teacherRes, coursRes, docsRes] = await Promise.all([
           api.get<TeacherProfile>(`/teachers/${id}`),
           api.get<CoursAssignment[]>(`/teachers/${id}/cours`),
+          api.get<DocumentItem[]>(`/documents/teacher/${id}`),
         ]);
         setTeacher(teacherRes.data);
         setCoursHistory(Array.isArray(coursRes.data) ? coursRes.data : []);
+        setDocuments(Array.isArray(docsRes.data) ? docsRes.data : []);
       } catch (loadError) {
         setError(getApiErrorMessage(loadError, 'Impossible de charger le profil'));
       } finally {
@@ -75,6 +88,39 @@ export default function TeacherProfilePage() {
   }, [params.id]);
 
   const isVacataire = /vacataire/i.test(teacher?.role?.name ?? '');
+
+  const handleUploadDocument = async () => {
+    if (!teacher || !uploadFile) return;
+
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('teacherId', String(teacher.id));
+      formData.append('file', uploadFile);
+      const response = await api.post<DocumentItem>('/documents/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setDocuments((prev) => [response.data, ...prev]);
+      setUploadFile(null);
+      toast.success('Document enseignant téléversé');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Échec du téléversement'));
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const handleDeleteDocument = async (documentId: number) => {
+    if (!window.confirm('Supprimer ce document ?')) return;
+
+    try {
+      await api.delete(`/documents/${documentId}`);
+      setDocuments((prev) => prev.filter((doc) => doc.id !== documentId));
+      toast.success('Document supprimé');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Échec de la suppression'));
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -188,6 +234,74 @@ export default function TeacherProfilePage() {
                           <td>{a.class.filiere?.name ?? '—'}</td>
                           <td>{a.groupLabel ?? '—'}</td>
                           <td className="text-slate-600">{formatAffectationDate(a.createdAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="surface-card space-y-4">
+            <div className="panel-header">
+              <div>
+                <h2 className="panel-title">Documents</h2>
+                <p className="panel-copy">{documents.length} document{documents.length !== 1 ? 's' : ''} lié{documents.length !== 1 ? 's' : ''} à cet enseignant</p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+              <div className="field-stack">
+                <label className="field-label">Téléverser un document</label>
+                <input
+                  className="input"
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  className="btn-primary"
+                  type="button"
+                  onClick={() => void handleUploadDocument()}
+                  disabled={!uploadFile || uploadingFile}
+                >
+                  {uploadingFile ? 'Téléversement...' : 'Téléverser'}
+                </button>
+              </div>
+            </div>
+
+            {documents.length === 0 ? (
+              <p className="text-sm text-slate-400">Aucun document enregistré pour cet enseignant.</p>
+            ) : (
+              <div className="data-table-wrap">
+                <div className="table-scroll">
+                  <table className="table-base">
+                    <thead>
+                      <tr>
+                        <th>Nom</th>
+                        <th>Type</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {documents.map((doc) => (
+                        <tr key={doc.id}>
+                          <td className="font-medium text-slate-900">{doc.name}</td>
+                          <td>{doc.mimeType}</td>
+                          <td>{new Date(doc.createdAt).toLocaleDateString('fr-FR')}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="btn-outline text-xs"
+                              onClick={() => void handleDeleteDocument(doc.id)}
+                            >
+                              Supprimer
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

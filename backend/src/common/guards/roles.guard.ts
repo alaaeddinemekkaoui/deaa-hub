@@ -27,6 +27,11 @@ export class RolesGuard implements CanActivate {
     }>();
     const user = request.user;
 
+    // Admins bypass all role restrictions
+    if (user?.role === UserRole.ADMIN) {
+      return true;
+    }
+
     if (!user?.role || !requiredRoles.includes(user.role)) {
       throw new ForbiddenException('Insufficient role permissions');
     }

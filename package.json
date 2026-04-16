@@ -1,0 +1,12 @@
+{
+  "name": "deaa-hub-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Root workspace scripts for running DEAA Hub frontend and backend together",
+  "scripts": {
+    "start": "node ./start-dev.js",
+    "start:dev": "node ./start-dev.js",
+    "start:backend": "cd backend && npm run start:dev",
+    "start:frontend": "cd frontend && npm run dev"
+  }
+}

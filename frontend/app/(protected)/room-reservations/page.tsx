@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CalendarCheck, ChevronLeft, ChevronRight, Clock, Trash2 } from 'lucide-react';
+import { AlertTriangle, CalendarCheck, CheckCircle, ChevronLeft, ChevronRight, Clock, Trash2, XCircle } from 'lucide-react';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
+import { useAuth } from '@/features/auth/auth-context';
 import { api, getApiErrorMessage, PaginatedResponse } from '@/services/api';
 import { toast } from 'sonner';
 
@@ -26,6 +27,7 @@ type AcademicClassForCount = {
 };
 
 type Purpose = 'cours' | 'examen' | 'reunion' | 'autre';
+type ReservationStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
 type Reservation = {
   id: number;
@@ -38,6 +40,11 @@ type Reservation = {
   reservedBy: string;
   purpose: Purpose;
   notes: string | null;
+  status: ReservationStatus;
+  approvalNote?: string | null;
+  requestedBy?: { id: number; fullName: string } | null;
+  approvedBy?: { id: number; fullName: string } | null;
+  room?: { id: number; name: string; departmentId?: number | null } | null;
   academicClass?: {
     id: number;
     name: string;
@@ -49,6 +56,20 @@ type Reservation = {
       department?: { id: number; name: string } | null;
     } | null;
   } | null;
+};
+
+const STATUS_BADGE: Record<ReservationStatus, string> = {
+  pending:   'bg-amber-100 text-amber-700',
+  approved:  'bg-emerald-100 text-emerald-700',
+  rejected:  'bg-red-100 text-red-700',
+  cancelled: 'bg-slate-100 text-slate-500',
+};
+
+const STATUS_LABELS: Record<ReservationStatus, string> = {
+  pending:   'En attente',
+  approved:  'Approuvée',
+  rejected:  'Rejetée',
+  cancelled: 'Annulée',
 };
 
 type CreateReservationPayload = {
@@ -138,6 +159,18 @@ function rowSpan(start: string, end: string): number {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function RoomReservationsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const isInspector = user?.role === 'viewer';
+  const canReserveOutsideDepartment = isAdmin || isInspector;
+  const userDeptIds = user?.departments.map((d) => d.id) ?? [];
+
+  const canApprove = (reservation: Reservation) => {
+    if (isAdmin) return true;
+    const roomDeptId = reservation.room?.departmentId;
+    return roomDeptId != null && userDeptIds.includes(roomDeptId);
+  };
+
   const [rooms, setRooms] = useState<Room[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [classes, setClasses] = useState<AcademicClassForCount[]>([]);
@@ -212,6 +245,13 @@ export default function RoomReservationsPage() {
       })
       .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
   }, [classes, selectedDepartmentId, selectedFiliereId]);
+
+  const modalClassOptions = useMemo(() => {
+    if (canReserveOutsideDepartment) {
+      return [...classes].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+    }
+    return filteredClasses;
+  }, [canReserveOutsideDepartment, classes, filteredClasses]);
 
   useEffect(() => {
     if (
@@ -439,6 +479,36 @@ export default function RoomReservationsPage() {
     }
   };
 
+  const approveReservation = async (id: number) => {
+    try {
+      const updated = await api.patch<Reservation>(`/room-reservations/${id}/approve`, {});
+      setReservations((prev) => prev.map((r) => r.id === id ? updated.data : r));
+      setDetailRes((prev) => prev?.id === id ? updated.data : prev);
+      toast.success('Réservation approuvée');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Échec de l'approbation"));
+    }
+  };
+
+  const rejectReservation = async (id: number) => {
+    const note = window.prompt('Motif du rejet (optionnel) :') ?? undefined;
+    if (note === null) return; // cancelled
+    try {
+      const updated = await api.patch<Reservation>(`/room-reservations/${id}/reject`, { note });
+      setReservations((prev) => prev.map((r) => r.id === id ? updated.data : r));
+      setDetailRes((prev) => prev?.id === id ? updated.data : prev);
+      toast.success('Réservation rejetée');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Échec du rejet'));
+    }
+  };
+
+  const pendingReservations = useMemo(
+    () => reservations.filter((r) => r.status === 'pending' && canApprove(r)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reservations, isAdmin, userDeptIds],
+  );
+
   const selectedRoom = rooms.find((r) => String(r.id) === selectedRoomId);
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -458,6 +528,49 @@ export default function RoomReservationsPage() {
           title="Réservation des salles"
           description="Réservez et consultez l'occupation des salles par semaine. Les conflits sont détectés automatiquement."
         />
+
+        {/* ── Pending approvals panel ── */}
+        {pendingReservations.length > 0 && (
+          <section className="surface-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold">
+                {pendingReservations.length}
+              </span>
+              <h2 className="font-semibold text-slate-800">Réservations en attente d&apos;approbation</h2>
+            </div>
+            <div className="space-y-2">
+              {pendingReservations.map((r) => (
+                <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <div className="text-sm">
+                    <p className="font-medium text-slate-800">{r.reservedBy}</p>
+                    <p className="text-slate-500 text-xs">
+                      {r.room?.name ?? '—'} · {toDate(r.date).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' })} · {r.startTime}–{r.endTime}
+                    </p>
+                    {r.requestedBy && (
+                      <p className="text-slate-400 text-xs">Demandé par {r.requestedBy.fullName}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                      onClick={() => approveReservation(r.id)}
+                    >
+                      <CheckCircle size={12} /> Approuver
+                    </button>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                      onClick={() => rejectReservation(r.id)}
+                    >
+                      <XCircle size={12} /> Rejeter
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── Toolbar ── */}
         <section className="surface-card p-4 space-y-4">
@@ -793,7 +906,13 @@ export default function RoomReservationsPage() {
                           >
                             {res && (
                               <div
-                                className={`relative h-full rounded-lg border-l-4 p-2 cursor-pointer ${PURPOSE_STYLE[res.purpose]} ${isConflict ? '!border-red-400 !bg-red-50' : ''}`}
+                                className={`relative h-full rounded-lg border-l-4 p-2 cursor-pointer ${
+                                  res.status === 'pending'
+                                    ? 'border-amber-400 bg-amber-50'
+                                    : res.status === 'rejected'
+                                    ? 'border-red-400 bg-red-50 opacity-70'
+                                    : PURPOSE_STYLE[res.purpose]
+                                } ${isConflict ? '!border-red-400 !bg-red-50' : ''}`}
                                 style={{ minHeight: `${span * 3}rem` }}
                                 onClick={() => setDetailRes(res)}
                               >
@@ -801,6 +920,9 @@ export default function RoomReservationsPage() {
                                   <div className="absolute right-1 top-1">
                                     <AlertTriangle size={11} className="text-red-500" />
                                   </div>
+                                )}
+                                {res.status === 'pending' && !isConflict && (
+                                  <div className="absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-400" title="En attente" />
                                 )}
                                 <p className="text-xs font-bold leading-tight truncate">{res.reservedBy}</p>
                                 <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${PURPOSE_BADGE[res.purpose]}`}>
@@ -891,7 +1013,7 @@ export default function RoomReservationsPage() {
                 onChange={(e) => setModalClassId(e.target.value)}
               >
                 <option value="">Aucune classe liée</option>
-                {filteredClasses.map((academicClass) => (
+                {modalClassOptions.map((academicClass) => (
                   <option key={academicClass.id} value={String(academicClass.id)}>
                     {academicClass.name}
                   </option>
@@ -937,13 +1059,33 @@ export default function RoomReservationsPage() {
           onClose={() => setDetailRes(null)}
           footer={
             <>
-              <button
-                className="btn-outline flex items-center gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
-                type="button"
-                onClick={() => detailRes && deleteReservation(detailRes.id)}
-              >
-                <Trash2 size={13} /> Supprimer
-              </button>
+              {detailRes?.status === 'pending' && canApprove(detailRes) && (
+                <>
+                  <button
+                    className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+                    type="button"
+                    onClick={() => detailRes && approveReservation(detailRes.id)}
+                  >
+                    <CheckCircle size={13} /> Approuver
+                  </button>
+                  <button
+                    className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                    type="button"
+                    onClick={() => detailRes && rejectReservation(detailRes.id)}
+                  >
+                    <XCircle size={13} /> Rejeter
+                  </button>
+                </>
+              )}
+              {isAdmin && (
+                <button
+                  className="btn-outline flex items-center gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
+                  type="button"
+                  onClick={() => detailRes && deleteReservation(detailRes.id)}
+                >
+                  <Trash2 size={13} /> Supprimer
+                </button>
+              )}
               <button className="btn-outline" type="button" onClick={() => setDetailRes(null)}>Fermer</button>
             </>
           }
@@ -951,7 +1093,12 @@ export default function RoomReservationsPage() {
           {detailRes && (
             <div className="space-y-3">
               <div className={`rounded-xl border-l-4 p-4 ${PURPOSE_STYLE[detailRes.purpose]}`}>
-                <p className="font-semibold text-slate-800">{detailRes.reservedBy}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold text-slate-800">{detailRes.reservedBy}</p>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[detailRes.status]}`}>
+                    {STATUS_LABELS[detailRes.status]}
+                  </span>
+                </div>
                 <span className={`mt-1 inline-block rounded px-2 py-0.5 text-xs font-medium ${PURPOSE_BADGE[detailRes.purpose]}`}>
                   {PURPOSE_LABELS[detailRes.purpose]}
                 </span>
@@ -966,6 +1113,24 @@ export default function RoomReservationsPage() {
                   <p className="text-xs text-slate-400">Créneau</p>
                   <p className="font-medium">{detailRes.startTime} – {detailRes.endTime}</p>
                 </div>
+                {detailRes.requestedBy && (
+                  <div>
+                    <p className="text-xs text-slate-400">Demandé par</p>
+                    <p className="font-medium">{detailRes.requestedBy.fullName}</p>
+                  </div>
+                )}
+                {detailRes.approvedBy && (
+                  <div>
+                    <p className="text-xs text-slate-400">{detailRes.status === 'rejected' ? 'Rejeté par' : 'Approuvé par'}</p>
+                    <p className="font-medium">{detailRes.approvedBy.fullName}</p>
+                  </div>
+                )}
+                {detailRes.approvalNote && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-slate-400">Motif</p>
+                    <p className="font-medium">{detailRes.approvalNote}</p>
+                  </div>
+                )}
                 <div className="col-span-2">
                   <p className="text-xs text-slate-400">Classe liée</p>
                   <p className="font-medium">{detailRes.academicClass?.name ?? 'Aucune classe'}</p>

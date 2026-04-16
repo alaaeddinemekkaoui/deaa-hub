@@ -14,28 +14,30 @@ import { FiliereQueryDto } from './dto/filiere-query.dto';
 export class FilieresService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: FiliereQueryDto) {
+  async findAll(query: FiliereQueryDto, departmentIds?: number[]) {
     const { page, limit, search, departmentId, sortBy, sortOrder } = query;
+
+    // departmentIds (from JWT scope) narrows to specific departments;
+    // departmentId (from query param) further narrows within that set.
+    const effectiveDeptIds: number[] | undefined =
+      departmentIds !== undefined && departmentId
+        ? [departmentId].filter((id) => departmentIds.includes(id))
+        : departmentIds !== undefined
+        ? departmentIds
+        : departmentId
+        ? [departmentId]
+        : undefined;
+
     const where = {
       ...(search
         ? {
             OR: [
-              {
-                name: {
-                  contains: search,
-                  mode: 'insensitive' as const,
-                },
-              },
-              {
-                code: {
-                  contains: search,
-                  mode: 'insensitive' as const,
-                },
-              },
+              { name: { contains: search, mode: 'insensitive' as const } },
+              { code: { contains: search, mode: 'insensitive' as const } },
             ],
           }
         : {}),
-      ...(departmentId ? { departmentId } : {}),
+      ...(effectiveDeptIds !== undefined ? { departmentId: { in: effectiveDeptIds } } : {}),
     };
 
     const [data, total] = await Promise.all([

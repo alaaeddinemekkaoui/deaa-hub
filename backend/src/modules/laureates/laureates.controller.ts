@@ -34,13 +34,13 @@ export class LaureatesController {
   constructor(private readonly laureatesService: LaureatesService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findAll() {
     return this.laureatesService.findAll();
   }
 
   @Get('non-laureates')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findNonLaureateStudents(@Query('search') search?: string) {
     return this.laureatesService.findNonLaureateStudents(search);
   }
@@ -62,7 +62,7 @@ export class LaureatesController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.laureatesService.findOne(id);
   }

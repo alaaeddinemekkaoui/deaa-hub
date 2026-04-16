@@ -25,13 +25,11 @@ export class OptionsController {
   constructor(private readonly optionsService: OptionsService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
   findAll(@Query() query: OptionQueryDto) {
     return this.optionsService.findAll(query);
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.optionsService.findOne(id);
   }

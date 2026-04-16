@@ -9,7 +9,8 @@ import { ImportDataButton } from '@/components/admin/import-data-button';
 import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
-import { api, getApiErrorMessage, PaginatedResponse } from '@/services/api';
+import { api, fetchRef, getApiErrorMessage, PaginatedResponse } from '@/services/api';
+import { useAuth } from '@/features/auth/auth-context';
 import { toast } from 'sonner';
 
 type StudentClassHistory = {
@@ -50,6 +51,8 @@ type Filiere = { id: number; name: string; departmentId?: number };
 type AcademicClass = { id: number; name: string; year: number; filiereId?: number | null };
 
 export default function StudentsPage() {
+  const { user } = useAuth();
+  const canDelete = user?.role === 'admin';
   const [students, setStudents] = useState<Student[]>([]);
   const [filieres, setFilieres] = useState<Filiere[]>([]);
   const [classes, setClasses] = useState<AcademicClass[]>([]);
@@ -126,57 +129,45 @@ export default function StudentsPage() {
     return isHistoryEntryRedoublant(sortedHistory, latestEntry.id);
   };
 
+  // Load reference data once per session
+  useEffect(() => {
+    const loadRef = async () => {
+      try {
+        const [filieresData, classesData] = await Promise.all([
+          fetchRef<PaginatedResponse<Filiere>>('/filieres?page=1&limit=1000&sortBy=name&sortOrder=asc'),
+          fetchRef<PaginatedResponse<AcademicClass>>('/classes?page=1&limit=1000&sortBy=name&sortOrder=asc'),
+        ]);
+        setFilieres(filieresData.data);
+        setClasses(classesData.data);
+        if (filieresData.data.length > 0) setFiliereId(String(filieresData.data[0].id));
+        if (classesData.data.length > 0) setClassId(String(classesData.data[0].id));
+      } catch {
+        // non-fatal
+      }
+    };
+    void loadRef();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load students when search query or refresh changes
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
         setError(null);
-
-        const studentParams: Record<string, string | number> = {
-          page: 1,
-          limit: 100,
-        };
-
+        const studentParams: Record<string, string | number> = { page: 1, limit: 100 };
         const normalizedQuery = query.trim();
-        if (normalizedQuery) {
-          studentParams.search = normalizedQuery;
-        }
-
-        const [studentsRes, filieresRes, classesRes] = await Promise.all([
-          api.get<PaginatedResponse<Student>>('/students', {
-            params: studentParams,
-          }),
-          api.get<PaginatedResponse<Filiere>>('/filieres', {
-            params: { page: 1, limit: 1000, sortBy: 'name', sortOrder: 'asc' },
-          }),
-          api.get<PaginatedResponse<AcademicClass>>('/classes', {
-            params: { page: 1, limit: 1000, sortBy: 'name', sortOrder: 'asc' },
-          }),
-        ]);
-
-        const nextStudents = studentsRes.data.data;
-        const nextFilieres = filieresRes.data.data;
-        const nextClasses = classesRes.data.data;
-
-        setStudents(nextStudents);
-        setFilieres(nextFilieres);
-        setClasses(nextClasses);
-
-        if (!filiereId && nextFilieres.length > 0) {
-          setFiliereId(String(nextFilieres[0].id));
-        }
-        if (!classId && nextClasses.length > 0) {
-          setClassId(String(nextClasses[0].id));
-        }
+        if (normalizedQuery) studentParams.search = normalizedQuery;
+        const studentsRes = await api.get<PaginatedResponse<Student>>('/students', { params: studentParams });
+        setStudents(studentsRes.data.data);
       } catch (loadError) {
         setError(getApiErrorMessage(loadError, 'Failed to load students data'));
       } finally {
         setLoading(false);
       }
     };
-
     void load();
-  }, [query, refreshKey, filiereId, classId]);
+  }, [query, refreshKey]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -469,9 +460,11 @@ export default function StudentsPage() {
                       >
                         Modifier
                       </button>
-                      <button type="button" className="btn-outline" onClick={() => onDelete(student.id)}>
-                        Supprimer
-                      </button>
+                      {canDelete && (
+                        <button type="button" className="btn-outline" onClick={() => onDelete(student.id)}>
+                          Supprimer
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

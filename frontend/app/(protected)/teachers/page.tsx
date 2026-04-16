@@ -16,7 +16,8 @@ import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
 import { PaginationControls } from '@/components/admin/pagination-controls';
-import { api, getApiErrorMessage, PaginatedResponse } from '@/services/api';
+import { api, fetchRef, getApiErrorMessage, PaginatedResponse } from '@/services/api';
+import { useAuth } from '@/features/auth/auth-context';
 import { toast } from 'sonner';
 
 type Department = { id: number; name: string };
@@ -55,6 +56,8 @@ type Teacher = {
 const PAGE_SIZE = 8;
 
 export default function TeachersPage() {
+  const { user } = useAuth();
+  const canDelete = user?.role === 'admin';
   const [rows, setRows] = useState<Teacher[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [filieres, setFilieres] = useState<Filiere[]>([]);
@@ -195,96 +198,56 @@ export default function TeachersPage() {
     setIsModalOpen(true);
   };
 
+  // Load reference data once per session (cached by fetchRef)
+  useEffect(() => {
+    const loadRef = async () => {
+      try {
+        const [depsRes, filieresRes, rolesData, gradesData] = await Promise.all([
+          fetchRef<PaginatedResponse<Department>>('/departments?page=1&limit=200&sortBy=name&sortOrder=asc'),
+          fetchRef<PaginatedResponse<Filiere>>('/filieres?page=1&limit=200&sortBy=name&sortOrder=asc'),
+          fetchRef<TeacherRole[]>('/teachers/roles'),
+          fetchRef<TeacherGrade[]>('/teachers/grades'),
+        ]);
+        setDepartments(depsRes.data);
+        setFilieres(filieresRes.data);
+        setRoles(rolesData);
+        setGrades(gradesData);
+      } catch {
+        // non-fatal
+      }
+    };
+    void loadRef();
+  }, []);
+
+  // Load teachers when filters, page, sort, or refresh change
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
         setError(null);
-        const [
-          teachersResult,
-          departmentsResult,
-          filieresResult,
-          rolesResult,
-          gradesResult,
-        ] = await Promise.allSettled([
-          api.get<PaginatedResponse<Teacher>>('/teachers', {
-            params: {
-              page,
-              limit: PAGE_SIZE,
-              search: query || undefined,
-              departmentId: filterDepartmentId || undefined,
-              filiereId: filterFiliereId || undefined,
-              roleId: filterRoleId || undefined,
-              gradeId: filterGradeId || undefined,
-              sortBy,
-              sortOrder,
-            },
-          }),
-          fetchAllPaginatedRows<Department>('/departments', {
-            sortBy: 'name',
-            sortOrder: 'asc',
-          }),
-          fetchAllPaginatedRows<Filiere>('/filieres', {
-            sortBy: 'name',
-            sortOrder: 'asc',
-          }),
-          api.get<TeacherRole[]>('/teachers/roles'),
-          api.get<TeacherGrade[]>('/teachers/grades'),
-        ]);
-
-        if (teachersResult.status === 'fulfilled') {
-          setRows(teachersResult.value.data.data);
-          setMeta(teachersResult.value.data.meta);
-        } else {
-          setError(
-            getApiErrorMessage(
-              teachersResult.reason,
-              'Unable to load teachers right now.',
-            ),
-          );
-          setRows([]);
-          setMeta({
-            page: 1,
+        const teachersRes = await api.get<PaginatedResponse<Teacher>>('/teachers', {
+          params: {
+            page,
             limit: PAGE_SIZE,
-            total: 0,
-            totalPages: 1,
-            hasNextPage: false,
-            hasPreviousPage: false,
-          });
-        }
-
-        if (departmentsResult.status === 'fulfilled') {
-          setDepartments(departmentsResult.value);
-        } else {
-          setDepartments([]);
-        }
-
-        if (filieresResult.status === 'fulfilled') {
-          setFilieres(filieresResult.value);
-        } else {
-          setFilieres([]);
-        }
-
-        if (rolesResult.status === 'fulfilled') {
-          setRoles(rolesResult.value.data);
-        } else {
-          setRoles([]);
-        }
-
-        if (gradesResult.status === 'fulfilled') {
-          setGrades(gradesResult.value.data);
-        } else {
-          setGrades([]);
-        }
+            search: query || undefined,
+            departmentId: filterDepartmentId || undefined,
+            filiereId: filterFiliereId || undefined,
+            roleId: filterRoleId || undefined,
+            gradeId: filterGradeId || undefined,
+            sortBy,
+            sortOrder,
+          },
+        });
+        setRows(teachersRes.data.data);
+        setMeta(teachersRes.data.meta);
       } catch (loadError) {
-        setError(
-          getApiErrorMessage(loadError, 'Unable to load teachers right now.'),
-        );
+        setError(getApiErrorMessage(loadError, 'Unable to load teachers right now.'));
+        setRows([]);
+        setMeta({ page: 1, limit: PAGE_SIZE, total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false });
       } finally {
         setLoading(false);
       }
     };
-
     void load();
   }, [
     filterDepartmentId,
@@ -701,13 +664,15 @@ export default function TeachersPage() {
                             >
                               Modifier
                             </button>
-                            <button
-                              type="button"
-                              className="btn-outline"
-                              onClick={() => onDelete(item.id)}
-                            >
-                              Supprimer
-                            </button>
+                            {canDelete && (
+                              <button
+                                type="button"
+                                className="btn-outline"
+                                onClick={() => onDelete(item.id)}
+                              >
+                                Supprimer
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

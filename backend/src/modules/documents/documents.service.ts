@@ -13,6 +13,15 @@ import { join } from 'path';
 export class DocumentsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private slugify(value: string) {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase();
+  }
+
   private getUploadBaseDir() {
     if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
       return join(tmpdir(), 'deaa-hub', 'uploads');
@@ -31,6 +40,14 @@ export class DocumentsService {
             codeMassar: true,
           },
         },
+        teacher: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            cin: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -47,6 +64,14 @@ export class DocumentsService {
             codeMassar: true,
           },
         },
+        teacher: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            cin: true,
+          },
+        },
       },
     });
   }
@@ -56,21 +81,65 @@ export class DocumentsService {
       throw new BadRequestException('File is required');
     }
 
-    const student = await this.prisma.student.findUnique({
-      where: { id: dto.studentId },
-      select: { id: true, codeMassar: true },
+    const ownerCount = Number(Boolean(dto.studentId)) + Number(Boolean(dto.teacherId));
+    if (ownerCount !== 1) {
+      throw new BadRequestException(
+        'Provide exactly one owner: either studentId or teacherId',
+      );
+    }
+
+    if (dto.studentId) {
+      const student = await this.prisma.student.findUnique({
+        where: { id: dto.studentId },
+        select: { id: true, codeMassar: true },
+      });
+
+      if (!student) {
+        throw new NotFoundException('Student not found');
+      }
+
+      const studentDir = join(
+        this.getUploadBaseDir(),
+        'students',
+        student.codeMassar,
+      );
+      if (!existsSync(studentDir)) {
+        mkdirSync(studentDir, { recursive: true });
+      }
+
+      const finalPath = join(studentDir, file.originalname);
+      renameSync(file.path, finalPath);
+
+      return this.prisma.document.create({
+        data: {
+          name: file.originalname,
+          mimeType: file.mimetype,
+          path: finalPath,
+          studentId: student.id,
+        },
+      });
+    }
+
+    const teacher = await this.prisma.teacher.findUnique({
+      where: { id: dto.teacherId },
+      select: { id: true, firstName: true, lastName: true, cin: true },
     });
 
-    if (!student) {
-      throw new NotFoundException('Student not found');
+    if (!teacher) {
+      throw new NotFoundException('Teacher not found');
     }
 
-    const studentDir = join(this.getUploadBaseDir(), student.codeMassar);
-    if (!existsSync(studentDir)) {
-      mkdirSync(studentDir, { recursive: true });
+    const teacherFolder = teacher.cin
+      ? teacher.cin
+      : `teacher-${teacher.id}-${this.slugify(
+          `${teacher.firstName}-${teacher.lastName}`,
+        )}`;
+    const teacherDir = join(this.getUploadBaseDir(), 'teachers', teacherFolder);
+    if (!existsSync(teacherDir)) {
+      mkdirSync(teacherDir, { recursive: true });
     }
 
-    const finalPath = join(studentDir, file.originalname);
+    const finalPath = join(teacherDir, file.originalname);
     renameSync(file.path, finalPath);
 
     return this.prisma.document.create({
@@ -78,7 +147,7 @@ export class DocumentsService {
         name: file.originalname,
         mimeType: file.mimetype,
         path: finalPath,
-        studentId: student.id,
+        teacherId: teacher.id,
       },
     });
   }
@@ -90,12 +159,28 @@ export class DocumentsService {
     });
   }
 
-  update(id: number, dto: { name?: string; studentId?: number }) {
+  findByTeacher(teacherId: number) {
+    return this.prisma.document.findMany({
+      where: { teacherId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  update(id: number, dto: { name?: string; studentId?: number; teacherId?: number }) {
+    const ownerCount =
+      Number(Boolean(dto.studentId)) + Number(Boolean(dto.teacherId));
+    if (ownerCount > 1) {
+      throw new BadRequestException(
+        'Document cannot be attached to both a student and a teacher',
+      );
+    }
+
     return this.prisma.document.update({
       where: { id },
       data: {
         ...(dto.name ? { name: dto.name } : {}),
-        ...(dto.studentId ? { studentId: dto.studentId } : {}),
+        ...(dto.studentId ? { studentId: dto.studentId, teacherId: null } : {}),
+        ...(dto.teacherId ? { teacherId: dto.teacherId, studentId: null } : {}),
       },
     });
   }

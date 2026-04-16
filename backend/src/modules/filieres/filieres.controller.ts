@@ -23,6 +23,9 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/types/role.type';
 import { FiliereQueryDto } from './dto/filiere-query.dto';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { deptScope } from '../../common/utils/dept-scope';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 
 @Controller('filieres')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -30,9 +33,8 @@ export class FilieresController {
   constructor(private readonly filieresService: FilieresService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
-  findAll(@Query() query: FiliereQueryDto) {
-    return this.filieresService.findAll(query);
+  findAll(@Query() query: FiliereQueryDto, @CurrentUser() user: JwtPayload) {
+    return this.filieresService.findAll(query, deptScope(user));
   }
 
   @Post('import')
@@ -49,7 +51,6 @@ export class FilieresController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.filieresService.findOne(id);
   }

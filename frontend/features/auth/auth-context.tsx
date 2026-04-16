@@ -10,11 +10,14 @@ import {
 } from 'react';
 import { api } from '@/services/api';
 
-type AuthUser = {
+export type Department = { id: number; name: string };
+
+export type AuthUser = {
   id: number;
   email: string;
   fullName?: string;
-  role: 'admin' | 'staff' | 'viewer';
+  role: 'admin' | 'staff' | 'viewer' | 'user';
+  departments: Department[];
 };
 
 type AuthContextType = {
@@ -38,10 +41,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     api
-      .get('/auth/me')
+      .get<{ sub: number; email: string; role: AuthUser['role']; fullName?: string; departments: Department[] }>('/auth/me')
       .then((response) => {
         const data = response.data;
-        setUser({ id: data.sub, email: data.email, role: data.role });
+        setUser({
+          id: data.sub,
+          email: data.email,
+          role: data.role,
+          fullName: data.fullName,
+          departments: data.departments ?? [],
+        });
       })
       .catch(() => {
         localStorage.removeItem('deaa_token');
@@ -55,13 +64,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       loading,
       login: async (identifier: string, password: string) => {
-        const response = await api.post('/auth/login', { identifier, password });
+        const response = await api.post<{
+          access_token: string;
+          user: { id: number; email: string; fullName?: string; role: AuthUser['role']; departments: Department[] };
+        }>('/auth/login', { identifier, password });
         const { access_token, user: payloadUser } = response.data;
         localStorage.setItem('deaa_token', access_token);
         setUser({
           id: payloadUser.id,
           email: payloadUser.email,
           role: payloadUser.role,
+          fullName: payloadUser.fullName,
+          departments: payloadUser.departments ?? [],
         });
       },
       logout: () => {

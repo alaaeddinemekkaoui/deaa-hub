@@ -73,6 +73,25 @@ api.interceptors.response.use(
   },
 );
 
+// ---------------------------------------------------------------------------
+// Session-level reference-data cache
+// Avoids re-fetching rarely-changing lookups (departments, cycles, options…)
+// on every page mount. TTL defaults to 5 minutes.
+// ---------------------------------------------------------------------------
+const REF_CACHE = new Map<string, { data: unknown; ts: number }>();
+
+export async function fetchRef<T>(url: string, ttlMs = 5 * 60 * 1000): Promise<T> {
+  const hit = REF_CACHE.get(url);
+  if (hit && Date.now() - hit.ts < ttlMs) return hit.data as T;
+  const r = await api.get<T>(url);
+  REF_CACHE.set(url, { data: r.data, ts: Date.now() });
+  return r.data;
+}
+
+export function invalidateRef(url: string): void {
+  REF_CACHE.delete(url);
+}
+
 export function getApiErrorMessage(
   error: unknown,
   fallback = 'Something went wrong.',

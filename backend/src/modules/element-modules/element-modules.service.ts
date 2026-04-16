@@ -1,10 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ElementType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AcademicModulesService } from '../academic-modules/academic-modules.service';
 import { CreateElementDto } from './dto/create-element.dto';
 import { UpdateElementDto } from './dto/update-element.dto';
 import { ElementQueryDto } from './dto/element-query.dto';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { UserRole } from '../../common/types/role.type';
 
 @Injectable()
 export class ElementModulesService {
@@ -95,8 +97,11 @@ export class ElementModulesService {
     return el;
   }
 
-  async create(dto: CreateElementDto) {
+  async create(dto: CreateElementDto, currentUser?: JwtPayload) {
     await this.ensureModuleExists(dto.moduleId);
+
+    const departmentId = await this.getDepartmentIdFromModuleId(dto.moduleId);
+    this.ensureCanManageDepartment(departmentId, currentUser);
 
     const element = await this.prisma.elementModule.create({
       data: {
@@ -138,9 +143,22 @@ export class ElementModulesService {
     });
   }
 
-  async update(id: number, dto: UpdateElementDto) {
-    await this.ensureExists(id);
+  async update(id: number, dto: UpdateElementDto, currentUser?: JwtPayload) {
+    const existing = await this.prisma.elementModule.findUnique({
+      where: { id },
+      select: { id: true, moduleId: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`ElementModule ${id} not found`);
+    }
+
     if (dto.moduleId) await this.ensureModuleExists(dto.moduleId);
+
+    const nextModuleId = dto.moduleId ?? existing.moduleId;
+    const departmentId = await this.getDepartmentIdFromModuleId(nextModuleId);
+    this.ensureCanManageDepartment(departmentId, currentUser);
+
     return this.prisma.elementModule.update({
       where: { id },
       data: {
@@ -154,9 +172,52 @@ export class ElementModulesService {
     });
   }
 
-  async remove(id: number) {
-    await this.ensureExists(id);
+  async remove(id: number, currentUser?: JwtPayload) {
+    const existing = await this.prisma.elementModule.findUnique({
+      where: { id },
+      select: { id: true, moduleId: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`ElementModule ${id} not found`);
+    }
+
+    const departmentId = await this.getDepartmentIdFromModuleId(existing.moduleId);
+    this.ensureCanManageDepartment(departmentId, currentUser);
+
     return this.prisma.elementModule.delete({ where: { id } });
+  }
+
+  private async getDepartmentIdFromModuleId(moduleId: number): Promise<number | null> {
+    const moduleEntity = await this.prisma.module.findUnique({
+      where: { id: moduleId },
+      select: { filiere: { select: { departmentId: true } } },
+    });
+
+    if (!moduleEntity) {
+      throw new NotFoundException(`Module ${moduleId} not found`);
+    }
+
+    return moduleEntity.filiere?.departmentId ?? null;
+  }
+
+  private ensureCanManageDepartment(
+    departmentId: number | null | undefined,
+    currentUser?: JwtPayload,
+  ) {
+    if (
+      !currentUser ||
+      (currentUser.role !== UserRole.USER &&
+        currentUser.role !== UserRole.VIEWER)
+    ) {
+      return;
+    }
+
+    if (!departmentId || !currentUser.departmentIds.includes(departmentId)) {
+      throw new ForbiddenException(
+        'You can only manage element modules in your own department',
+      );
+    }
   }
 
   private async ensureExists(id: number) {

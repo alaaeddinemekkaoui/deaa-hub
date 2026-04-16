@@ -23,6 +23,9 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/types/role.type';
 import { DepartmentQueryDto } from './dto/department-query.dto';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { deptScope } from '../../common/utils/dept-scope';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 
 @Controller('departments')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -30,9 +33,8 @@ export class DepartmentsController {
   constructor(private readonly departmentsService: DepartmentsService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
-  findAll(@Query() query: DepartmentQueryDto) {
-    return this.departmentsService.findAll(query);
+  findAll(@Query() query: DepartmentQueryDto, @CurrentUser() user: JwtPayload) {
+    return this.departmentsService.findAll(query, deptScope(user));
   }
 
   @Post('import')
@@ -49,7 +51,6 @@ export class DepartmentsController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.departmentsService.findOne(id);
   }
