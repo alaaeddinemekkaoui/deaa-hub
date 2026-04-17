@@ -155,11 +155,17 @@ async function fetchEntityRows(entity: Exclude<ExportEntity, 'everything'>): Pro
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  admin: 'Administrateur',
-  user: 'Utilisateur',
-  staff: 'Personnel',
-  viewer: 'Spectateur',
+  admin:     'Administrateur',
+  staff:     'Personnel',
+  viewer:    'Spectateur',
+  user:      'Utilisateur',
+  teacher:   'Enseignant',
+  student:   'Étudiant',
+  inspector: 'Inspecteur',
 };
+
+/** Roles that are department-scoped (need dept assignment) */
+const DEPT_SCOPED_ROLES = new Set(['user', 'teacher', 'student', 'inspector']);
 
 export default function UsersPage() {
   const { user } = useAuth();
@@ -339,8 +345,8 @@ export default function UsersPage() {
     setEmail(item.email);
     setUserRole(item.role);
     setPassword('');
-    // Only load departments for 'user' role; admins don't use them
-    setSelectedDeptIds(item.role === 'user' ? item.departments.map((d) => d.id) : []);
+    // Load departments for dept-scoped roles; admins/staff/viewer don't need them
+    setSelectedDeptIds(DEPT_SCOPED_ROLES.has(item.role) ? item.departments.map((d) => d.id) : []);
   };
 
   const resetRoleForm = () => { setEditingRoleId(null); setRoleName(''); };
@@ -426,9 +432,9 @@ export default function UsersPage() {
           icon={Users2}
         />
         <MetricCard
-          label="Administrateurs"
-          value={rows.filter((item) => item.role === 'admin').length}
-          hint="Niveau d'accès le plus élevé"
+          label="Dept. utilisateurs"
+          value={rows.filter((item) => DEPT_SCOPED_ROLES.has(item.role)).length}
+          hint="Enseignants, étudiants, inspecteurs"
           icon={ShieldCheck}
         />
         <MetricCard
@@ -482,12 +488,21 @@ export default function UsersPage() {
                 onChange={(event) => {
                   const next = event.target.value;
                   setUserRole(next);
-                  // Admins don't need department assignments
-                  if (next === 'admin') setSelectedDeptIds([]);
+                  // Clear dept assignment for non dept-scoped roles
+                  if (!DEPT_SCOPED_ROLES.has(next)) setSelectedDeptIds([]);
                 }}
               >
-                <option value="admin">Administrateur</option>
-                <option value="user">Utilisateur</option>
+                <optgroup label="Administratifs">
+                  <option value="admin">Administrateur</option>
+                  <option value="staff">Personnel</option>
+                  <option value="viewer">Spectateur</option>
+                </optgroup>
+                <optgroup label="Utilisateurs département">
+                  <option value="teacher">Enseignant</option>
+                  <option value="student">Étudiant</option>
+                  <option value="inspector">Inspecteur</option>
+                  <option value="user">Utilisateur</option>
+                </optgroup>
               </select>
             </div>
             <div className="field-stack">
@@ -503,8 +518,8 @@ export default function UsersPage() {
             </div>
           </div>
 
-          {/* Department assignment — always shown for 'user' role */}
-          {userRole === 'user' && (
+          {/* Department assignment — shown for all dept-scoped roles */}
+          {DEPT_SCOPED_ROLES.has(userRole) && (
             <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 space-y-3">
               <div>
                 <label className="field-label text-blue-900">Départements affectés</label>
@@ -602,9 +617,13 @@ export default function UsersPage() {
                     <td>
                       <span
                         className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                          item.role === 'admin'
-                            ? 'bg-purple-100 text-purple-800'
-                            : 'bg-slate-100 text-slate-700'
+                          item.role === 'admin'    ? 'bg-purple-100 text-purple-800' :
+                          item.role === 'staff'    ? 'bg-blue-100 text-blue-800' :
+                          item.role === 'viewer'   ? 'bg-slate-100 text-slate-600' :
+                          item.role === 'teacher'  ? 'bg-emerald-100 text-emerald-800' :
+                          item.role === 'student'  ? 'bg-amber-100 text-amber-800' :
+                          item.role === 'inspector'? 'bg-orange-100 text-orange-800' :
+                                                     'bg-slate-100 text-slate-700'
                         }`}
                       >
                         {ROLE_LABELS[item.role] ?? item.role}

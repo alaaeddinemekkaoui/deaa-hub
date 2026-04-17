@@ -8,7 +8,7 @@ import { Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
-import { UserRole } from '../../common/types/role.type';
+import { UserRole, isDeptScoped } from '../../common/types/role.type';
 import { CreateGradeDto } from './dto/create-grade.dto';
 import { UpdateGradeDto } from './dto/update-grade.dto';
 import { GradeQueryDto } from './dto/grade-query.dto';
@@ -1044,7 +1044,7 @@ export class GradesService {
   ) {
     if (
       !currentUser ||
-      (currentUser.role !== UserRole.USER &&
+      (!isDeptScoped(currentUser.role as UserRole) &&
         currentUser.role !== UserRole.VIEWER)
     ) {
       return;

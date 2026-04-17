@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
-import { UserRole } from '../types/role.type';
+import { UserRole, DEPT_SCOPED_ROLES } from '../types/role.type';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -32,10 +32,22 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
-    if (!user?.role || !requiredRoles.includes(user.role)) {
+    if (!user?.role) {
       throw new ForbiddenException('Insufficient role permissions');
     }
 
-    return true;
+    // Direct match
+    if (requiredRoles.includes(user.role)) {
+      return true;
+    }
+
+    // If the required roles include any dept-scoped role (e.g. USER) and the
+    // user's role is also dept-scoped (TEACHER / STUDENT / INSPECTOR), allow it.
+    const requiresDeptScoped = requiredRoles.some((r) => DEPT_SCOPED_ROLES.has(r));
+    if (requiresDeptScoped && DEPT_SCOPED_ROLES.has(user.role)) {
+      return true;
+    }
+
+    throw new ForbiddenException('Insufficient role permissions');
   }
 }

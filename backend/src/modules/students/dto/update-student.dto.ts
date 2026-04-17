@@ -37,6 +37,10 @@ export class UpdateStudentDto {
   codeMassar?: string;
 
   @IsOptional()
+  @IsString()
+  codeEtudiant?: string;
+
+  @IsOptional()
   @IsDateString()
   dateNaissance?: string;
 

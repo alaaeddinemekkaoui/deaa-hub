@@ -27,6 +27,8 @@ import { RoomReservationsModule } from './modules/room-reservations/room-reserva
 import { GradesModule } from './modules/grades/grades.module';
 import { AcademicYearsModule } from './modules/academic-years/academic-years.module';
 import { DocumentTypesModule } from './modules/document-types/document-types.module';
+import { MessagingModule } from './modules/messaging/messaging.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -56,6 +58,8 @@ import { DocumentTypesModule } from './modules/document-types/document-types.mod
     GradesModule,
     AcademicYearsModule,
     DocumentTypesModule,
+    MessagingModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

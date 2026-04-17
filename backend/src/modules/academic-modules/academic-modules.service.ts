@@ -9,7 +9,7 @@ import { CreateModuleDto } from './dto/create-module.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
 import { ModuleQueryDto } from './dto/module-query.dto';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
-import { UserRole } from '../../common/types/role.type';
+import { UserRole, isDeptScoped } from '../../common/types/role.type';
 
 @Injectable()
 export class AcademicModulesService {
@@ -363,7 +363,7 @@ export class AcademicModulesService {
   ) {
     if (
       !currentUser ||
-      (currentUser.role !== UserRole.USER &&
+      (!isDeptScoped(currentUser.role as UserRole) &&
         currentUser.role !== UserRole.VIEWER)
     ) {
       return;

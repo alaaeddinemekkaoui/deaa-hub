@@ -13,7 +13,7 @@ import { UpdateClassDto } from './dto/update-class.dto';
 import { ClassQueryDto } from './dto/class-query.dto';
 import { TransferClassDto } from './dto/transfer-class.dto';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
-import { UserRole } from '../../common/types/role.type';
+import { UserRole, isDeptScoped } from '../../common/types/role.type';
 
 @Injectable()
 export class ClassesService {
@@ -432,7 +432,7 @@ export class ClassesService {
   ) {
     if (
       !currentUser ||
-      (currentUser.role !== UserRole.USER &&
+      (!isDeptScoped(currentUser.role as UserRole) &&
         currentUser.role !== UserRole.VIEWER)
     ) {
       return;

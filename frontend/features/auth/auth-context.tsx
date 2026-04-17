@@ -16,7 +16,7 @@ export type AuthUser = {
   id: number;
   email: string;
   fullName?: string;
-  role: 'admin' | 'staff' | 'viewer' | 'user';
+  role: 'admin' | 'staff' | 'viewer' | 'user' | 'teacher' | 'student' | 'inspector';
   departments: Department[];
 };
 

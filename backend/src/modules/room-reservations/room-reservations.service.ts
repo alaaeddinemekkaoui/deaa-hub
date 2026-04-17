@@ -15,7 +15,7 @@ import { CreateRoomReservationDto } from './dto/create-room-reservation.dto';
 import { UpdateRoomReservationDto } from './dto/update-room-reservation.dto';
 import { RoomReservationQueryDto } from './dto/room-reservation-query.dto';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
-import { UserRole } from '../../common/types/role.type';
+import { UserRole, isDeptScoped } from '../../common/types/role.type';
 
 const ROOM_RESERVATION_INCLUDE = {
   room: {
@@ -263,7 +263,7 @@ export class RoomReservationsService {
     // Department scoping for regular users
     if (
       currentUser &&
-      currentUser.role === UserRole.USER &&
+      isDeptScoped(currentUser.role as UserRole) &&
       currentUser.departmentIds.length > 0
     ) {
       filters.push({
@@ -333,7 +333,7 @@ export class RoomReservationsService {
     roomDepartmentId: number | null,
     classDepartmentId: number | null,
   ) {
-    if (currentUser.role !== UserRole.USER) return;
+    if (!isDeptScoped(currentUser.role as UserRole)) return;
 
     const allowedDepartmentIds = currentUser.departmentIds ?? [];
     if (allowedDepartmentIds.length === 0) {

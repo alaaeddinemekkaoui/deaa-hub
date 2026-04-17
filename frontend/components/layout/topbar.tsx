@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { LogOut, Pencil, X, Check, Eye, EyeOff } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Bell, LogOut, MessageSquare, Pencil, X, Check, Eye, EyeOff } from 'lucide-react';
+import Link from 'next/link';
 import { useAuth } from '@/features/auth/auth-context';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { api } from '@/services/api';
+import { cn } from '@/lib/utils';
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 function initials(name?: string, email?: string): string {
@@ -216,6 +219,139 @@ function ProfileDrawer({ onClose }: { onClose: () => void }) {
   );
 }
 
+/* ── Notification Bell ──────────────────────────────────────── */
+type Notification = {
+  id: number;
+  content: string;
+  read: boolean;
+  createdAt: string;
+  type: string;
+  message?: { id: number; sender?: { fullName: string }; group?: { name: string } } | null;
+};
+
+function NotificationBell() {
+  const [open, setOpen] = useState(false);
+  const [count, setCount] = useState(0);
+  const [items, setItems] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const fetchCount = useCallback(async () => {
+    try {
+      const res = await api.get<{ count: number }>('/notifications/count');
+      setCount(res.data.count);
+    } catch { /* silent */ }
+  }, []);
+
+  const fetchNotifications = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get<Notification[]>('/notifications', { params: { unreadOnly: false } });
+      setItems(res.data);
+    } catch { /* silent */ } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Poll count every 30 s
+  useEffect(() => {
+    void fetchCount();
+    const id = setInterval(() => void fetchCount(), 30_000);
+    return () => clearInterval(id);
+  }, [fetchCount]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const handleOpen = () => {
+    setOpen((v) => !v);
+    void fetchNotifications();
+  };
+
+  const markRead = async (id: number) => {
+    try {
+      await api.patch(`/notifications/${id}/read`);
+      setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+      setCount((c) => Math.max(0, c - 1));
+    } catch { /* silent */ }
+  };
+
+  const markAllRead = async () => {
+    try {
+      await api.patch('/notifications/mark-all-read');
+      setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+      setCount(0);
+    } catch { /* silent */ }
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={handleOpen}
+        className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors"
+        title="Notifications"
+      >
+        <Bell size={15} />
+        {count > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-0.5 text-[10px] font-bold text-white leading-none">
+            {count > 99 ? '99+' : count}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-11 z-50 w-80 rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+            <span className="text-sm font-semibold text-slate-800">Notifications</span>
+            {count > 0 && (
+              <button type="button" onClick={markAllRead} className="text-[11px] text-emerald-600 hover:text-emerald-700">
+                Tout marquer lu
+              </button>
+            )}
+          </div>
+          <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
+            {loading ? (
+              <div className="py-6 text-center text-xs text-slate-400">Chargement…</div>
+            ) : items.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">Aucune notification</div>
+            ) : (
+              items.slice(0, 20).map((n) => (
+                <div
+                  key={n.id}
+                  className={cn('flex gap-2.5 px-4 py-3 hover:bg-slate-50 cursor-pointer transition-colors', !n.read && 'bg-emerald-50/60')}
+                  onClick={() => { if (!n.read) void markRead(n.id); }}
+                >
+                  <div className={cn('mt-0.5 h-2 w-2 shrink-0 rounded-full', n.read ? 'bg-slate-200' : 'bg-emerald-500')} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] text-slate-700 leading-snug">{n.content}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {new Date(n.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="border-t border-slate-100 px-4 py-2.5">
+            <Link href="/messages" onClick={() => setOpen(false)} className="flex items-center gap-1.5 text-[12px] text-emerald-600 hover:text-emerald-700 font-medium">
+              <MessageSquare size={12} />
+              Ouvrir la messagerie
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Topbar ─────────────────────────────────────────────────── */
 export function Topbar() {
   const { user, logout } = useAuth();
@@ -235,6 +371,8 @@ export function Topbar() {
         </div>
 
         <div className="flex items-center gap-3">
+          <NotificationBell />
+
           {/* Clickable user info → opens profile drawer */}
           <button
             type="button"

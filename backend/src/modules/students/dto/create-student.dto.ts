@@ -33,6 +33,10 @@ export class CreateStudentDto {
   @IsString()
   codeMassar: string;
 
+  @IsOptional()
+  @IsString()
+  codeEtudiant?: string;
+
   @IsDateString()
   dateNaissance: string;
 

@@ -22,7 +22,7 @@ import {
   Home,
   Layers,
   Medal,
-
+  MessageSquare,
   NotebookPen,
   RefreshCw,
   Scale,
@@ -56,7 +56,7 @@ const navigation: NavGroup[] = [
   },
   {
     heading: 'Étudiants',
-    roles: ['admin', 'staff', 'viewer', 'user'],
+    roles: ['admin', 'staff', 'viewer', 'user', 'teacher', 'student', 'inspector'],
     items: [
       { href: '/students',      label: 'Étudiants',    caption: 'Profils et cohortes',              icon: GraduationCap },
       { href: '/grades',        label: 'Épreuves',     caption: 'Notes par classe et module',       icon: BookOpen },
@@ -67,7 +67,7 @@ const navigation: NavGroup[] = [
   },
   {
     heading: 'Enseignants',
-    roles: ['admin', 'staff', 'viewer', 'user'],
+    roles: ['admin', 'staff', 'viewer', 'user', 'teacher', 'student', 'inspector'],
     items: [
       { href: '/teachers', label: 'Professeurs', caption: 'Permanents et vacataires', icon: Users },
     ],
@@ -101,6 +101,12 @@ const navigation: NavGroup[] = [
       { href: '/filieres',    label: 'Filières',     caption: 'Programmes et voies',           icon: BookOpen },
       { href: '/structure',   label: 'Options',      caption: 'Spécialités par filière',       icon: Layers },
       { href: '/cycles',      label: 'Cycles',       caption: 'Cycles académiques',            icon: RefreshCw },
+    ],
+  },
+  {
+    heading: 'Messagerie',
+    items: [
+      { href: '/messages', label: 'Messages', caption: 'Groupes et conversations', icon: MessageSquare },
     ],
   },
   {
@@ -197,7 +203,7 @@ export function Sidebar() {
         </div>
 
         {/* Department badge for regular users */}
-        {role === 'user' && user?.departments && user.departments.length > 0 && (
+        {(['user', 'teacher', 'student', 'inspector'] as const).includes(role as 'user' | 'teacher' | 'student' | 'inspector') && user?.departments && user.departments.length > 0 && (
           <div className="mx-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Mes départements</p>
             <div className="mt-1 flex flex-wrap gap-1">

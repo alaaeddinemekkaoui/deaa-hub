@@ -10,7 +10,7 @@ import { CreateElementDto } from './dto/create-element.dto';
 import { UpdateElementDto } from './dto/update-element.dto';
 import { ElementQueryDto } from './dto/element-query.dto';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
-import { UserRole } from '../../common/types/role.type';
+import { UserRole, isDeptScoped } from '../../common/types/role.type';
 
 @Injectable()
 export class ElementModulesService {
@@ -215,7 +215,7 @@ export class ElementModulesService {
   ) {
     if (
       !currentUser ||
-      (currentUser.role !== UserRole.USER &&
+      (!isDeptScoped(currentUser.role as UserRole) &&
         currentUser.role !== UserRole.VIEWER)
     ) {
       return;

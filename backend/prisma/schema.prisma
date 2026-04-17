@@ -12,6 +12,9 @@ enum UserRole {
   staff
   viewer
   user
+  teacher
+  student
+  inspector
 }
 
 enum ReservationStatus {
@@ -70,6 +73,15 @@ enum AccreditationPlanStatus {
   archived
 }
 
+enum GroupType {
+  EVERYONE
+  ADMINS_ONLY
+  FILIERE
+  DEPARTMENT
+  CYCLE
+  CUSTOM
+}
+
 model User {
   id                    Int               @id @default(autoincrement())
   fullName              String
@@ -81,8 +93,13 @@ model User {
   activityLogs          ActivityLog[]
   assignedWorkflows     WorkflowTask[]
   departments           UserDepartment[]
-  requestedReservations RoomReservation[] @relation("RequestedReservations")
-  approvedReservations  RoomReservation[] @relation("ApprovedReservations")
+  requestedReservations RoomReservation[]    @relation("RequestedReservations")
+  approvedReservations  RoomReservation[]    @relation("ApprovedReservations")
+  sentMessages          Message[]            @relation("SentMessages")
+  receivedMessages      Message[]            @relation("ReceivedMessages")
+  groupMemberships      MessageGroupMember[]
+  notifications         Notification[]
+  studentProfile        Student?
 }
 
 model UserDepartment {
@@ -136,6 +153,7 @@ model Student {
   sex             Sex
   cin             String                @unique
   codeMassar      String                @unique
+  codeEtudiant    String?               @unique
   dateNaissance   DateTime
   email           String?               @unique
   telephone       String?
@@ -151,6 +169,8 @@ model Student {
   dateInscription DateTime              @default(now())
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
+  userId          Int?                  @unique  // linked User account (role: student)
+  user            User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
   filiere         Filiere?              @relation(fields: [filiereId], references: [id], onDelete: SetNull)
   academicClass   AcademicClass?        @relation(fields: [classId], references: [id], onDelete: SetNull)
   classHistory    StudentClassHistory[]
@@ -413,6 +433,65 @@ model WorkflowTimeline {
   task      WorkflowTask   @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
+}
+
+model MessageGroup {
+  id          Int                  @id @default(autoincrement())
+  name        String
+  type        GroupType
+  referenceId Int?                 // filiereId / departmentId / cycleId for auto-groups
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  members     MessageGroupMember[]
+  messages    Message[]
+
+  @@index([type])
+  @@index([referenceId])
+}
+
+model MessageGroupMember {
+  groupId Int
+  userId  Int
+  canSend Boolean      @default(false)
+  group   MessageGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id            Int           @id @default(autoincrement())
+  senderId      Int
+  content       String
+  fileUrl       String?
+  createdAt     DateTime      @default(now())
+  recipientId   Int?          // for 1:1 messages
+  groupId       Int?          // for group messages
+  sender        User          @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient     User?         @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: SetNull)
+  group         MessageGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  notifications Notification[]
+
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([groupId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  messageId Int?
+  type      String   @default("message")
+  content   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message   Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }
 
 model Room {

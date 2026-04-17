@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { getCorsOptions } from './common/cors';
+import { MessagingService } from './modules/messaging/messaging.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -14,6 +15,12 @@ async function bootstrap() {
       transform: true,
       forbidNonWhitelisted: true,
     }),
+  );
+
+  // Seed default message groups (EVERYONE, ADMINS_ONLY, per dept/filière/cycle)
+  const messaging = app.get(MessagingService);
+  await messaging.seedSystemGroups().catch((e) =>
+    console.warn('⚠️  Messaging seed failed (non-fatal):', e),
   );
 
   const port = process.env.PORT ?? 4000;

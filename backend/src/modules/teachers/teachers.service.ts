@@ -17,7 +17,7 @@ import { UpdateTeacherRoleDto } from './dto/update-teacher-role.dto';
 import { CreateTeacherGradeDto } from './dto/create-teacher-grade.dto';
 import { UpdateTeacherGradeDto } from './dto/update-teacher-grade.dto';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
-import { UserRole } from '../../common/types/role.type';
+import { UserRole, isDeptScoped } from '../../common/types/role.type';
 
 @Injectable()
 export class TeachersService {
@@ -357,7 +357,7 @@ export class TeachersService {
   ) {
     if (
       !currentUser ||
-      (currentUser.role !== UserRole.USER &&
+      (!isDeptScoped(currentUser.role as UserRole) &&
         currentUser.role !== UserRole.VIEWER)
     ) {
       return;

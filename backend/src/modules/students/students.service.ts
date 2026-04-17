@@ -1,9 +1,11 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { TransferStudentsDto } from './dto/transfer-students.dto';
 import { ProgressStudentsDto } from './dto/progress-students.dto';
 import { PrepaYear, Prisma, StudentCycle } from '@prisma/client';
@@ -13,7 +15,7 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
-import { UserRole } from '../../common/types/role.type';
+import { UserRole, isDeptScoped } from '../../common/types/role.type';
 
 @Injectable()
 export class StudentsService {
@@ -255,7 +257,7 @@ export class StudentsService {
   ) {
     if (
       !currentUser ||
-      (currentUser.role !== UserRole.USER &&
+      (!isDeptScoped(currentUser.role as UserRole) &&
         currentUser.role !== UserRole.VIEWER)
     ) {
       return;
@@ -317,6 +319,7 @@ export class StudentsService {
       ...(dto.sex !== undefined ? { sex: dto.sex } : {}),
       ...(dto.cin !== undefined ? { cin: dto.cin } : {}),
       ...(dto.codeMassar !== undefined ? { codeMassar: dto.codeMassar } : {}),
+      ...(dto.codeEtudiant !== undefined ? { codeEtudiant: dto.codeEtudiant ?? null } : {}),
       ...(dto.dateNaissance
         ? { dateNaissance: new Date(dto.dateNaissance) }
         : {}),
@@ -832,6 +835,7 @@ export class StudentsService {
           fullName: cellString(row['fullName']) || undefined,
           cin: cellString(row['cin'], row['CIN']),
           codeMassar: cellString(row['codeMassar'], row['Code Massar']),
+          codeEtudiant: cellString(row['codeEtudiant'], row['Code Étudiant']) || undefined,
           sex: (['male', 'female'].includes(
             cellString(row['sex']).toLowerCase(),
           )
@@ -862,5 +866,100 @@ export class StudentsService {
     }
 
     return { imported, errors };
+  }
+
+  // ─── Account creation ────────────────────────────────────────────────────────
+
+  /**
+   * Create (or retrieve) a User account for a student.
+   * Email: student.email if set, else {codeEtudiant}@iav.ac.ma, else {codeMassar}@iav.ac.ma
+   * Role: student. Linked back via Student.userId.
+   */
+  async createAccount(
+    studentId: number,
+    password: string,
+    currentUser?: JwtPayload,
+  ) {
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      include: { filiere: { select: { department: { select: { id: true } } } } },
+    });
+    if (!student) throw new NotFoundException(`Student ${studentId} not found`);
+
+    const departmentId =
+      student.filiere?.department?.id ?? null;
+    this.ensureCanManageDepartment(departmentId, currentUser);
+
+    if (student.userId) {
+      throw new ConflictException('Student already has a user account');
+    }
+
+    const identifier = student.codeEtudiant ?? student.codeMassar;
+    const email = student.email ?? `${identifier}@iav.ac.ma`;
+
+    // Check email not already taken
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      throw new ConflictException(
+        `Email ${email} is already in use. Update the student's email first.`,
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const [user] = await this.prisma.$transaction([
+      this.prisma.user.create({
+        data: {
+          fullName: student.fullName,
+          email,
+          role: 'student',
+          passwordHash,
+          ...(departmentId
+            ? { departments: { create: [{ departmentId }] } }
+            : {}),
+        },
+        select: { id: true, fullName: true, email: true, role: true },
+      }),
+    ]);
+
+    await this.prisma.student.update({
+      where: { id: studentId },
+      data: { userId: user.id },
+    });
+
+    return { user, studentId };
+  }
+
+  /**
+   * Bulk-create accounts for multiple students using one shared default password.
+   * Skips students that already have an account. Returns counts + per-student errors.
+   */
+  async bulkCreateAccounts(
+    studentIds: number[],
+    defaultPassword: string,
+    currentUser?: JwtPayload,
+  ): Promise<{ created: number; skipped: number; errors: string[] }> {
+    const errors: string[] = [];
+    let created = 0;
+    let skipped = 0;
+
+    for (const id of studentIds) {
+      try {
+        await this.createAccount(id, defaultPassword, currentUser);
+        created++;
+      } catch (err: unknown) {
+        if (
+          err instanceof ConflictException &&
+          (err.message.includes('already has') || err.message.includes('already in use'))
+        ) {
+          skipped++;
+        } else {
+          const msg = err instanceof Error ? err.message : 'Unknown error';
+          errors.push(`Student ${id}: ${msg}`);
+        }
+      }
+    }
+
+    return { created, skipped, errors };
   }
 }
