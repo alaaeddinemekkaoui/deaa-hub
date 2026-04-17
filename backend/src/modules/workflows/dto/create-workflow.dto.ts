@@ -19,4 +19,8 @@ export class CreateWorkflowDto {
   @IsOptional()
   @IsInt()
   studentId?: number;
+
+  @IsOptional()
+  @IsInt()
+  documentTypeId?: number;
 }

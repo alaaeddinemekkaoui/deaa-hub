@@ -45,10 +45,11 @@ export default function ClassTransferPage() {
   const [selected, setSelected] = useState<AcademicClass | null>(null);
   const [targetClassId, setTargetClassId] = useState('');
   const [targetSearch, setTargetSearch] = useState('');
+  const [transferAcademicYear, setTransferAcademicYear] = useState('');
   const [transferring, setTransferring] = useState(false);
 
   // Session log
-  const [transferLog, setTransferLog] = useState<{ from: string; fromYear: number; to: string; toYear: number }[]>([]);
+  const [transferLog, setTransferLog] = useState<{ from: string; fromYear: number; to: string; toYear: number; academicYear?: string }[]>([]);
 
   const availableYears = useMemo(() => {
     const s = new Set(rows.map((r) => r.year));
@@ -126,18 +127,22 @@ export default function ClassTransferPage() {
     setSelected(item);
     setTargetClassId('');
     setTargetSearch('');
+    setTransferAcademicYear(`${item.year}/${item.year + 1}`);
   };
-  const closeModal = () => { setSelected(null); setTargetClassId(''); setTargetSearch(''); };
+  const closeModal = () => { setSelected(null); setTargetClassId(''); setTargetSearch(''); setTransferAcademicYear(''); };
 
   const onTransfer = async () => {
     if (!selected || !targetClassId) return;
     setTransferring(true);
     try {
-      await api.post(`/classes/${selected.id}/transfer`, { targetClassId: Number(targetClassId) });
+      await api.post(`/classes/${selected.id}/transfer`, {
+        targetClassId: Number(targetClassId),
+        academicYear: transferAcademicYear.trim() || undefined,
+      });
       const target = selectedTarget;
       toast.success(`Modules et enseignants transférés vers « ${target?.name} (${target?.year}) »`);
       setTransferLog((prev) => [
-        { from: selected.name, fromYear: selected.year, to: target?.name ?? '?', toYear: target?.year ?? 0 },
+        { from: selected.name, fromYear: selected.year, to: target?.name ?? '?', toYear: target?.year ?? 0, academicYear: transferAcademicYear.trim() || undefined },
         ...prev,
       ]);
       closeModal();
@@ -180,6 +185,9 @@ export default function ClassTransferPage() {
                 <ArrowRight size={14} className="text-slate-400" />
                 <span className="font-medium text-slate-800">{entry.to}</span>
                 <span className="status-chip status-chip--ok">{entry.toYear}</span>
+                {entry.academicYear && (
+                  <span className="status-chip status-chip--muted">{entry.academicYear}</span>
+                )}
               </div>
             ))}
           </div>
@@ -335,6 +343,20 @@ export default function ClassTransferPage() {
             </select>
           </div>
 
+          {/* Année scolaire */}
+          <div className="field-stack">
+            <label className="field-label">Année scolaire cible</label>
+            <input
+              className="input"
+              value={transferAcademicYear}
+              onChange={(e) => setTransferAcademicYear(e.target.value)}
+              placeholder="ex. 2025/2026"
+            />
+            <p className="text-[11px] text-slate-400">
+              Les modules copiés seront indépendants — modifier l&apos;année 2026 n&apos;affectera pas 2025.
+            </p>
+          </div>
+
           {/* Preview */}
           {selectedTarget && (
             <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
@@ -342,6 +364,7 @@ export default function ClassTransferPage() {
               <div>
                 <p className="font-medium text-emerald-800">
                   {selectedTarget.name} <span className="status-chip status-chip--ok ml-1">{selectedTarget.year}</span>
+                  {transferAcademicYear && <span className="ml-2 text-emerald-600 text-xs">· {transferAcademicYear}</span>}
                 </p>
                 <p className="text-emerald-700 text-xs mt-0.5">
                   {selectedTarget.filiere?.name ?? 'Aucune filière'} · {selectedTarget._count.students} étudiant(s)

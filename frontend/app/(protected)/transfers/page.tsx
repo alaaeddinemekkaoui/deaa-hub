@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle, XCircle, RefreshCw, ChevronDown } from 'lucide-react';
 import { PageHeader } from '@/components/admin/page-header';
-import { api } from '@/services/api';
+import { api, fetchCollectionRef } from '@/services/api';
 import { toast } from 'sonner';
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
@@ -183,13 +183,13 @@ export default function TransfersPage() {
   /* load reference data on mount */
   useEffect(() => {
     Promise.all([
-      api.get('/departments', { params: { limit: 200 } }),
-      api.get('/filieres', { params: { limit: 200 } }),
-      api.get('/classes', { params: { limit: 200 } }),
-    ]).then(([deptRes, filRes, clsRes]) => {
-      setDepartments((deptRes.data?.data as Department[]) || []);
-      setFilieres((filRes.data?.data as Filiere[]) || []);
-      setClasses((clsRes.data?.data as AcademicClass[]) || []);
+      fetchCollectionRef<Department>('/departments', { limit: 200 }),
+      fetchCollectionRef<Filiere>('/filieres', { limit: 200 }),
+      fetchCollectionRef<AcademicClass>('/classes', { limit: 200 }),
+    ]).then(([departmentsData, filieresData, classesData]) => {
+      setDepartments(departmentsData);
+      setFilieres(filieresData);
+      setClasses(classesData);
     }).catch(() => toast.error('Impossible de charger les données'));
   }, []);
 

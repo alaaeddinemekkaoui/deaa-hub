@@ -15,9 +15,10 @@ export class RoomsService {
   constructor(private readonly prisma: PrismaService) {}
 
   findAll(departmentIds?: number[]) {
-    const where = departmentIds !== undefined
-      ? { departmentId: { in: departmentIds } }
-      : undefined;
+    const where =
+      departmentIds !== undefined
+        ? { departmentId: { in: departmentIds } }
+        : undefined;
 
     return this.prisma.room.findMany({
       where,

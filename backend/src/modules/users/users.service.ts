@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { TtlCache } from '../../common/utils/ttl-cache';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -42,14 +43,22 @@ function mapDepartments(user: UserWithDepts): MappedUser {
 
 @Injectable()
 export class UsersService {
+  private readonly listCache = new TtlCache<MappedUser[]>({
+    key: 'users:list',
+    ttlMs: 5 * 60 * 1000,
+    staleTtlMs: 30 * 60 * 1000,
+  });
+
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll() {
-    const users = await this.prisma.user.findMany({
-      select: USER_SELECT,
-      orderBy: { createdAt: 'desc' },
+    return this.listCache.getOrLoad(async () => {
+      const users = await this.prisma.user.findMany({
+        select: USER_SELECT,
+        orderBy: { createdAt: 'desc' },
+      });
+      return users.map(mapDepartments);
     });
-    return users.map(mapDepartments);
   }
 
   async findOne(id: number) {
@@ -95,12 +104,15 @@ export class UsersService {
         passwordHash,
         departments: dto.departmentIds?.length
           ? {
-              create: dto.departmentIds.map((departmentId) => ({ departmentId })),
+              create: dto.departmentIds.map((departmentId) => ({
+                departmentId,
+              })),
             }
           : undefined,
       },
       select: USER_SELECT,
     });
+    this.listCache.invalidate();
     return mapDepartments(user);
   }
 
@@ -117,7 +129,10 @@ export class UsersService {
         await tx.userDepartment.deleteMany({ where: { userId: id } });
         if (departmentIds.length > 0) {
           await tx.userDepartment.createMany({
-            data: departmentIds.map((departmentId) => ({ userId: id, departmentId })),
+            data: departmentIds.map((departmentId) => ({
+              userId: id,
+              departmentId,
+            })),
           });
         }
       }
@@ -129,10 +144,12 @@ export class UsersService {
       });
     });
 
+    this.listCache.invalidate();
     return mapDepartments(user);
   }
 
   remove(id: number) {
+    this.listCache.invalidate();
     return this.prisma.user.delete({ where: { id } });
   }
 }

@@ -23,6 +23,10 @@ export class UpdateWorkflowDto {
   studentId?: number;
 
   @IsOptional()
+  @IsInt()
+  documentTypeId?: number;
+
+  @IsOptional()
   @IsString()
   timelineNote?: string;
 }

@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ElementType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AcademicModulesService } from '../academic-modules/academic-modules.service';
@@ -182,13 +186,17 @@ export class ElementModulesService {
       throw new NotFoundException(`ElementModule ${id} not found`);
     }
 
-    const departmentId = await this.getDepartmentIdFromModuleId(existing.moduleId);
+    const departmentId = await this.getDepartmentIdFromModuleId(
+      existing.moduleId,
+    );
     this.ensureCanManageDepartment(departmentId, currentUser);
 
     return this.prisma.elementModule.delete({ where: { id } });
   }
 
-  private async getDepartmentIdFromModuleId(moduleId: number): Promise<number | null> {
+  private async getDepartmentIdFromModuleId(
+    moduleId: number,
+  ): Promise<number | null> {
     const moduleEntity = await this.prisma.module.findUnique({
       where: { id: moduleId },
       select: { filiere: { select: { departmentId: true } } },

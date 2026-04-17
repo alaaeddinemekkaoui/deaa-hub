@@ -20,7 +20,18 @@ export class ClassesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: ClassQueryDto, departmentIds?: number[]) {
-    const { page, limit, search, filiereId, departmentId, year, cycleId, optionId, sortBy, sortOrder } = query;
+    const {
+      page,
+      limit,
+      search,
+      filiereId,
+      departmentId,
+      year,
+      cycleId,
+      optionId,
+      sortBy,
+      sortOrder,
+    } = query;
 
     const filters: Prisma.AcademicClassWhereInput[] = [];
 
@@ -40,16 +51,21 @@ export class ClassesService {
     if (optionId) filters.push({ optionId });
     // JWT-scoped department filter
     if (departmentIds !== undefined) {
-      filters.push({ filiere: { is: { departmentId: { in: departmentIds } } } });
+      filters.push({
+        filiere: { is: { departmentId: { in: departmentIds } } },
+      });
     }
 
-    const where: Prisma.AcademicClassWhereInput = filters.length > 0 ? { AND: filters } : {};
+    const where: Prisma.AcademicClassWhereInput =
+      filters.length > 0 ? { AND: filters } : {};
 
     const [data, total] = await Promise.all([
       this.prisma.academicClass.findMany({
         where,
         include: {
-          filiere: { include: { department: { select: { id: true, name: true } } } },
+          filiere: {
+            include: { department: { select: { id: true, name: true } } },
+          },
           academicOption: { select: { id: true, name: true, code: true } },
           cycle: { select: { id: true, name: true, code: true } },
           _count: { select: { students: true, teachers: true, cours: true } },
@@ -67,7 +83,9 @@ export class ClassesService {
     return {
       data,
       meta: {
-        page, limit, total,
+        page,
+        limit,
+        total,
         totalPages: Math.ceil(total / limit) || 1,
         hasNextPage: page * limit < total,
         hasPreviousPage: page > 1,
@@ -154,11 +172,15 @@ export class ClassesService {
 
     if (!existing) throw new NotFoundException(`Class ${id} not found`);
 
-    if (typeof dto.filiereId === 'number') await this.ensureFiliereExists(dto.filiereId);
-    if (typeof dto.cycleId === 'number') await this.ensureCycleExists(dto.cycleId);
-    if (typeof dto.optionId === 'number') await this.ensureOptionExists(dto.optionId);
+    if (typeof dto.filiereId === 'number')
+      await this.ensureFiliereExists(dto.filiereId);
+    if (typeof dto.cycleId === 'number')
+      await this.ensureCycleExists(dto.cycleId);
+    if (typeof dto.optionId === 'number')
+      await this.ensureOptionExists(dto.optionId);
 
-    const nextFiliereId = dto.filiereId !== undefined ? dto.filiereId : existing.filiereId;
+    const nextFiliereId =
+      dto.filiereId !== undefined ? dto.filiereId : existing.filiereId;
     const departmentId = nextFiliereId
       ? await this.getDepartmentIdFromFiliereId(nextFiliereId)
       : null;
@@ -173,10 +195,16 @@ export class ClassesService {
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.year !== undefined ? { year: dto.year } : {}),
-        ...(dto.classType !== undefined ? { classType: dto.classType ?? null } : {}),
+        ...(dto.classType !== undefined
+          ? { classType: dto.classType ?? null }
+          : {}),
         ...(dto.cycleId !== undefined ? { cycleId: dto.cycleId ?? null } : {}),
-        ...(dto.optionId !== undefined ? { optionId: dto.optionId ?? null } : {}),
-        ...(dto.filiereId !== undefined ? { filiereId: dto.filiereId ?? null } : {}),
+        ...(dto.optionId !== undefined
+          ? { optionId: dto.optionId ?? null }
+          : {}),
+        ...(dto.filiereId !== undefined
+          ? { filiereId: dto.filiereId ?? null }
+          : {}),
       },
     });
   }
@@ -198,7 +226,10 @@ export class ClassesService {
       currentUser,
     );
 
-    if (academicClass._count.students > 0 || academicClass._count.teachers > 0) {
+    if (
+      academicClass._count.students > 0 ||
+      academicClass._count.teachers > 0
+    ) {
       throw new BadRequestException(
         'Class cannot be deleted while students or teachers are still attached',
       );
@@ -220,7 +251,9 @@ export class ClassesService {
    */
   async transfer(id: number, dto: TransferClassDto, currentUser?: JwtPayload) {
     if (id === dto.targetClassId) {
-      throw new BadRequestException('Source and target class cannot be the same');
+      throw new BadRequestException(
+        'Source and target class cannot be the same',
+      );
     }
 
     const [source, target] = await Promise.all([
@@ -242,7 +275,10 @@ export class ClassesService {
     ]);
 
     if (!source) throw new NotFoundException(`Source class ${id} not found`);
-    if (!target) throw new NotFoundException(`Target class ${dto.targetClassId} not found`);
+    if (!target)
+      throw new NotFoundException(
+        `Target class ${dto.targetClassId} not found`,
+      );
 
     const [sourceDepartmentId, targetDepartmentId] = await Promise.all([
       this.getDepartmentIdFromClassId(source.id),
@@ -285,7 +321,9 @@ export class ClassesService {
       // Copy teacher assignments (skip duplicates)
       for (const tc of source.teachers) {
         const exists = await tx.teacherClass.findUnique({
-          where: { teacherId_classId: { teacherId: tc.teacherId, classId: target.id } },
+          where: {
+            teacherId_classId: { teacherId: tc.teacherId, classId: target.id },
+          },
         });
         if (!exists) {
           await tx.teacherClass.create({
@@ -294,35 +332,54 @@ export class ClassesService {
         }
       }
 
-      // Return the updated target class
-      return tx.academicClass.findUnique({
+      // Return the updated target class plus metadata
+      const updatedTarget = await tx.academicClass.findUnique({
         where: { id: target.id },
         include: {
-          filiere: { include: { department: { select: { id: true, name: true } } } },
+          filiere: {
+            include: { department: { select: { id: true, name: true } } },
+          },
           academicOption: { select: { id: true, name: true } },
           cycle: { select: { id: true, name: true } },
           _count: { select: { students: true, teachers: true, cours: true } },
         },
       });
+      return {
+        ...updatedTarget,
+        academicYear: dto.academicYear ?? null,
+      };
     });
   }
 
   private async ensureFiliereExists(id: number) {
-    const f = await this.prisma.filiere.findUnique({ where: { id }, select: { id: true } });
+    const f = await this.prisma.filiere.findUnique({
+      where: { id },
+      select: { id: true },
+    });
     if (!f) throw new NotFoundException(`Filiere ${id} not found`);
   }
 
   private async ensureCycleExists(id: number) {
-    const c = await this.prisma.cycle.findUnique({ where: { id }, select: { id: true } });
+    const c = await this.prisma.cycle.findUnique({
+      where: { id },
+      select: { id: true },
+    });
     if (!c) throw new NotFoundException(`Cycle ${id} not found`);
   }
 
   private async ensureOptionExists(id: number) {
-    const o = await this.prisma.option.findUnique({ where: { id }, select: { id: true } });
+    const o = await this.prisma.option.findUnique({
+      where: { id },
+      select: { id: true },
+    });
     if (!o) throw new NotFoundException(`Option ${id} not found`);
   }
 
-  private async ensureClassIdentityAvailable(name: string, year: number, excludeId?: number) {
+  private async ensureClassIdentityAvailable(
+    name: string,
+    year: number,
+    excludeId?: number,
+  ) {
     const existing = await this.prisma.academicClass.findFirst({
       where: {
         name: { equals: name, mode: 'insensitive' },
@@ -333,11 +390,15 @@ export class ClassesService {
     });
 
     if (existing) {
-      throw new ConflictException(`A class named "${name}" already exists for year ${year}`);
+      throw new ConflictException(
+        `A class named "${name}" already exists for year ${year}`,
+      );
     }
   }
 
-  private async getDepartmentIdFromFiliereId(filiereId: number): Promise<number | null> {
+  private async getDepartmentIdFromFiliereId(
+    filiereId: number,
+  ): Promise<number | null> {
     const filiere = await this.prisma.filiere.findUnique({
       where: { id: filiereId },
       select: { departmentId: true },
@@ -350,7 +411,9 @@ export class ClassesService {
     return filiere.departmentId;
   }
 
-  private async getDepartmentIdFromClassId(classId: number): Promise<number | null> {
+  private async getDepartmentIdFromClassId(
+    classId: number,
+  ): Promise<number | null> {
     const academicClass = await this.prisma.academicClass.findUnique({
       where: { id: classId },
       select: { filiere: { select: { departmentId: true } } },
@@ -382,10 +445,14 @@ export class ClassesService {
     }
   }
 
-  async importFromBuffer(buffer: Buffer): Promise<{ imported: number; errors: string[] }> {
+  async importFromBuffer(
+    buffer: Buffer,
+  ): Promise<{ imported: number; errors: string[] }> {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null });
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: null,
+    });
 
     let imported = 0;
     const errors: string[] = [];
@@ -403,7 +470,9 @@ export class ClassesService {
           name,
           year,
           filiereId: row['filiereId'] ? Number(row['filiereId']) : undefined,
-          classType: row['classType'] ? String(row['classType']).trim() : undefined,
+          classType: row['classType']
+            ? String(row['classType']).trim()
+            : undefined,
         });
         imported++;
       } catch (err: unknown) {

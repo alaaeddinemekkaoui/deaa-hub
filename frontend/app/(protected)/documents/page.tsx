@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ExportDataButton } from '@/components/admin/export-data-button';
 import { PageHeader } from '@/components/admin/page-header';
-import { api } from '@/services/api';
+import { api, fetchCollectionRef } from '@/services/api';
 import { toast } from 'sonner';
 
 type DocumentItem = {
@@ -32,26 +32,28 @@ export default function DocumentsPage() {
   const [editName, setEditName] = useState('');
   const [editOwnerType, setEditOwnerType] = useState<'student' | 'teacher'>('student');
 
-  const load = async () => {
-    const [docsRes, studentsRes, teachersRes] = await Promise.all([
-      api.get('/documents'),
-      api.get('/students', { params: { page: 1, limit: 200 } }),
-      api.get('/teachers', { params: { page: 1, limit: 200 } }),
+  const load = useCallback(async () => {
+    const [docsRes, studentsData, teachersData] = await Promise.all([
+      api.get<DocumentItem[]>('/documents'),
+      fetchCollectionRef<Student>('/students', { page: 1, limit: 200 }),
+      fetchCollectionRef<Teacher>('/teachers', { page: 1, limit: 200 }),
     ]);
     setRows(docsRes.data);
-    setStudents(studentsRes.data.data);
-    setTeachers(teachersRes.data.data);
-    if (!studentId && studentsRes.data.data.length > 0) {
-      setStudentId(String(studentsRes.data.data[0].id));
-    }
-    if (!teacherId && teachersRes.data.data.length > 0) {
-      setTeacherId(String(teachersRes.data.data[0].id));
-    }
-  };
+    setStudents(studentsData);
+    setTeachers(teachersData);
+    setStudentId((current) =>
+      current || (studentsData.length > 0 ? String(studentsData[0].id) : ''),
+    );
+    setTeacherId((current) =>
+      current || (teachersData.length > 0 ? String(teachersData[0].id) : ''),
+    );
+  }, []);
 
   useEffect(() => {
-    queueMicrotask(() => { void load(); });
-  }, []);
+    queueMicrotask(() => {
+      void load();
+    });
+  }, [load]);
 
   return (
     <div className="space-y-6">
@@ -114,7 +116,7 @@ export default function DocumentsPage() {
                 setStatus('Téléversement réussi');
                 toast.success('Document téléversé avec succès');
                 setFile(null);
-                load();
+                void load();
               } catch {
                 toast.error('Échec du téléversement');
               }
@@ -167,7 +169,7 @@ export default function DocumentsPage() {
                         try {
                           await api.delete(`/documents/${doc.id}`);
                           toast.success('Document supprimé');
-                          load();
+                          void load();
                         } catch { toast.error('Échec de la suppression'); }
                       }}>
                         Supprimer
@@ -203,7 +205,7 @@ export default function DocumentsPage() {
                 await api.patch(`/documents/${editingId}`, { name: editName });
                 toast.success('Document mis à jour');
                 setEditingId(null); setEditName('');
-                load();
+                void load();
               } catch { toast.error('Échec de la mise à jour'); }
             }}>
               Enregistrer

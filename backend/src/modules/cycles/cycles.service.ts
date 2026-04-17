@@ -10,20 +10,21 @@ import { UpdateCycleDto } from './dto/update-cycle.dto';
 
 @Injectable()
 export class CyclesService {
-  private readonly cache = new TtlCache<unknown[]>(5 * 60 * 1000);
+  private readonly cache = new TtlCache<unknown[]>({
+    key: 'cycles:list',
+    ttlMs: 5 * 60 * 1000,
+    staleTtlMs: 30 * 60 * 1000,
+  });
 
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll() {
-    const cached = this.cache.get();
-    if (cached) return cached;
-
-    const data = await this.prisma.cycle.findMany({
-      include: { _count: { select: { classes: true } } },
-      orderBy: { name: 'asc' },
-    });
-    this.cache.set(data);
-    return data;
+    return this.cache.getOrLoad(() =>
+      this.prisma.cycle.findMany({
+        include: { _count: { select: { classes: true } } },
+        orderBy: { name: 'asc' },
+      }),
+    );
   }
 
   async findOne(id: number) {

@@ -49,6 +49,7 @@ enum WorkflowStatus {
   pending
   in_progress
   completed
+  refused
 }
 
 enum DiplomaStatus {
@@ -162,6 +163,7 @@ model Student {
   @@index([codeMassar])
   @@index([filiereId])
   @@index([classId])
+  @@index([classId, fullName])
   @@index([cycle])
   @@index([sex])
   @@index([firstYearEntry])
@@ -184,6 +186,7 @@ model StudentClassHistory {
   classId        Int
   academicYear   String
   studyYear      Int
+  semestre       String?
   decisionStatus String?       @default("admis")
   createdAt      DateTime      @default(now())
   student        Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -250,6 +253,16 @@ model Cycle {
   updatedAt          DateTime            @updatedAt
   classes            AcademicClass[]
   accreditationPlans AccreditationPlan[]
+}
+
+model AcademicYear {
+  id        Int      @id @default(autoincrement())
+  label     String   @unique
+  isCurrent Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isCurrent])
 }
 
 // Each class record is year-specific (e.g. "1er APESA" year 2026).
@@ -356,23 +369,39 @@ model StudentGrade {
   @@index([elementModuleId])
   @@index([academicYear])
   @@index([subject])
+  @@index([studentId, academicYear], map: "idx_grade_student_year")
+  @@index([classId, academicYear, semester], map: "idx_grade_class_year_sem")
+  @@index([classId, moduleId, elementModuleId, academicYear, semester], map: "idx_grade_lookup_base")
+  @@index([classId, moduleId, elementModuleId, academicYear, semester, assessmentType], map: "idx_grade_lookup_assessment")
+}
+
+model DocumentType {
+  id          Int            @id @default(autoincrement())
+  name        String         @unique
+  description String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  workflows   WorkflowTask[]
 }
 
 model WorkflowTask {
-  id           Int                @id @default(autoincrement())
-  title        String
-  description  String?
-  status       WorkflowStatus     @default(pending)
-  assignedToId Int
-  studentId    Int?
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  assignedTo   User               @relation(fields: [assignedToId], references: [id], onDelete: Restrict)
-  student      Student?           @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  timeline     WorkflowTimeline[]
+  id             Int                @id @default(autoincrement())
+  title          String
+  description    String?
+  status         WorkflowStatus     @default(pending)
+  assignedToId   Int
+  studentId      Int?
+  documentTypeId Int?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  assignedTo     User               @relation(fields: [assignedToId], references: [id], onDelete: Restrict)
+  student        Student?           @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  documentType   DocumentType?      @relation(fields: [documentTypeId], references: [id], onDelete: SetNull)
+  timeline       WorkflowTimeline[]
 
   @@index([assignedToId])
   @@index([studentId])
+  @@index([documentTypeId])
 }
 
 model WorkflowTimeline {

@@ -39,17 +39,18 @@ export default function StudentClassTransferPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [studentSearch, setStudentSearch] = useState('');
 
-  // Step 3 — target class + academic year
+  // Step 3 — target class + academic year + semestre
   const [targetId, setTargetId] = useState('');
   const [targetSearch, setTargetSearch] = useState('');
   const [academicYear, setAcademicYear] = useState('');
+  const [semestre, setSemestre] = useState('S1');
 
   // Confirm modal
   const [modalOpen, setModalOpen] = useState(false);
   const [transferring, setTransferring] = useState(false);
 
   // Session log
-  const [log, setLog] = useState<{ count: number; from: string; to: string }[]>([]);
+  const [log, setLog] = useState<{ count: number; from: string; to: string; semestre: string; academicYear: string }[]>([]);
 
   // Load all classes once
   useEffect(() => {
@@ -130,7 +131,7 @@ export default function StudentClassTransferPage() {
     }
   };
 
-  const canConfirm = selected.size > 0 && targetId && academicYear.trim();
+  const canConfirm = selected.size > 0 && targetId && academicYear.trim() && semestre;
 
   const onTransfer = async () => {
     if (!canConfirm || !sourceId) return;
@@ -141,11 +142,12 @@ export default function StudentClassTransferPage() {
         toClassId: Number(targetId),
         studentIds: Array.from(selected),
         academicYear: academicYear.trim(),
+        semestre,
       });
       const { transferred, errors } = res.data;
       if (transferred > 0) {
         toast.success(`${transferred} étudiant(s) transféré(s) vers « ${targetClass?.name} (${targetClass?.year}) »`);
-        setLog((prev) => [{ count: transferred, from: sourceClass?.name + ' ' + (sourceClass?.year ?? ''), to: (targetClass?.name ?? '') + ' ' + (targetClass?.year ?? '') }, ...prev]);
+        setLog((prev) => [{ count: transferred, from: sourceClass?.name + ' ' + (sourceClass?.year ?? ''), to: (targetClass?.name ?? '') + ' ' + (targetClass?.year ?? ''), semestre, academicYear: academicYear.trim() }, ...prev]);
       }
       if (errors.length > 0) {
         toast.error(`${errors.length} erreur(s) : ${errors[0]}`);
@@ -187,6 +189,8 @@ export default function StudentClassTransferPage() {
                 <span className="font-medium text-slate-700">{entry.from}</span>
                 <ArrowRight size={14} className="text-slate-400" />
                 <span className="font-medium text-slate-700">{entry.to}</span>
+                <span className="status-chip status-chip--muted">{entry.semestre}</span>
+                <span className="text-slate-400 text-xs">{entry.academicYear}</span>
               </div>
             ))}
           </div>
@@ -270,14 +274,26 @@ export default function StudentClassTransferPage() {
               ))}
             </select>
           </div>
-          <div className="field-stack">
-            <label className="field-label">Année académique <span className="text-red-500">*</span></label>
-            <input
-              className="input"
-              value={academicYear}
-              onChange={(e) => setAcademicYear(e.target.value)}
-              placeholder="ex. 2026/2027"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="field-stack">
+              <label className="field-label">Année académique <span className="text-red-500">*</span></label>
+              <input
+                className="input"
+                value={academicYear}
+                onChange={(e) => setAcademicYear(e.target.value)}
+                placeholder="ex. 2026/2027"
+              />
+            </div>
+            <div className="field-stack">
+              <label className="field-label">Semestre <span className="text-red-500">*</span></label>
+              <input
+                className="input"
+                value={semestre}
+                onChange={(e) => setSemestre(e.target.value)}
+                placeholder="ex. S5"
+              />
+              <p className="text-[11px] text-slate-400">Saisissez le semestre selon les règles du cycle (ex. S5, S6).</p>
+            </div>
           </div>
           {targetClass && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
@@ -405,6 +421,7 @@ export default function StudentClassTransferPage() {
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1">
             <p className="text-slate-600"><strong>{selected.size}</strong> étudiant(s) seront transférés</p>
             <p className="text-slate-600">Année académique : <strong>{academicYear}</strong></p>
+            <p className="text-slate-600">Semestre : <strong>{semestre}</strong></p>
           </div>
           <p className="text-xs text-slate-500">
             Les étudiants transférés seront affectés à la nouvelle classe et leur historique sera mis à jour.

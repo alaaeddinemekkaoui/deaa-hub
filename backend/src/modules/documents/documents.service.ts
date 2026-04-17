@@ -81,7 +81,8 @@ export class DocumentsService {
       throw new BadRequestException('File is required');
     }
 
-    const ownerCount = Number(Boolean(dto.studentId)) + Number(Boolean(dto.teacherId));
+    const ownerCount =
+      Number(Boolean(dto.studentId)) + Number(Boolean(dto.teacherId));
     if (ownerCount !== 1) {
       throw new BadRequestException(
         'Provide exactly one owner: either studentId or teacherId',
@@ -166,7 +167,10 @@ export class DocumentsService {
     });
   }
 
-  update(id: number, dto: { name?: string; studentId?: number; teacherId?: number }) {
+  update(
+    id: number,
+    dto: { name?: string; studentId?: number; teacherId?: number },
+  ) {
     const ownerCount =
       Number(Boolean(dto.studentId)) + Number(Boolean(dto.teacherId));
     if (ownerCount > 1) {

@@ -23,10 +23,10 @@ export class FilieresService {
       departmentIds !== undefined && departmentId
         ? [departmentId].filter((id) => departmentIds.includes(id))
         : departmentIds !== undefined
-        ? departmentIds
-        : departmentId
-        ? [departmentId]
-        : undefined;
+          ? departmentIds
+          : departmentId
+            ? [departmentId]
+            : undefined;
 
     const where = {
       ...(search
@@ -37,7 +37,9 @@ export class FilieresService {
             ],
           }
         : {}),
-      ...(effectiveDeptIds !== undefined ? { departmentId: { in: effectiveDeptIds } } : {}),
+      ...(effectiveDeptIds !== undefined
+        ? { departmentId: { in: effectiveDeptIds } }
+        : {}),
     };
 
     const [data, total] = await Promise.all([

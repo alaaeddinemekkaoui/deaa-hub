@@ -21,8 +21,16 @@ import { UserRole } from '../../common/types/role.type';
 
 @Injectable()
 export class TeachersService {
-  private readonly rolesCache = new TtlCache<unknown[]>(5 * 60 * 1000);
-  private readonly gradesCache = new TtlCache<unknown[]>(5 * 60 * 1000);
+  private readonly rolesCache = new TtlCache<unknown[]>({
+    key: 'teachers:roles',
+    ttlMs: 5 * 60 * 1000,
+    staleTtlMs: 30 * 60 * 1000,
+  });
+  private readonly gradesCache = new TtlCache<unknown[]>({
+    key: 'teachers:grades',
+    ttlMs: 5 * 60 * 1000,
+    staleTtlMs: 30 * 60 * 1000,
+  });
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -403,14 +411,12 @@ export class TeachersService {
   }
 
   async findRoles() {
-    const cached = this.rolesCache.get();
-    if (cached) return cached;
-    const data = await this.prisma.teacherRole.findMany({
-      include: { _count: { select: { teachers: true } } },
-      orderBy: { name: 'asc' },
-    });
-    this.rolesCache.set(data);
-    return data;
+    return this.rolesCache.getOrLoad(() =>
+      this.prisma.teacherRole.findMany({
+        include: { _count: { select: { teachers: true } } },
+        orderBy: { name: 'asc' },
+      }),
+    );
   }
 
   async createRole(dto: CreateTeacherRoleDto) {
@@ -462,14 +468,12 @@ export class TeachersService {
   }
 
   async findGrades() {
-    const cached = this.gradesCache.get();
-    if (cached) return cached;
-    const data = await this.prisma.teacherGrade.findMany({
-      include: { _count: { select: { teachers: true } } },
-      orderBy: { name: 'asc' },
-    });
-    this.gradesCache.set(data);
-    return data;
+    return this.gradesCache.getOrLoad(() =>
+      this.prisma.teacherGrade.findMany({
+        include: { _count: { select: { teachers: true } } },
+        orderBy: { name: 'asc' },
+      }),
+    );
   }
 
   async createGrade(dto: CreateTeacherGradeDto) {

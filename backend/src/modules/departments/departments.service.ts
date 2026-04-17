@@ -19,10 +19,13 @@ export class DepartmentsService {
     const { page, limit, search, sortBy, sortOrder } = query;
 
     const filters: Prisma.DepartmentWhereInput[] = [];
-    if (search) filters.push({ name: { contains: search, mode: 'insensitive' } });
-    if (departmentIds !== undefined) filters.push({ id: { in: departmentIds } });
+    if (search)
+      filters.push({ name: { contains: search, mode: 'insensitive' } });
+    if (departmentIds !== undefined)
+      filters.push({ id: { in: departmentIds } });
 
-    const where: Prisma.DepartmentWhereInput = filters.length > 1 ? { AND: filters } : filters[0] ?? {};
+    const where: Prisma.DepartmentWhereInput =
+      filters.length > 1 ? { AND: filters } : (filters[0] ?? {});
 
     const [data, total] = await Promise.all([
       this.prisma.department.findMany({

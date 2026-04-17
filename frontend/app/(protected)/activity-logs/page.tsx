@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ExportDataButton } from '@/components/admin/export-data-button';
 import { PageHeader } from '@/components/admin/page-header';
-import { api } from '@/services/api';
+import { api, fetchCollectionRef } from '@/services/api';
 import { toast } from 'sonner';
 
 type Log = { id: number; userId: number; action: string; timestamp: string; user: { fullName: string } };
@@ -16,20 +16,23 @@ export default function ActivityLogsPage() {
   const [action, setAction] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
 
-  const load = async () => {
-    const [logsRes, usersRes] = await Promise.all([api.get('/activity-logs'), api.get('/users')]);
+  const load = useCallback(async () => {
+    const [logsRes, usersData] = await Promise.all([
+      api.get<Log[]>('/activity-logs'),
+      fetchCollectionRef<User>('/users'),
+    ]);
     setRows(logsRes.data);
-    setUsers(usersRes.data);
-    if (!userId && usersRes.data.length > 0) {
-      setUserId(String(usersRes.data[0].id));
-    }
-  };
+    setUsers(usersData);
+    setUserId((current) =>
+      current || (usersData.length > 0 ? String(usersData[0].id) : ''),
+    );
+  }, []);
 
   useEffect(() => {
     queueMicrotask(() => {
       void load();
     });
-  }, []);
+  }, [load]);
 
   const onSubmit = async () => {
     if (!userId || !action.trim()) return;
@@ -49,7 +52,7 @@ export default function ActivityLogsPage() {
       }
       setEditingId(null);
       setAction('');
-      load();
+      void load();
     } catch {
       toast.error("Échec de l'enregistrement du journal d'activité");
     }
@@ -60,7 +63,7 @@ export default function ActivityLogsPage() {
     try {
       await api.delete(`/activity-logs/${id}`);
       toast.success("Journal d'activité supprimé avec succès");
-      load();
+      void load();
     } catch {
       toast.error("Échec de la suppression du journal d'activité");
     }

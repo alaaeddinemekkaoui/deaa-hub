@@ -445,6 +445,8 @@ export class StudentsService {
     academicYear: unknown,
     firstYearEntry: unknown,
     decisionStatus?: string,
+    semestre?: string,
+    tx?: Prisma.TransactionClient,
   ) {
     const normalizedClassId = Number(classId);
     if (!Number.isInteger(normalizedClassId) || normalizedClassId < 1) {
@@ -469,7 +471,8 @@ export class StudentsService {
       ? Math.max(1, startYear - normalizedFirstYearEntry + 1)
       : 1;
 
-    await this.prisma.studentClassHistory.upsert({
+    const db = tx ?? this.prisma;
+    await db.studentClassHistory.upsert({
       where: {
         studentId_academicYear: {
           studentId,
@@ -480,6 +483,7 @@ export class StudentsService {
         classId: normalizedClassId,
         studyYear: computedStudyYear,
         ...(decisionStatus ? { decisionStatus } : {}),
+        ...(semestre ? { semestre } : {}),
       },
       create: {
         studentId,
@@ -487,6 +491,7 @@ export class StudentsService {
         academicYear,
         studyYear: computedStudyYear,
         ...(decisionStatus ? { decisionStatus } : {}),
+        ...(semestre ? { semestre } : {}),
       },
     });
   }
@@ -570,56 +575,54 @@ export class StudentsService {
       throw new NotFoundException(`Target class ${dto.toClassId} not found`);
     }
 
-    let transferred = 0;
+    // Single batch fetch instead of N individual findUnique calls
+    const students = await this.prisma.student.findMany({
+      where: { id: { in: dto.studentIds } },
+      select: { id: true, fullName: true, firstYearEntry: true, classId: true },
+    });
+    const studentMap = new Map(students.map((s) => [s.id, s]));
+
     const errors: string[] = [];
+    const validStudents: (typeof students)[number][] = [];
 
     for (const studentId of dto.studentIds) {
-      try {
-        const student = await this.prisma.student.findUnique({
-          where: { id: studentId },
-          select: {
-            id: true,
-            fullName: true,
-            firstYearEntry: true,
-            classId: true,
-            filiereId: true,
-            anneeAcademique: true,
-          },
-        });
+      const student = studentMap.get(studentId);
+      if (!student) {
+        errors.push(`Student ${studentId}: not found`);
+        continue;
+      }
+      if (student.classId !== dto.fromClassId) {
+        errors.push(
+          `Student ${student.fullName}: not enrolled in source class`,
+        );
+        continue;
+      }
+      validStudents.push(student);
+    }
 
-        if (!student) {
-          errors.push(`Student ${studentId}: not found`);
-          continue;
-        }
-
-        if (student.classId !== dto.fromClassId) {
-          errors.push(
-            `Student ${student.fullName}: not enrolled in source class`,
-          );
-          continue;
-        }
-
-        await this.prisma.student.update({
-          where: { id: studentId },
+    if (validStudents.length > 0) {
+      // Single updateMany + history upserts in one transaction
+      await this.prisma.$transaction(async (tx) => {
+        await tx.student.updateMany({
+          where: { id: { in: validStudents.map((s) => s.id) } },
           data: {
             classId: dto.toClassId,
             anneeAcademique: dto.academicYear,
             ...(toClass.filiereId ? { filiereId: toClass.filiereId } : {}),
           },
         });
-
-        await this.upsertClassHistory(
-          studentId,
-          dto.toClassId,
-          dto.academicYear,
-          student.firstYearEntry,
-        );
-
-        transferred++;
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        errors.push(`Student ${studentId}: ${message}`);
-      }
+        for (const student of validStudents) {
+          await this.upsertClassHistory(
+            student.id,
+            dto.toClassId,
+            dto.academicYear,
+            student.firstYearEntry,
+            undefined,
+            dto.semestre,
+            tx,
+          );
+        }
+      });
     }
 
     if (userId) {
@@ -632,14 +635,14 @@ export class StudentsService {
             toClassId: dto.toClassId,
             academicYear: dto.academicYear,
             studentIds: dto.studentIds,
-            transferred,
+            transferred: validStudents.length,
             errors: errors.length,
           },
         },
       });
     }
 
-    return { transferred, errors };
+    return { transferred: validStudents.length, errors };
   }
 
   async progressStudents(
@@ -654,70 +657,81 @@ export class StudentsService {
       throw new NotFoundException(`Target class ${dto.toClassId} not found`);
     }
 
-    let processed = 0;
+    // Single batch fetch instead of N individual findUnique calls
+    const students = await this.prisma.student.findMany({
+      where: { id: { in: dto.students.map((e) => e.id) } },
+      select: { id: true, fullName: true, firstYearEntry: true, classId: true },
+    });
+    const studentMap = new Map(students.map((s) => [s.id, s]));
+
     const errors: string[] = [];
+    type ValidEntry = { id: number; firstYearEntry: number; status: string };
+    const admisGroup: ValidEntry[] = [];
+    const otherGroup: ValidEntry[] = [];
 
     for (const entry of dto.students) {
-      try {
-        const student = await this.prisma.student.findUnique({
-          where: { id: entry.id },
-          select: {
-            id: true,
-            fullName: true,
-            firstYearEntry: true,
-            classId: true,
-            filiereId: true,
-            anneeAcademique: true,
-          },
-        });
+      const student = studentMap.get(entry.id);
+      if (!student) {
+        errors.push(`Étudiant ${entry.id}: introuvable`);
+        continue;
+      }
+      if (student.classId !== dto.fromClassId) {
+        errors.push(`${student.fullName}: non inscrit dans la classe source`);
+        continue;
+      }
+      const record = {
+        id: student.id,
+        firstYearEntry: student.firstYearEntry,
+        status: entry.status,
+      };
+      if (entry.status === 'admis') admisGroup.push(record);
+      else otherGroup.push(record);
+    }
 
-        if (!student) {
-          errors.push(`Étudiant ${entry.id}: introuvable`);
-          continue;
-        }
+    const processed = admisGroup.length + otherGroup.length;
 
-        if (student.classId !== dto.fromClassId) {
-          errors.push(`${student.fullName}: non inscrit dans la classe source`);
-          continue;
-        }
-
-        if (entry.status === 'admis') {
-          // Move to target class
-          await this.prisma.student.update({
-            where: { id: entry.id },
+    if (processed > 0) {
+      // Two updateMany calls + history upserts in one transaction
+      await this.prisma.$transaction(async (tx) => {
+        if (admisGroup.length > 0) {
+          await tx.student.updateMany({
+            where: { id: { in: admisGroup.map((s) => s.id) } },
             data: {
               classId: dto.toClassId,
               anneeAcademique: dto.academicYear,
               ...(toClass.filiereId ? { filiereId: toClass.filiereId } : {}),
             },
           });
-          await this.upsertClassHistory(
-            entry.id,
-            dto.toClassId,
-            dto.academicYear,
-            student.firstYearEntry,
-            'admis',
-          );
-        } else {
-          // Stay in same class, just update academic year
-          await this.prisma.student.update({
-            where: { id: entry.id },
+        }
+        if (otherGroup.length > 0) {
+          await tx.student.updateMany({
+            where: { id: { in: otherGroup.map((s) => s.id) } },
             data: { anneeAcademique: dto.academicYear },
           });
+        }
+        for (const s of admisGroup) {
           await this.upsertClassHistory(
-            entry.id,
-            dto.fromClassId,
+            s.id,
+            dto.toClassId,
             dto.academicYear,
-            student.firstYearEntry,
-            entry.status,
+            s.firstYearEntry,
+            'admis',
+            undefined,
+            tx,
           );
         }
-
-        processed++;
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        errors.push(`Étudiant ${entry.id}: ${message}`);
-      }
+        for (const s of otherGroup) {
+          await this.upsertClassHistory(
+            s.id,
+            dto.fromClassId,
+            dto.academicYear,
+            s.firstYearEntry,
+            s.status,
+            undefined,
+            tx,
+          );
+        }
+      });
     }
 
     if (userId) {

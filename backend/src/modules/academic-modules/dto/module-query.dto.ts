@@ -34,6 +34,12 @@ export class ModuleQueryDto extends PaginationDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  classId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   classYear?: number;
 
   @IsOptional()

@@ -75,12 +75,17 @@ export class UsersController {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
     const args = [
-      '-h', dbUrl.hostname,
-      '-p', dbUrl.port || '5432',
-      '-U', dbUrl.username,
-      '-d', dbUrl.pathname.replace(/^\//, ''),
+      '-h',
+      dbUrl.hostname,
+      '-p',
+      dbUrl.port || '5432',
+      '-U',
+      dbUrl.username,
+      '-d',
+      dbUrl.pathname.replace(/^\//, ''),
       '--no-password',
-      '-F', 'p',
+      '-F',
+      'p',
       '--encoding=UTF8',
     ];
 
@@ -90,7 +95,9 @@ export class UsersController {
 
     dump.on('error', (err) => {
       if (!res.headersSent) {
-        res.status(500).json({ message: `pg_dump unavailable: ${err.message}` });
+        res
+          .status(500)
+          .json({ message: `pg_dump unavailable: ${err.message}` });
       }
     });
 

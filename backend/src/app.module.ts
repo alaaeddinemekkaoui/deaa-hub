@@ -25,6 +25,8 @@ import { CyclesModule } from './modules/cycles/cycles.module';
 import { StudentObservationsModule } from './modules/student-observations/student-observations.module';
 import { RoomReservationsModule } from './modules/room-reservations/room-reservations.module';
 import { GradesModule } from './modules/grades/grades.module';
+import { AcademicYearsModule } from './modules/academic-years/academic-years.module';
+import { DocumentTypesModule } from './modules/document-types/document-types.module';
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { GradesModule } from './modules/grades/grades.module';
     StudentObservationsModule,
     RoomReservationsModule,
     GradesModule,
+    AcademicYearsModule,
+    DocumentTypesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

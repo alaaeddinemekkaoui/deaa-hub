@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsInt, IsString, Min } from 'class-validator';
+import { ArrayMinSize, IsArray, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 export class TransferStudentsDto {
   @Type(() => Number)
@@ -20,4 +20,8 @@ export class TransferStudentsDto {
 
   @IsString()
   academicYear: string;
+
+  @IsOptional()
+  @IsString()
+  semestre?: string;
 }

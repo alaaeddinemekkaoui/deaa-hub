@@ -898,6 +898,306 @@ async function main() {
   await upsertRoomReservation('Labo Informatique 1', 5, '08:00', '10:00', 'Pr. Fennich', RoomReservationPurpose.cours, 'TP Informatique IAG1');
   await upsertRoomReservation('Amphi B', 1, '14:00', '16:00', 'Pr. Chakroun', RoomReservationPurpose.cours, 'Cours Anatomie MV2');
 
+  // ─── Academic Years ───────────────────────────────────────────────────────
+  const yearDefs = [
+    { label: '2022/2023', isCurrent: false },
+    { label: '2023/2024', isCurrent: false },
+    { label: '2024/2025', isCurrent: false },
+    { label: '2025/2026', isCurrent: true },
+  ];
+  for (const y of yearDefs) {
+    await prisma.academicYear.upsert({
+      where: { label: y.label },
+      update: { isCurrent: y.isCurrent },
+      create: { label: y.label, isCurrent: y.isCurrent },
+    });
+  }
+
+  // ─── ModuleClass assignments (module → class links for deliberation) ──────
+  const upsertModuleClass = async (moduleId: number, classId: number) => {
+    await prisma.moduleClass.upsert({
+      where: { moduleId_classId: { moduleId, classId } },
+      update: {},
+      create: { moduleId, classId },
+    });
+  };
+
+  // APESA 1
+  for (const mod of [modMathApesa, modPhyChimApesa, modBioApesa, modInfoApesa, modLangApesa]) {
+    await upsertModuleClass(mod.id, classAPESA1.id);
+  }
+  // Agronomie 1A
+  for (const mod of [modAgronGen, modBiochim, modStatInfo, modPedologie, modBotanique]) {
+    await upsertModuleClass(mod.id, classAgro1.id);
+  }
+  // Agronomie 3A
+  for (const mod of [modFitopathol, modIrrig, modEconAgri]) {
+    await upsertModuleClass(mod.id, classAgro3.id);
+  }
+  // PVPP 4A
+  for (const mod of [modPhytotech, modProtPlantes]) {
+    await upsertModuleClass(mod.id, classPVPP4.id);
+  }
+  // Vétérinaire 1A
+  for (const mod of [modAnatomie, modHistoEmb, modPhysioVet, modZootechnie]) {
+    await upsertModuleClass(mod.id, classVeto1.id);
+  }
+  // Génie Rural 1A
+  for (const mod of [modMecaFluides, modTopographieGR, modHydroGR]) {
+    await upsertModuleClass(mod.id, classGR1.id);
+  }
+  // IAA 1A
+  for (const mod of [modMicroIAA, modChimIAA, modTechCons]) {
+    await upsertModuleClass(mod.id, classIAA1.id);
+  }
+
+  // ─── StudentGrades ────────────────────────────────────────────────────────
+  // Helper: upsert a single grade for a student × element
+  const upsertGrade = async (
+    studentId: number,
+    classId: number,
+    moduleId: number,
+    elementModuleId: number,
+    subject: string,
+    semester: string,
+    score: number,
+    academicYearLabel: string,
+  ) => {
+    const existing = await prisma.studentGrade.findFirst({
+      where: { studentId, elementModuleId, academicYear: academicYearLabel },
+      select: { id: true },
+    });
+    if (existing) {
+      await prisma.studentGrade.update({
+        where: { id: existing.id },
+        data: { score },
+      });
+      return;
+    }
+    await prisma.studentGrade.create({
+      data: {
+        studentId,
+        classId,
+        moduleId,
+        elementModuleId,
+        subject,
+        semester,
+        score,
+        maxScore: 20,
+        academicYear: academicYearLabel,
+        assessmentType: null,
+      },
+    });
+  };
+
+  // Helper to get element id by name and classId
+  const getEl = async (name: string, cId: number): Promise<number | null> => {
+    const el = await prisma.elementModule.findFirst({
+      where: { name, classId: cId },
+      select: { id: true },
+    });
+    return el?.id ?? null;
+  };
+
+  // Grades for APESA 1 (2025/2026) — 6 students
+  const apesa1Students = ['SA001001', 'SA002002', 'SA003003', 'SA004004', 'SA005005', 'SA006006'];
+  // Base scores per student (slight variation to make it realistic)
+  const apesa1Scores = [
+    [14, 13, 15, 14, 12, 13, 16, 14, 13, 12],
+    [16, 15, 17, 16, 14, 15, 18, 16, 14, 15],
+    [11, 10, 12, 11,  9, 10, 13, 11, 10,  9],
+    [13, 12, 14, 13, 11, 12, 15, 13, 12, 11],
+    [15, 14, 16, 15, 13, 14, 17, 15, 13, 14],
+    [12, 11, 13, 12, 10, 11, 14, 12, 11, 10],
+  ];
+  const apesa1Elements: { name: string; modId: number; sem: string }[] = [
+    { name: 'Analyse et Algèbre', modId: modMathApesa.id, sem: 'S1-S2' },
+    { name: 'Analyse et Algèbre - TD', modId: modMathApesa.id, sem: 'S1-S2' },
+    { name: 'Physique Générale', modId: modPhyChimApesa.id, sem: 'S1-S2' },
+    { name: 'Chimie Générale - TP', modId: modPhyChimApesa.id, sem: 'S1-S2' },
+    { name: 'Biologie Cellulaire', modId: modBioApesa.id, sem: 'S1-S2' },
+    { name: 'Biologie Cellulaire - TD', modId: modBioApesa.id, sem: 'S1-S2' },
+    { name: 'Algorithmique et Programmation', modId: modInfoApesa.id, sem: 'S1' },
+    { name: 'Algorithmique - TP', modId: modInfoApesa.id, sem: 'S1' },
+    { name: 'Français Scientifique', modId: modLangApesa.id, sem: 'S1-S2' },
+    { name: 'Anglais Technique', modId: modLangApesa.id, sem: 'S1-S2' },
+  ];
+  for (let si = 0; si < apesa1Students.length; si++) {
+    const cin = apesa1Students[si];
+    const studentId = savedStudents[cin];
+    for (let ei = 0; ei < apesa1Elements.length; ei++) {
+      const { name, modId, sem } = apesa1Elements[ei];
+      const elId = await getEl(name, classAPESA1.id);
+      if (!elId) continue;
+      await upsertGrade(studentId, classAPESA1.id, modId, elId, name, sem, apesa1Scores[si][ei], '2025/2026');
+    }
+  }
+
+  // Grades for Agronomie 1A (2025/2026) — 5 students
+  const agro1Students = ['SB001001', 'SB002002', 'SB003003', 'SB004004', 'SB005005'];
+  const agro1Scores = [
+    [13, 12, 14, 15, 14, 12, 11, 13, 12, 14, 13],
+    [16, 15, 17, 16, 15, 14, 13, 16, 15, 17, 16],
+    [10, 10, 11, 12, 11,  9,  8, 10,  9, 11, 10],
+    [14, 13, 15, 14, 13, 12, 11, 14, 13, 15, 14],
+    [12, 11, 13, 14, 13, 11, 10, 12, 11, 13, 12],
+  ];
+  const agro1Elements: { name: string; modId: number; sem: string }[] = [
+    { name: "Introduction à l'Agronomie", modId: modAgronGen.id, sem: 'S1' },
+    { name: 'Pratiques Agronomiques - TD', modId: modAgronGen.id, sem: 'S1' },
+    { name: 'Travaux Pratiques Agronomie', modId: modAgronGen.id, sem: 'S1' },
+    { name: 'Biochimie Structurale', modId: modBiochim.id, sem: 'S1' },
+    { name: 'Biochimie - TP Labo', modId: modBiochim.id, sem: 'S1' },
+    { name: 'Biostatistiques', modId: modStatInfo.id, sem: 'S2' },
+    { name: 'Biostatistiques - TD', modId: modStatInfo.id, sem: 'S2' },
+    { name: 'Pédologie Générale', modId: modPedologie.id, sem: 'S2' },
+    { name: 'Analyses de Sol - TP', modId: modPedologie.id, sem: 'S2' },
+    { name: 'Morphologie et Taxonomie Végétale', modId: modBotanique.id, sem: 'S1' },
+    { name: 'Herbiers et Identification - TP', modId: modBotanique.id, sem: 'S1' },
+  ];
+  for (let si = 0; si < agro1Students.length; si++) {
+    const cin = agro1Students[si];
+    const studentId = savedStudents[cin];
+    for (let ei = 0; ei < agro1Elements.length; ei++) {
+      const { name, modId, sem } = agro1Elements[ei];
+      const elId = await getEl(name, classAgro1.id);
+      if (!elId) continue;
+      await upsertGrade(studentId, classAgro1.id, modId, elId, name, sem, agro1Scores[si][ei], '2025/2026');
+    }
+  }
+
+  // Grades for Agronomie 3A (2025/2026) — 4 students
+  const agro3Students = ['SB006006', 'SB007007', 'SB008008', 'SB009009'];
+  const agro3Scores = [
+    [15, 14, 16, 14, 13, 15, 14],
+    [13, 12, 14, 12, 11, 13, 12],
+    [17, 16, 18, 16, 15, 17, 16],
+    [ 9,  8, 10,  8,  7,  9,  8],
+  ];
+  const agro3Elements: { name: string; modId: number; sem: string }[] = [
+    { name: 'Maladies des Plantes', modId: modFitopathol.id, sem: 'S5' },
+    { name: 'Diagnostic Phytosanitaire - TD', modId: modFitopathol.id, sem: 'S5' },
+    { name: "Principes de l'Irrigation", modId: modIrrig.id, sem: 'S5' },
+    { name: 'Dimensionnement - TD', modId: modIrrig.id, sem: 'S5' },
+    { name: 'Micro-irrigation - TP', modId: modIrrig.id, sem: 'S5' },
+    { name: 'Analyse Économique des Exploitations', modId: modEconAgri.id, sem: 'S6' },
+    { name: 'Études de Cas Agricoles - TD', modId: modEconAgri.id, sem: 'S6' },
+  ];
+  for (let si = 0; si < agro3Students.length; si++) {
+    const cin = agro3Students[si];
+    const studentId = savedStudents[cin];
+    for (let ei = 0; ei < agro3Elements.length; ei++) {
+      const { name, modId, sem } = agro3Elements[ei];
+      const elId = await getEl(name, classAgro3.id);
+      if (!elId) continue;
+      await upsertGrade(studentId, classAgro3.id, modId, elId, name, sem, agro3Scores[si][ei], '2025/2026');
+    }
+  }
+
+  // Grades for PVPP 4A (2025/2026) — 3 students
+  const pvpp4Students = ['SB010010', 'SB011011', 'SB012012'];
+  const pvpp4Scores = [
+    [14, 13, 15, 14],
+    [16, 15, 17, 16],
+    [12, 11, 13, 12],
+  ];
+  const pvpp4Elements: { name: string; modId: number; sem: string }[] = [
+    { name: 'Cultures Maraîchères', modId: modPhytotech.id, sem: 'S7' },
+    { name: 'Cultures Maraîchères - TD', modId: modPhytotech.id, sem: 'S7' },
+    { name: 'Lutte Biologique', modId: modProtPlantes.id, sem: 'S7' },
+    { name: 'Lutte Biologique - TP', modId: modProtPlantes.id, sem: 'S7' },
+  ];
+  for (let si = 0; si < pvpp4Students.length; si++) {
+    const cin = pvpp4Students[si];
+    const studentId = savedStudents[cin];
+    for (let ei = 0; ei < pvpp4Elements.length; ei++) {
+      const { name, modId, sem } = pvpp4Elements[ei];
+      const elId = await getEl(name, classPVPP4.id);
+      if (!elId) continue;
+      await upsertGrade(studentId, classPVPP4.id, modId, elId, name, sem, pvpp4Scores[si][ei], '2025/2026');
+    }
+  }
+
+  // Grades for Vétérinaire 1A (2025/2026) — 4 students
+  const veto1Students = ['SC001001', 'SC002002', 'SC003003', 'SC004004'];
+  const veto1Scores = [
+    [15, 14, 16, 15, 14, 13, 15, 14],
+    [13, 12, 14, 13, 12, 11, 13, 12],
+    [17, 16, 18, 17, 16, 15, 17, 16],
+    [11, 10, 12, 11, 10,  9, 11, 10],
+  ];
+  const veto1Elements: { name: string; modId: number; sem: string }[] = [
+    { name: 'Anatomie des Carnivores', modId: modAnatomie.id, sem: 'S1' },
+    { name: 'Dissection - TP', modId: modAnatomie.id, sem: 'S1' },
+    { name: 'Histologie des Tissus', modId: modHistoEmb.id, sem: 'S1' },
+    { name: 'Histologie - TP Microscope', modId: modHistoEmb.id, sem: 'S1' },
+    { name: 'Physiologie de la Digestion', modId: modPhysioVet.id, sem: 'S2' },
+    { name: 'Physiologie - TD', modId: modPhysioVet.id, sem: 'S2' },
+    { name: 'Races Animales et Productions', modId: modZootechnie.id, sem: 'S2' },
+    { name: 'Alimentation des Ruminants - TD', modId: modZootechnie.id, sem: 'S2' },
+  ];
+  for (let si = 0; si < veto1Students.length; si++) {
+    const cin = veto1Students[si];
+    const studentId = savedStudents[cin];
+    for (let ei = 0; ei < veto1Elements.length; ei++) {
+      const { name, modId, sem } = veto1Elements[ei];
+      const elId = await getEl(name, classVeto1.id);
+      if (!elId) continue;
+      await upsertGrade(studentId, classVeto1.id, modId, elId, name, sem, veto1Scores[si][ei], '2025/2026');
+    }
+  }
+
+  // Grades for Génie Rural 1A (2025/2026) — 3 students
+  const gr1Students = ['SD001001', 'SD002002', 'SD003003'];
+  const gr1Scores = [
+    [14, 13, 15, 14, 13],
+    [12, 11, 13, 12, 11],
+    [16, 15, 17, 16, 15],
+  ];
+  const gr1Elements: { name: string; modId: number; sem: string }[] = [
+    { name: 'Hydraulique Générale', modId: modMecaFluides.id, sem: 'S1' },
+    { name: 'Hydraulique - TD', modId: modMecaFluides.id, sem: 'S1' },
+    { name: 'Levés Topographiques', modId: modTopographieGR.id, sem: 'S2' },
+    { name: 'SIG et Cartographie - TP', modId: modTopographieGR.id, sem: 'S2' },
+    { name: 'Cycle Hydrologique', modId: modHydroGR.id, sem: 'S1' },
+  ];
+  for (let si = 0; si < gr1Students.length; si++) {
+    const cin = gr1Students[si];
+    const studentId = savedStudents[cin];
+    for (let ei = 0; ei < gr1Elements.length; ei++) {
+      const { name, modId, sem } = gr1Elements[ei];
+      const elId = await getEl(name, classGR1.id);
+      if (!elId) continue;
+      await upsertGrade(studentId, classGR1.id, modId, elId, name, sem, gr1Scores[si][ei], '2025/2026');
+    }
+  }
+
+  // Grades for IAA 1A (2025/2026) — 3 students
+  const iaa1Students = ['SE001001', 'SE002002', 'SE003003'];
+  const iaa1Scores = [
+    [13, 12, 14, 13, 12, 11],
+    [15, 14, 16, 15, 14, 13],
+    [11, 10, 12, 11, 10,  9],
+  ];
+  const iaa1Elements: { name: string; modId: number; sem: string }[] = [
+    { name: 'Microbiologie Générale', modId: modMicroIAA.id, sem: 'S1' },
+    { name: 'Microbiologie - TP', modId: modMicroIAA.id, sem: 'S1' },
+    { name: 'Glucides et Lipides Alimentaires', modId: modChimIAA.id, sem: 'S1' },
+    { name: 'Analyse Bromatologique - TP', modId: modChimIAA.id, sem: 'S1' },
+    { name: 'Procédés Thermiques', modId: modTechCons.id, sem: 'S2' },
+    { name: 'Procédés Thermiques - TD', modId: modTechCons.id, sem: 'S2' },
+  ];
+  for (let si = 0; si < iaa1Students.length; si++) {
+    const cin = iaa1Students[si];
+    const studentId = savedStudents[cin];
+    for (let ei = 0; ei < iaa1Elements.length; ei++) {
+      const { name, modId, sem } = iaa1Elements[ei];
+      const elId = await getEl(name, classIAA1.id);
+      if (!elId) continue;
+      await upsertGrade(studentId, classIAA1.id, modId, elId, name, sem, iaa1Scores[si][ei], '2025/2026');
+    }
+  }
+
   // ─── Activity logs and workflow tasks ────────────────────────────────────
   const adminUser = await prisma.user.findUnique({ where: { email: 'admin' }, select: { id: true } });
 
@@ -962,6 +1262,9 @@ async function main() {
   console.log(`   Rooms: ${roomDefs.length}`);
   console.log(`   Teachers: ${teacherDefs.length} (10 permanent + 5 vacataires)`);
   console.log(`   Students: ${studentDefs.length} + 3 laureates`);
+  console.log('   Academic years: 4 (2025/2026 is current)');
+  console.log('   ModuleClass links: seeded for all classes');
+  console.log('   StudentGrades: seeded for all active classes (2025/2026)');
   console.log('   Accreditation plans: 2 (published)');
   console.log('   Timetable sessions: seeded sample weekly grid');
   console.log('   Room reservations: seeded current-week room booking demo');

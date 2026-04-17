@@ -38,6 +38,16 @@ export class GradesController {
     return this.gradesService.findAll(query);
   }
 
+  @Get('deliberation/class/:classId')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  getDeliberation(
+    @Param('classId', ParseIntPipe) classId: number,
+    @Query('academicYear') academicYear?: string,
+    @Query('semester') semester?: string,
+  ) {
+    return this.gradesService.getDeliberation(classId, academicYear, semester);
+  }
+
   @Get('student/:studentId')
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findByStudent(@Param('studentId', ParseIntPipe) studentId: number) {

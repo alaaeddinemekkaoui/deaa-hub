@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api } from '@/services/api';
+import { api, clearRefCache } from '@/services/api';
 
 export type Department = { id: number; name: string };
 
@@ -20,11 +20,14 @@ export type AuthUser = {
   departments: Department[];
 };
 
+type ProfileUpdate = { fullName?: string; email?: string; password?: string };
+
 type AuthContextType = {
   user: AuthUser | null;
   loading: boolean;
   login: (identifier: string, password: string) => Promise<void>;
   logout: () => void;
+  updateProfile: (data: ProfileUpdate) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       })
       .catch(() => {
+        clearRefCache();
         localStorage.removeItem('deaa_token');
         setUser(null);
       })
@@ -69,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           user: { id: number; email: string; fullName?: string; role: AuthUser['role']; departments: Department[] };
         }>('/auth/login', { identifier, password });
         const { access_token, user: payloadUser } = response.data;
+        clearRefCache();
         localStorage.setItem('deaa_token', access_token);
         setUser({
           id: payloadUser.id,
@@ -79,8 +84,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       },
       logout: () => {
+        clearRefCache();
         localStorage.removeItem('deaa_token');
         setUser(null);
+      },
+      updateProfile: async (data: ProfileUpdate) => {
+        await api.patch('/auth/profile', data);
+        // Re-fetch authoritative data
+        const res = await api.get<{
+          sub: number;
+          email: string;
+          role: AuthUser['role'];
+          fullName?: string;
+          departments: Department[];
+        }>('/auth/me');
+        setUser({
+          id: res.data.sub,
+          email: res.data.email,
+          role: res.data.role,
+          fullName: res.data.fullName,
+          departments: res.data.departments ?? [],
+        });
       },
     }),
     [user, loading],

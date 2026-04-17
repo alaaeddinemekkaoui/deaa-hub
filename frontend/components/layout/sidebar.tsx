@@ -3,26 +3,32 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import {
   Activity,
   ArrowLeftRight,
+  BarChart2,
   BookOpen,
   BookOpenCheck,
   Building2,
   CalendarRange,
   CalendarDays,
+  ChevronDown,
   CopyPlus,
   DoorOpen,
+  FileStack,
+  FileText,
   GraduationCap,
   Home,
   Layers,
   Medal,
-  MoveRight,
+
   NotebookPen,
   RefreshCw,
+  Scale,
+  Settings,
   UserCog,
   Users,
-  Workflow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/features/auth/auth-context';
@@ -52,10 +58,11 @@ const navigation: NavGroup[] = [
     heading: 'Étudiants',
     roles: ['admin', 'staff', 'viewer', 'user'],
     items: [
-      { href: '/students',  label: 'Étudiants',  caption: 'Profils et cohortes',          icon: GraduationCap },
-      { href: '/grades',    label: 'Épreuves', caption: 'Notes par classe et module', icon: BookOpen },
-      { href: '/laureates', label: 'Lauréats',   caption: 'Diplômes et suivi',             icon: Medal },
-      { href: '/transfers', label: 'Transferts', caption: 'Passage inter-établissements',  icon: ArrowLeftRight },
+      { href: '/students',      label: 'Étudiants',    caption: 'Profils et cohortes',              icon: GraduationCap },
+      { href: '/grades',        label: 'Épreuves',     caption: 'Notes par classe et module',       icon: BookOpen },
+      { href: '/deliberation',  label: 'Délibération', caption: 'Résultats et relevés de notes',    icon: Scale },
+      { href: '/laureates',     label: 'Lauréats',     caption: 'Diplômes et suivi',                icon: Medal },
+      { href: '/transfers',     label: 'Transferts',   caption: 'Passage inter-établissements',     icon: ArrowLeftRight },
     ],
   },
   {
@@ -80,11 +87,11 @@ const navigation: NavGroup[] = [
     ],
   },
   {
-    heading: 'Emploi du Temps et Gestion des Salles',
+    heading: 'Emploi du Temps & Salles',
     items: [
-      { href: '/timetable',        label: 'Emploi du temps',    caption: 'Planification hebdomadaire', icon: CalendarDays },
-      { href: '/rooms',            label: 'Gestion des salles', caption: 'Espaces et équipements',     icon: DoorOpen },
-      { href: '/room-reservations',label: 'Réservation de salle', caption: 'Occupation des salles',   icon: CalendarRange },
+      { href: '/timetable',         label: 'Emploi du temps',      caption: 'Planification hebdomadaire', icon: CalendarDays },
+      { href: '/rooms',             label: 'Gestion des salles',   caption: 'Espaces et équipements',     icon: DoorOpen },
+      { href: '/room-reservations', label: 'Réservation de salle', caption: 'Occupation des salles',      icon: CalendarRange },
     ],
   },
   {
@@ -97,18 +104,44 @@ const navigation: NavGroup[] = [
     ],
   },
   {
+    heading: 'Demandes de documents',
+    roles: ['admin', 'staff', 'viewer'],
+    items: [
+      { href: '/workflows', label: 'Demandes', caption: 'Suivi des demandes de docs', icon: FileText },
+    ],
+  },
+  {
     heading: 'Administration',
     roles: ['admin', 'staff'],
     items: [
-      { href: '/workflows',     label: 'Workflows',    caption: 'Suivi des dossiers',    icon: Workflow },
-      { href: '/activity-logs', label: 'Journaux',     caption: "Historique d'activité", icon: Activity },
-      { href: '/users',         label: 'Utilisateurs', caption: 'Accès et rôles',        icon: UserCog },
+      { href: '/users',       label: 'Utilisateurs', caption: 'Accès et rôles',         icon: UserCog },
+      { href: '/statistics',  label: 'Statistiques', caption: 'Données et exports CSV', icon: BarChart2 },
+    ],
+  },
+  {
+    heading: 'Paramètres',
+    roles: ['admin', 'staff'],
+    items: [
+      { href: '/settings/academic-years',   label: 'Années académiques', caption: 'Gérer les années académiques',  icon: Settings },
+      { href: '/settings/document-types',   label: 'Types de documents', caption: 'Catégories de documents admin', icon: FileStack },
+      { href: '/activity-logs',             label: 'Journaux',           caption: "Historique d'activité",         icon: Activity },
     ],
   },
 ];
 
-// Suppress unused import warning — MoveRight is kept for potential future use
-void MoveRight;
+const allHrefs = navigation.flatMap((g) => g.items.map((i) => i.href));
+
+function getActiveHref(pathname: string): string | undefined {
+  return allHrefs
+    .filter((h) => pathname === h || pathname.startsWith(`${h}/`))
+    .sort((a, b) => b.length - a.length)[0];
+}
+
+function getActiveGroup(pathname: string): string | undefined {
+  const best = getActiveHref(pathname);
+  if (!best) return undefined;
+  return navigation.find((g) => g.items.some((i) => i.href === best))?.heading;
+}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -119,7 +152,32 @@ export function Sidebar() {
     (group) => !group.roles || group.roles.includes(role),
   );
 
-  const allHrefs = navigation.flatMap((g) => g.items.map((i) => i.href));
+  // Initialise: all groups open
+  const [openGroups, setOpenGroups] = useState<Set<string>>(
+    () => new Set(navigation.map((g) => g.heading)),
+  );
+
+  // Auto-expand the active group when pathname changes
+  useEffect(() => {
+    const activeGroup = getActiveGroup(pathname);
+    if (activeGroup) {
+      setOpenGroups((prev) => {
+        if (prev.has(activeGroup)) return prev;
+        return new Set([...prev, activeGroup]);
+      });
+    }
+  }, [pathname]);
+
+  const toggleGroup = (heading: string) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(heading)) next.delete(heading);
+      else next.add(heading);
+      return next;
+    });
+  };
+
+  const bestMatch = getActiveHref(pathname);
 
   return (
     <aside
@@ -156,42 +214,65 @@ export function Sidebar() {
         <div className="border-t border-white/8" />
 
         {/* Navigation groups */}
-        <nav className="grid gap-3">
-          {visibleGroups.map((group) => (
-            <div key={group.heading}>
-              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.25em] text-white/35">
-                {group.heading}
-              </p>
-              <div className="grid gap-0.5">
-                {group.items.map(({ href, label, caption, icon: Icon }) => {
-                  const bestMatch = allHrefs
-                    .filter((h) => pathname === h || pathname.startsWith(`${h}/`))
-                    .sort((a, b) => b.length - a.length)[0];
-                  const active = href === bestMatch;
-                  return (
-                    <Link
-                      key={`${group.heading}-${label}`}
-                      href={href}
-                      className={cn('sidebar-link', active && 'active')}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Icon size={15} strokeWidth={active ? 2.2 : 1.8} />
-                        <span className="text-[13px]">{label}</span>
-                      </div>
-                      <span
-                        className={cn(
-                          'pl-[26px] text-[11px] leading-4',
-                          active ? 'text-slate-400' : 'text-white/35',
-                        )}
-                      >
-                        {caption}
-                      </span>
-                    </Link>
-                  );
-                })}
+        <nav className="grid gap-1">
+          {visibleGroups.map((group) => {
+            const isOpen = openGroups.has(group.heading);
+            return (
+              <div key={group.heading}>
+                {/* Group header — clickable to collapse/expand */}
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.heading)}
+                  className="group/hd flex w-full items-center justify-between px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 group-hover/hd:text-white/65 transition-colors">
+                    {group.heading}
+                  </p>
+                  <ChevronDown
+                    size={11}
+                    className={cn(
+                      'text-white/30 transition-transform duration-300 group-hover/hd:text-white/55',
+                      isOpen ? 'rotate-0' : '-rotate-90',
+                    )}
+                  />
+                </button>
+
+                {/* Collapsible content with animation */}
+                <div
+                  className={cn(
+                    'overflow-hidden transition-all duration-300 ease-in-out',
+                    isOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0',
+                  )}
+                >
+                  <div className="grid gap-0.5 pb-1">
+                    {group.items.map(({ href, label, caption, icon: Icon }) => {
+                      const active = href === bestMatch;
+                      return (
+                        <Link
+                          key={`${group.heading}-${label}`}
+                          href={href}
+                          className={cn('sidebar-link', active && 'active')}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Icon size={15} strokeWidth={active ? 2.2 : 1.8} />
+                            <span className="text-[13px]">{label}</span>
+                          </div>
+                          <span
+                            className={cn(
+                              'pl-[26px] text-[11px] leading-4',
+                              active ? 'text-slate-400' : 'text-white/35',
+                            )}
+                          >
+                            {caption}
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </nav>
       </div>
     </aside>

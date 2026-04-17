@@ -5,7 +5,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, RoomReservationPurpose, ReservationStatus } from '@prisma/client';
+import {
+  Prisma,
+  RoomReservationPurpose,
+  ReservationStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateRoomReservationDto } from './dto/create-room-reservation.dto';
 import { UpdateRoomReservationDto } from './dto/update-room-reservation.dto';
@@ -90,7 +94,12 @@ export class RoomReservationsService {
 
     this.ensureWeekdayMatches(dto.date, dto.dayOfWeek);
     this.ensureTimeRange(dto.startTime, dto.endTime);
-    await this.ensureNoOverlap(dto.roomId, dto.date, dto.startTime, dto.endTime);
+    await this.ensureNoOverlap(
+      dto.roomId,
+      dto.date,
+      dto.startTime,
+      dto.endTime,
+    );
 
     // Admins get auto-approved; users get pending
     const isAdmin = currentUser.role === UserRole.ADMIN;
@@ -241,7 +250,7 @@ export class RoomReservationsService {
     }
 
     throw new ForbiddenException(
-      'Vous n\'êtes pas autorisé à approuver cette réservation',
+      "Vous n'êtes pas autorisé à approuver cette réservation",
     );
   }
 
@@ -333,10 +342,7 @@ export class RoomReservationsService {
       );
     }
 
-    if (
-      roomDepartmentId &&
-      !allowedDepartmentIds.includes(roomDepartmentId)
-    ) {
+    if (roomDepartmentId && !allowedDepartmentIds.includes(roomDepartmentId)) {
       throw new ForbiddenException(
         'You can only reserve rooms in your own department',
       );

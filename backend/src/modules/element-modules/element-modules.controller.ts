@@ -56,7 +56,10 @@ export class ElementModulesController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
-  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: JwtPayload) {
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
     return this.service.remove(id, user);
   }
 }

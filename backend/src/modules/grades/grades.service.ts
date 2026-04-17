@@ -50,6 +50,12 @@ type GradeContext = {
   departmentId: number | null;
 };
 
+type ElementGradeSummary = {
+  score: number;
+  maxScore: number;
+  assessmentType: string | null;
+};
+
 @Injectable()
 export class GradesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -581,6 +587,164 @@ export class GradesService {
       ...result,
       importedRows: grades.length,
       skippedRows: skipped,
+    };
+  }
+
+  async getDeliberation(
+    classId: number,
+    academicYear?: string,
+    semester?: string,
+  ) {
+    const [academicClass, moduleAssignments, students, grades] =
+      await Promise.all([
+        this.prisma.academicClass.findUnique({
+          where: { id: classId },
+          select: {
+            id: true,
+            name: true,
+            year: true,
+            filiere: { select: { id: true, name: true } },
+            academicOption: { select: { id: true, name: true } },
+          },
+        }),
+        this.prisma.moduleClass.findMany({
+          where: { classId },
+          include: {
+            module: {
+              select: {
+                id: true,
+                name: true,
+                semestre: true,
+                elements: {
+                  select: {
+                    id: true,
+                    name: true,
+                    type: true,
+                    volumeHoraire: true,
+                  },
+                  orderBy: { name: 'asc' },
+                },
+              },
+            },
+          },
+          orderBy: { module: { name: 'asc' } },
+        }),
+        this.prisma.student.findMany({
+          where: { classId },
+          select: {
+            id: true,
+            fullName: true,
+            codeMassar: true,
+            dateNaissance: true,
+          },
+          orderBy: { fullName: 'asc' },
+        }),
+        this.prisma.studentGrade.findMany({
+          where: {
+            classId,
+            ...(academicYear ? { academicYear } : {}),
+            ...(semester ? { semester } : {}),
+          },
+          select: {
+            studentId: true,
+            elementModuleId: true,
+            moduleId: true,
+            score: true,
+            maxScore: true,
+            assessmentType: true,
+            academicYear: true,
+            semester: true,
+          },
+        }),
+      ]);
+
+    if (!academicClass) {
+      throw new NotFoundException(`Class ${classId} not found`);
+    }
+
+    const modules = moduleAssignments.map((assignment) => ({
+      id: assignment.module.id,
+      name: assignment.module.name,
+      semestre: assignment.module.semestre,
+      elements: assignment.module.elements,
+    }));
+
+    // Build grade lookup: studentId -> elementModuleId -> grade
+    const gradeMap = new Map<number, Map<number, ElementGradeSummary>>();
+
+    for (const grade of grades) {
+      if (!grade.elementModuleId) continue;
+      if (!gradeMap.has(grade.studentId)) {
+        gradeMap.set(grade.studentId, new Map<number, ElementGradeSummary>());
+      }
+      const studentMap = gradeMap.get(grade.studentId)!;
+      // Keep the first grade found for each element (can be extended for multiple assessment types)
+      if (!studentMap.has(grade.elementModuleId)) {
+        studentMap.set(grade.elementModuleId, {
+          score: grade.score,
+          maxScore: grade.maxScore,
+          assessmentType: grade.assessmentType,
+        });
+      }
+    }
+
+    const studentsWithGrades = students.map((student) => {
+      const studentGradeMap =
+        gradeMap.get(student.id) ?? new Map<number, ElementGradeSummary>();
+      const gradesByElement: Record<number, ElementGradeSummary> = {};
+      studentGradeMap.forEach((grade, elementId) => {
+        gradesByElement[elementId] = grade;
+      });
+
+      // Compute module averages
+      const moduleAverages: Record<number, number | null> = {};
+      for (const mod of modules) {
+        const elementGrades = mod.elements
+          .map((el) => studentGradeMap.get(el.id))
+          .filter((g): g is ElementGradeSummary => g !== undefined);
+        if (elementGrades.length === 0) {
+          moduleAverages[mod.id] = null;
+        } else {
+          // Normalize to /20 and average
+          const avg =
+            elementGrades.reduce(
+              (sum, g) => sum + (g.score / g.maxScore) * 20,
+              0,
+            ) / elementGrades.length;
+          moduleAverages[mod.id] = Math.round(avg * 100) / 100;
+        }
+      }
+
+      // Overall average across all modules with grades
+      const validModuleAverages = Object.values(moduleAverages).filter(
+        (v): v is number => v !== null,
+      );
+      const overallAverage =
+        validModuleAverages.length > 0
+          ? Math.round(
+              (validModuleAverages.reduce((sum, v) => sum + v, 0) /
+                validModuleAverages.length) *
+                100,
+            ) / 100
+          : null;
+
+      return {
+        id: student.id,
+        fullName: student.fullName,
+        codeMassar: student.codeMassar,
+        dateNaissance: student.dateNaissance,
+        grades: gradesByElement,
+        moduleAverages,
+        overallAverage,
+      };
+    });
+
+    return {
+      class: academicClass,
+      modules,
+      students: studentsWithGrades,
+      academicYear: academicYear ?? null,
+      semester: semester ?? null,
     };
   }
 

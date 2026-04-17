@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
+import { LoadingScreen } from '@/components/admin/loading-screen';
 import { useAuth } from '@/features/auth/auth-context';
 
 // Pages that the 'user' role cannot access
@@ -11,6 +12,7 @@ const USER_ROLE_BLOCKED = [
   '/workflows',
   '/activity-logs',
   '/users',
+  '/statistics',
 ];
 
 export default function ProtectedLayout({
@@ -39,23 +41,24 @@ export default function ProtectedLayout({
   }, [loading, user, router, pathname]);
 
   if (loading) {
-    return (
-      <div className="container-page">
-        <div className="hero-panel">
-          <div className="space-y-3">
-            <p className="hero-eyebrow">Loading workspace</p>
-            <h1 className="hero-title text-3xl md:text-4xl">Preparing your academic dashboard</h1>
-            <p className="hero-copy max-w-xl">
-              We are restoring your secure session and loading the latest administrative data.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!user) {
     return null;
+  }
+
+  const isDashboard = pathname === '/dashboard';
+
+  if (isDashboard) {
+    return (
+      <div className="min-h-screen">
+        <div className="container-page">
+          <Topbar />
+          {children}
+        </div>
+      </div>
+    );
   }
 
   return (
