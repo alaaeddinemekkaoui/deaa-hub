@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Database, Download, Server, ShieldCheck, UserCog, Users2 } from 'lucide-react';
+import { AlertTriangle, Database, Download, RefreshCw, Server, ShieldCheck, UserCheck, UserCog, Users2 } from 'lucide-react';
 import { MetricCard } from '@/components/admin/metric-card';
+import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
 import { ExportDataButton } from '@/components/admin/export-data-button';
 import { useAuth } from '@/features/auth/auth-context';
@@ -21,6 +22,10 @@ type TeacherRole = { id: number; name: string; _count?: { teachers: number } };
 type TeacherGrade = { id: number; name: string; _count?: { teachers: number } };
 type AppStatus = { service: string; status: string; timestamp: string };
 type DatabaseStatus = { dbConnected: boolean; message: string; timestamp: string };
+type UnlinkedProfiles = {
+  students: { id: number; fullName: string; identifier: string }[];
+  teachers: { id: number; fullName: string; identifier: string | null }[];
+};
 
 type ExportEntity =
   | 'students'
@@ -194,6 +199,13 @@ export default function UsersPage() {
   const [exporting, setExporting] = useState(false);
   const [downloadingBackup, setDownloadingBackup] = useState(false);
 
+  // Account reconciliation
+  const [unlinked, setUnlinked] = useState<UnlinkedProfiles | null>(null);
+  const [unlinkedLoading, setUnlinkedLoading] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importPassword, setImportPassword] = useState('');
+  const [importing, setImporting] = useState(false);
+
   const loadUsers = async () => {
     const response = await api.get<User[]>('/users');
     setRows(response.data);
@@ -219,9 +231,48 @@ export default function UsersPage() {
     setDbStatus(dbResponse.data);
   };
 
+  const loadUnlinkedProfiles = async () => {
+    setUnlinkedLoading(true);
+    try {
+      const res = await api.get<UnlinkedProfiles>('/users/unlinked-profiles');
+      setUnlinked(res.data);
+    } catch {
+      // non-fatal
+    } finally {
+      setUnlinkedLoading(false);
+    }
+  };
+
+  const onBulkImport = async () => {
+    if (importPassword.length < 6) return;
+    setImporting(true);
+    try {
+      const res = await api.post<{
+        students: { created: number; skipped: number };
+        teachers: { created: number; skipped: number };
+        errors: string[];
+      }>('/users/bulk-import-accounts', { defaultPassword: importPassword });
+      const { students, teachers } = res.data;
+      toast.success(
+        `${students.created + teachers.created} compte(s) créé(s) — ` +
+        `${students.skipped + teachers.skipped} ignoré(s)`,
+      );
+      setImportModalOpen(false);
+      setImportPassword('');
+      await loadUnlinkedProfiles();
+      await loadUsers();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Échec de l\'import des comptes'));
+    } finally {
+      setImporting(false);
+    }
+  };
+
   useEffect(() => {
     void loadUsers();
     void loadDepartments();
+    void loadUnlinkedProfiles();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -893,6 +944,146 @@ export default function UsersPage() {
           </div>
         </section>
       ) : null}
+
+      {/* ── Account reconciliation panel ── */}
+      <section className="surface-card space-y-5">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Vérification des comptes</h2>
+            <p className="panel-copy">
+              Étudiants et enseignants sans compte utilisateur. Utilisez le bouton d&apos;import pour créer tous les comptes manquants en une seule opération.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn-outline flex items-center gap-1.5"
+            onClick={() => void loadUnlinkedProfiles()}
+            disabled={unlinkedLoading}
+          >
+            <RefreshCw size={14} className={unlinkedLoading ? 'animate-spin' : ''} />
+            Actualiser
+          </button>
+        </div>
+
+        {unlinkedLoading && <p className="empty-note">Chargement...</p>}
+
+        {!unlinkedLoading && unlinked && (
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Students */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {unlinked.students.length > 0
+                    ? <AlertTriangle size={16} className="text-amber-500" />
+                    : <UserCheck size={16} className="text-emerald-500" />
+                  }
+                  <span className="font-semibold text-slate-900">Étudiants</span>
+                </div>
+                <span className={`status-chip ${unlinked.students.length > 0 ? 'status-chip--warn' : 'status-chip--ok'}`}>
+                  {unlinked.students.length} sans compte
+                </span>
+              </div>
+              {unlinked.students.length > 0 ? (
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {unlinked.students.map((s) => (
+                    <div key={s.id} className="flex items-center justify-between text-sm">
+                      <span className="text-slate-700 truncate">{s.fullName}</span>
+                      <span className="text-slate-400 text-xs ml-2 shrink-0">{s.identifier}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-emerald-600">Tous les étudiants ont un compte.</p>
+              )}
+            </div>
+
+            {/* Teachers */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {unlinked.teachers.length > 0
+                    ? <AlertTriangle size={16} className="text-amber-500" />
+                    : <UserCheck size={16} className="text-emerald-500" />
+                  }
+                  <span className="font-semibold text-slate-900">Enseignants</span>
+                </div>
+                <span className={`status-chip ${unlinked.teachers.length > 0 ? 'status-chip--warn' : 'status-chip--ok'}`}>
+                  {unlinked.teachers.length} sans compte
+                </span>
+              </div>
+              {unlinked.teachers.length > 0 ? (
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {unlinked.teachers.map((t) => (
+                    <div key={t.id} className="flex items-center justify-between text-sm">
+                      <span className="text-slate-700 truncate">{t.fullName}</span>
+                      <span className="text-slate-400 text-xs ml-2 shrink-0">{t.identifier ?? '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-emerald-600">Tous les enseignants ont un compte.</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {!unlinkedLoading && unlinked && (unlinked.students.length > 0 || unlinked.teachers.length > 0) && (
+          <button
+            type="button"
+            className="btn-primary flex items-center gap-2"
+            onClick={() => setImportModalOpen(true)}
+          >
+            <UserCheck size={15} />
+            Importer tous les comptes manquants ({(unlinked.students.length + unlinked.teachers.length)})
+          </button>
+        )}
+      </section>
+
+      {/* Bulk import modal */}
+      <ModalShell
+        open={importModalOpen}
+        title="Créer tous les comptes manquants"
+        description={`Créer des comptes pour ${(unlinked?.students.length ?? 0) + (unlinked?.teachers.length ?? 0)} profil(s) sans compte. Un mot de passe commun sera appliqué à tous.`}
+        onClose={() => { setImportModalOpen(false); setImportPassword(''); }}
+        footer={
+          <>
+            <button
+              className="btn-primary flex items-center gap-1.5"
+              type="button"
+              onClick={() => void onBulkImport()}
+              disabled={importing || importPassword.length < 6}
+            >
+              <UserCheck size={14} />
+              {importing ? 'Import en cours...' : 'Importer'}
+            </button>
+            <button
+              className="btn-outline"
+              type="button"
+              onClick={() => { setImportModalOpen(false); setImportPassword(''); }}
+            >
+              Annuler
+            </button>
+          </>
+        }
+      >
+        <div className="field-stack">
+          <label className="field-label">Mot de passe par défaut</label>
+          <input
+            className="input"
+            type="password"
+            value={importPassword}
+            onChange={(e) => setImportPassword(e.target.value)}
+            placeholder="Minimum 6 caractères"
+            autoComplete="new-password"
+          />
+          {importPassword.length > 0 && importPassword.length < 6 && (
+            <p className="text-xs text-red-500">Le mot de passe doit comporter au moins 6 caractères.</p>
+          )}
+          <p className="text-xs text-slate-500 mt-1">
+            Les étudiants utilisent leur Code Massar comme identifiant de connexion. Les enseignants utilisent leur CIN ou email.
+          </p>
+        </div>
+      </ModalShell>
     </div>
   );
 }

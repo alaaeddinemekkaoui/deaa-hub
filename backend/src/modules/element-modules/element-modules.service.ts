@@ -113,6 +113,8 @@ export class ElementModulesService {
         moduleId: dto.moduleId,
         volumeHoraire: dto.volumeHoraire ?? null,
         type: dto.type ?? 'CM',
+        ponderation: dto.ponderation ?? 1,
+        coefficient: dto.coefficient ?? 1,
         // classId kept nullable; class context comes from ModuleClass
         classId: null,
       },
@@ -172,6 +174,8 @@ export class ElementModulesService {
           ? { volumeHoraire: dto.volumeHoraire ?? null }
           : {}),
         ...(dto.type !== undefined ? { type: dto.type } : {}),
+        ...(dto.ponderation !== undefined ? { ponderation: dto.ponderation } : {}),
+        ...(dto.coefficient !== undefined ? { coefficient: dto.coefficient } : {}),
       },
     });
   }

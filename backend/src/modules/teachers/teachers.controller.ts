@@ -96,6 +96,25 @@ export class TeachersController {
     return this.teachersService.removeGrade(id);
   }
 
+  @Post('bulk-create-accounts')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER)
+  bulkCreateAccounts(
+    @Body() body: { teacherIds: number[]; defaultPassword: string },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    if (!body.defaultPassword || body.defaultPassword.length < 6) {
+      throw new BadRequestException('Password must be at least 6 characters');
+    }
+    if (!Array.isArray(body.teacherIds) || body.teacherIds.length === 0) {
+      throw new BadRequestException('teacherIds must be a non-empty array');
+    }
+    return this.teachersService.bulkCreateAccounts(
+      body.teacherIds,
+      body.defaultPassword,
+      user,
+    );
+  }
+
   @Post('import')
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   @UseInterceptors(
@@ -150,5 +169,18 @@ export class TeachersController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.teachersService.remove(id, user);
+  }
+
+  @Post(':id/create-account')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER)
+  createAccount(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('password') password: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    if (!password || password.length < 6) {
+      throw new BadRequestException('Password must be at least 6 characters');
+    }
+    return this.teachersService.createAccount(id, password, user);
   }
 }

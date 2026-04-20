@@ -241,7 +241,7 @@ export class MessagingService {
 
   /** All conversations (inboxes) for current user */
   async getInbox(currentUser: JwtPayload) {
-    // Direct messages — latest per conversation partner
+    // Direct messages
     const directMessages = await this.prisma.message.findMany({
       where: {
         OR: [{ senderId: currentUser.sub }, { recipientId: currentUser.sub }],
@@ -252,9 +252,62 @@ export class MessagingService {
         recipient: { select: { id: true, fullName: true, role: true } },
       },
       orderBy: { createdAt: 'desc' },
-      distinct: ['senderId', 'recipientId'],
-      take: 50,
+      take: 300,
     });
+
+    type DirectThreadSummary = {
+      peer: { id: number; fullName: string; role: string };
+      lastMessage: string;
+      lastAt: string;
+      messageId: number;
+    };
+
+    const receivedMap = new Map<number, DirectThreadSummary>();
+    const sentMap = new Map<number, DirectThreadSummary>();
+
+    for (const msg of directMessages) {
+      if (msg.recipientId === currentUser.sub && msg.senderId !== currentUser.sub) {
+        if (!receivedMap.has(msg.senderId)) {
+          receivedMap.set(msg.senderId, {
+            peer: {
+              id: msg.sender.id,
+              fullName: msg.sender.fullName,
+              role: String(msg.sender.role),
+            },
+            lastMessage: msg.content,
+            lastAt: msg.createdAt.toISOString(),
+            messageId: msg.id,
+          });
+        }
+      }
+
+      if (
+        msg.senderId === currentUser.sub &&
+        msg.recipientId &&
+        msg.recipientId !== currentUser.sub &&
+        msg.recipient
+      ) {
+        if (!sentMap.has(msg.recipientId)) {
+          sentMap.set(msg.recipientId, {
+            peer: {
+              id: msg.recipient.id,
+              fullName: msg.recipient.fullName,
+              role: String(msg.recipient.role),
+            },
+            lastMessage: msg.content,
+            lastAt: msg.createdAt.toISOString(),
+            messageId: msg.id,
+          });
+        }
+      }
+    }
+
+    const received = Array.from(receivedMap.values()).sort((a, b) =>
+      b.lastAt.localeCompare(a.lastAt),
+    );
+    const sent = Array.from(sentMap.values()).sort((a, b) =>
+      b.lastAt.localeCompare(a.lastAt),
+    );
 
     // Group memberships
     const groups = await this.prisma.messageGroup.findMany({
@@ -272,7 +325,7 @@ export class MessagingService {
       orderBy: { name: 'asc' },
     });
 
-    return { directMessages, groups };
+    return { directMessages, groups, received, sent };
   }
 
   // ─── Seed default groups ────────────────────────────────────────────────────
@@ -368,6 +421,25 @@ export class MessagingService {
             name: `Cycle: ${c.name}`,
             type: GroupType.CYCLE,
             referenceId: c.id,
+          },
+        });
+      }
+    }
+
+    // Auto-groups per academic class
+    const classes = await this.prisma.academicClass.findMany({
+      select: { id: true, name: true },
+    });
+    for (const cls of classes) {
+      const existing = await this.prisma.messageGroup.findFirst({
+        where: { type: GroupType.CLASS, referenceId: cls.id },
+      });
+      if (!existing) {
+        await this.prisma.messageGroup.create({
+          data: {
+            name: `Classe: ${cls.name}`,
+            type: GroupType.CLASS,
+            referenceId: cls.id,
           },
         });
       }

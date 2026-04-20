@@ -18,6 +18,7 @@ import {
   GraduationCap,
   Layers,
   Medal,
+  MessageSquare,
   NotebookPen,
   RefreshCw,
   Scale,
@@ -154,7 +155,22 @@ const ACTION_SECTIONS: ActionSection[] = [
     roles: ['admin', 'staff'],
   },
 
-  /* ── 7. Administration ──────────────────────────────────────── */
+  /* ── 7. Messagerie ──────────────────────────────────────────── */
+  {
+    id: 'messaging',
+    heading: 'Messagerie',
+    description: 'Échanges de messages en groupes ou en direct entre utilisateurs',
+    icon: MessageSquare,
+    accent: 'bg-indigo-50 text-indigo-800 border-b border-indigo-200',
+    cardColor: 'hover:border-indigo-300 hover:bg-indigo-50/70 hover:shadow-indigo-100',
+    actions: [
+      { href: '/messages',              label: 'Groupes',  description: 'Messages par groupe',        icon: Users },
+      { href: '/messages?tab=received', label: 'Reçus',    description: 'Messages reçus en direct',   icon: MessageSquare },
+      { href: '/messages?tab=sent',     label: 'Envoyés',  description: 'Messages envoyés en direct', icon: MessageSquare },
+    ],
+  },
+
+  /* ── 8. Administration ──────────────────────────────────────── */
   {
     id: 'admin',
     heading: 'Administration',

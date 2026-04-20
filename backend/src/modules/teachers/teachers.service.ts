@@ -5,7 +5,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
+import { GroupType, Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { TtlCache } from '../../common/utils/ttl-cache';
@@ -755,5 +756,144 @@ export class TeachersService {
     }
 
     return { imported, errors };
+  }
+
+  // ─── Account creation ─────────────────────────────────────────────────────
+
+  /**
+   * Create (or retrieve) a User account for a teacher.
+   * Email: teacher.email if set, else {teacher.cin}@iav.ac.ma, else {lastName}.{firstName}@iav.ac.ma
+   * Role: teacher. Linked back via Teacher.userId.
+   */
+  async createAccount(
+    teacherId: number,
+    password: string,
+    currentUser?: JwtPayload,
+  ) {
+    const teacher = await this.prisma.teacher.findUnique({
+      where: { id: teacherId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        cin: true,
+        userId: true,
+        departmentId: true,
+        filiereId: true,
+      },
+    });
+    if (!teacher) throw new NotFoundException(`Teacher ${teacherId} not found`);
+
+    this.ensureCanManageDepartment(teacher.departmentId, currentUser);
+
+    if (teacher.userId) {
+      throw new ConflictException('Teacher already has a user account');
+    }
+
+    const fullName = `${teacher.firstName} ${teacher.lastName}`.trim();
+    const identifier = teacher.cin
+      ? teacher.cin
+      : `${teacher.lastName.toLowerCase()}.${teacher.firstName.toLowerCase()}`;
+    const email = teacher.email ?? `${identifier}@iav.ac.ma`;
+
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      throw new ConflictException(
+        `Email ${email} is already in use. Update the teacher's email first.`,
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = await this.prisma.user.create({
+      data: {
+        fullName,
+        email,
+        role: 'teacher',
+        passwordHash,
+        departments: {
+          create: [{ departmentId: teacher.departmentId }],
+        },
+      },
+      select: { id: true, fullName: true, email: true, role: true },
+    });
+
+    await this.prisma.teacher.update({
+      where: { id: teacherId },
+      data: { userId: user.id },
+    });
+
+    // Add to message groups (non-blocking)
+    this.addTeacherToGroups(user.id, teacher.filiereId, teacher.departmentId).catch(() => {/* non-blocking */});
+
+    return { user, teacherId };
+  }
+
+  async bulkCreateAccounts(
+    teacherIds: number[],
+    defaultPassword: string,
+    currentUser?: JwtPayload,
+  ): Promise<{ created: number; skipped: number; errors: string[] }> {
+    const errors: string[] = [];
+    let created = 0;
+    let skipped = 0;
+
+    for (const id of teacherIds) {
+      try {
+        await this.createAccount(id, defaultPassword, currentUser);
+        created++;
+      } catch (err: unknown) {
+        if (
+          err instanceof ConflictException &&
+          (err.message.includes('already has') || err.message.includes('already in use'))
+        ) {
+          skipped++;
+        } else {
+          const msg = err instanceof Error ? err.message : 'Unknown error';
+          errors.push(`Teacher ${id}: ${msg}`);
+        }
+      }
+    }
+
+    return { created, skipped, errors };
+  }
+
+  private async addTeacherToGroups(
+    userId: number,
+    filiereId: number | null | undefined,
+    departmentId: number,
+  ): Promise<void> {
+    await this.prisma.messageGroupMember.upsert({
+      where: { groupId_userId: { groupId: 1, userId } },
+      update: {},
+      create: { groupId: 1, userId, canSend: false },
+    });
+
+    if (filiereId) {
+      const fg = await this.prisma.messageGroup.findFirst({
+        where: { type: GroupType.FILIERE, referenceId: filiereId },
+        select: { id: true },
+      });
+      if (fg) {
+        await this.prisma.messageGroupMember.upsert({
+          where: { groupId_userId: { groupId: fg.id, userId } },
+          update: {},
+          create: { groupId: fg.id, userId, canSend: false },
+        });
+      }
+    }
+
+    const dg = await this.prisma.messageGroup.findFirst({
+      where: { type: GroupType.DEPARTMENT, referenceId: departmentId },
+      select: { id: true },
+    });
+    if (dg) {
+      await this.prisma.messageGroupMember.upsert({
+        where: { groupId_userId: { groupId: dg.id, userId } },
+        update: {},
+        create: { groupId: dg.id, userId, canSend: false },
+      });
+    }
   }
 }

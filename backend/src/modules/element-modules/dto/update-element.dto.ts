@@ -3,6 +3,7 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   MaxLength,
@@ -40,6 +41,24 @@ export class UpdateElementDto {
   @IsOptional()
   @IsEnum(ElementType)
   type?: ElementType;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === null || value === undefined || value === '') return undefined;
+    return Number(value);
+  })
+  @IsNumber()
+  @Min(0)
+  ponderation?: number;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === null || value === undefined || value === '') return undefined;
+    return Number(value);
+  })
+  @IsNumber()
+  @Min(0)
+  coefficient?: number;
 
   @IsOptional()
   @Type(() => Number)

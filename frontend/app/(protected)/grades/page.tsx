@@ -5,6 +5,7 @@ import {
   BookOpen,
   Download,
   FileSpreadsheet,
+  FileText,
   GraduationCap,
   Layers,
   Save,
@@ -117,6 +118,7 @@ export default function EpreuvesPage() {
   const [loadingGrades, setLoadingGrades] = useState(false);
   const [savingGrades, setSavingGrades] = useState(false);
   const [importingGrades, setImportingGrades] = useState(false);
+  const [exportingReleve, setExportingReleve] = useState(false);
 
   // ─── Computed visibility ─────────────────────────────────────────────────
 
@@ -433,13 +435,79 @@ export default function EpreuvesPage() {
     const elementName = (selectedElementModule?.name ?? 'element').replace(/\s+/g, '_');
     const className   = (selectedClass?.name ?? 'classe').replace(/\s+/g, '_');
     const fileName    = `${elementName}_${className}.csv`;
-    const header = 'codeMassar,fullName';
-    const rows   = students.map((s) => `${s.codeMassar},${s.fullName}`);
+    const csvEscape = (v: string) => (v.includes(',') || v.includes('"') ? `"${v.replace(/"/g, '""')}"` : v);
+    const header = 'codeMassar,fullName,score,comment';
+    const rows   = students.map((s) => {
+      const existing = gradeInputs[s.id];
+      const score = existing?.score ?? '';
+      const comment = existing?.comment ?? '';
+      return `${s.codeMassar},${csvEscape(s.fullName)},${score},${csvEscape(comment)}`;
+    });
     const blob   = new Blob([[header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url    = URL.createObjectURL(blob);
     const a      = document.createElement('a');
     a.href = url; a.download = fileName; a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const exportReleve = async () => {
+    if (!selectedClass) { toast.error('Choisissez une classe.'); return; }
+    try {
+      setExportingReleve(true);
+      type DelibeStudent = {
+        id: number; fullName: string; codeMassar: string;
+        moduleAverages: Record<number, number | null>;
+        overallAverage: number | null;
+      };
+      type DelibeModule = { id: number; name: string; semestre?: string | null };
+      type DelibeResponse = { class: { name: string }; modules: DelibeModule[]; students: DelibeStudent[] };
+
+      const res = await api.get<DelibeResponse>(`/grades/deliberation/class/${selectedClass.id}`, {
+        params: {
+          ...(academicYear.trim() ? { academicYear: academicYear.trim() } : {}),
+          ...(semester.trim() ? { semester: semester.trim() } : {}),
+        },
+      });
+
+      const { class: cls, modules, students: raw } = res.data;
+      const csvEscape = (v: string) => (v.includes(',') || v.includes('"') ? `"${v.replace(/"/g, '""')}"` : v);
+
+      // Sort by overallAverage desc, nulls last
+      const sorted = [...raw].sort((a, b) => {
+        if (a.overallAverage === null && b.overallAverage === null) return 0;
+        if (a.overallAverage === null) return 1;
+        if (b.overallAverage === null) return -1;
+        return b.overallAverage - a.overallAverage;
+      });
+
+      const moduleHeaders = modules.map((m) => csvEscape(`${m.name}${m.semestre ? ` (${m.semestre})` : ''}`));
+      const header = ['Rang', 'Code Massar', 'Nom complet', ...moduleHeaders, 'Moyenne générale'].join(',');
+
+      const rows = sorted.map((s, idx) => {
+        const moduleCols = modules.map((m) => {
+          const avg = s.moduleAverages[m.id];
+          return avg !== null && avg !== undefined ? String(avg) : '';
+        });
+        const overall = s.overallAverage !== null && s.overallAverage !== undefined ? String(s.overallAverage) : '';
+        return [String(idx + 1), s.codeMassar, csvEscape(s.fullName), ...moduleCols, overall].join(',');
+      });
+
+      const periodPart = [academicYear.trim(), semester.trim()].filter(Boolean).join(' — ');
+      const titleRow = `Relevé de Notes — Classe: ${cls.name}${periodPart ? ` — ${periodPart}` : ''}`;
+      const csvContent = [titleRow, header, ...rows].join('\n');
+
+      const className = cls.name.replace(/\s+/g, '_');
+      const yearPart = academicYear.trim().replace(/\//g, '-') || 'all';
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `releve_${className}_${yearPart}.csv`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Impossible de générer le relevé.'));
+    } finally {
+      setExportingReleve(false);
+    }
   };
 
   const uploadGrades = async () => {
@@ -657,6 +725,16 @@ export default function EpreuvesPage() {
             <button
               className="btn-outline flex items-center gap-2"
               type="button"
+              onClick={() => void exportReleve()}
+              disabled={!classId || exportingReleve}
+              title="Exporter le relevé de notes de toute la classe, classé par moyenne"
+            >
+              <FileText size={14} />
+              {exportingReleve ? 'Export...' : 'Relevé de notes'}
+            </button>
+            <button
+              className="btn-outline flex items-center gap-2"
+              type="button"
               onClick={exportStudentList}
               disabled={!students.length}
               title="Exporter la liste des étudiants en CSV"
@@ -697,7 +775,7 @@ export default function EpreuvesPage() {
               disabled={!canEdit}
             />
             <p className="text-xs text-slate-500">
-              Colonnes reconnues : <code>codeMassar</code>, <code>studentId</code> ou <code>fullName</code>, puis <code>score</code>.
+              Format attendu : <code>codeMassar</code>, <code>fullName</code>, <code>score</code>, <code>comment</code> — utilisez le bouton &quot;Liste étudiants&quot; pour obtenir le modèle.
             </p>
           </div>
           <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">

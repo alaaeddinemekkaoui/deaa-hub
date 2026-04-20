@@ -1,11 +1,11 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpen,
+  Download,
   GraduationCap,
   Printer,
-  User,
 } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
 import { MetricCard } from '@/components/admin/metric-card';
@@ -233,21 +233,103 @@ export default function DeliberationPage() {
   }, [data, visibleModules]);
 
   const passCount = useMemo(
-    () => computedStudents.filter((s) => (s.filteredOverallAverage ?? 0) >= 10).length,
-    [computedStudents],
+    () =>
+      computedStudents.filter((s) => {
+        const override = decisionOverrides[s.id];
+        if (override !== undefined) return override === 'admis';
+        return (s.filteredOverallAverage ?? 0) >= 10;
+      }).length,
+    [computedStudents, decisionOverrides],
   );
   const failCount = useMemo(
     () =>
-      computedStudents.filter(
-        (s) => s.filteredOverallAverage !== null && s.filteredOverallAverage < 10,
-      ).length,
-    [computedStudents],
+      computedStudents.filter((s) => {
+        if (s.filteredOverallAverage === null) return false;
+        const override = decisionOverrides[s.id];
+        if (override !== undefined) return override === 'ajourné';
+        return s.filteredOverallAverage < 10;
+      }).length,
+    [computedStudents, decisionOverrides],
   );
 
   const selectedStudent = useMemo(
     () => computedStudents.find((s) => s.id === selectedStudentId) ?? null,
     [computedStudents, selectedStudentId],
   );
+
+  const [exportingCsv, setExportingCsv] = useState(false);
+
+  const exportDeliberation = () => {
+    if (!data) return;
+    setExportingCsv(true);
+    try {
+      const csvEscape = (v: string) =>
+        v.includes(',') || v.includes('"') ? `"${v.replace(/"/g, '""')}"` : v;
+
+      const sorted = [...computedStudents].sort((a, b) => {
+        if (a.filteredOverallAverage === null && b.filteredOverallAverage === null) return 0;
+        if (a.filteredOverallAverage === null) return 1;
+        if (b.filteredOverallAverage === null) return -1;
+        return b.filteredOverallAverage - a.filteredOverallAverage;
+      });
+
+      const elementHeaders: string[] = [];
+      const moduleAvgHeaders: string[] = [];
+      for (const mod of visibleModules) {
+        for (const el of mod.elements) {
+          elementHeaders.push(csvEscape(`${mod.name} — ${el.name} (${el.type})`));
+        }
+        moduleAvgHeaders.push(csvEscape(`Moy. ${mod.name}`));
+      }
+      const allHeaders = [
+        'Rang', 'Code Massar', 'Nom',
+        ...elementHeaders,
+        ...moduleAvgHeaders,
+        'Moyenne générale', 'Mention', 'Décision',
+      ];
+
+      const rows = sorted.map((s, idx) => {
+        const elementCols: string[] = [];
+        for (const mod of visibleModules) {
+          for (const el of mod.elements) {
+            const g = s.grades[el.id];
+            elementCols.push(g ? String(g.score) : '');
+          }
+        }
+        const modAvgCols = visibleModules.map((mod) => {
+          const avg = s.filteredModuleAverages[mod.id];
+          return avg !== null && avg !== undefined ? avg.toFixed(2) : '';
+        });
+        const overall = s.filteredOverallAverage !== null && s.filteredOverallAverage !== undefined
+          ? s.filteredOverallAverage.toFixed(2)
+          : '';
+        const override = decisionOverrides[s.id];
+        const autoAdmit = (s.filteredOverallAverage ?? 0) >= 10;
+        const effective = override !== undefined ? override === 'admis' : autoAdmit;
+        const decision = s.filteredOverallAverage === null ? '' : (effective ? 'Admis' : 'Ajourné');
+        return [
+          String(idx + 1), s.codeMassar, csvEscape(s.fullName),
+          ...elementCols,
+          ...modAvgCols,
+          overall, csvEscape(mention(s.filteredOverallAverage)), csvEscape(decision),
+        ].join(',');
+      });
+
+      const periodPart = [data.academicYear, data.semester].filter(Boolean).join(' — ');
+      const titleRow = `Délibération — ${data.class.name}${periodPart ? ` — ${periodPart}` : ''}`;
+      const csvContent = [titleRow, allHeaders.join(','), ...rows].join('\n');
+
+      const className = data.class.name.replace(/\s+/g, '_');
+      const yearPart = (data.academicYear ?? 'all').replace(/\//g, '-');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `deliberation_${className}_${yearPart}.csv`; a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExportingCsv(false);
+    }
+  };
 
   // ─── Load reference data ───────────────────────────────────────────────────
 
@@ -373,8 +455,8 @@ export default function DeliberationPage() {
           hint={semester ? `Semestre ${semester}` : 'Tous les semestres'}
           icon={BookOpen}
         />
-        <MetricCard label="Admis" value={passCount} hint="Moyenne ≥ 10/20" icon={GraduationCap} />
-        <MetricCard label="Non admis" value={failCount} hint="Moyenne < 10/20" icon={User} />
+        <MetricCard label="Admis" value={passCount} hint="Selon décision du jury" icon={GraduationCap} />
+        <MetricCard label="Ajournés" value={failCount} hint="Selon décision du jury" icon={User} />
       </section>
 
       {/* Filters */}
@@ -387,14 +469,25 @@ export default function DeliberationPage() {
             </p>
           </div>
           {data && (
-            <button
-              className="btn-outline flex items-center gap-2"
-              type="button"
-              onClick={() => window.print()}
-            >
-              <Printer size={14} />
-              Imprimer
-            </button>
+            <div className="flex gap-2">
+              <button
+                className="btn-outline flex items-center gap-2"
+                type="button"
+                onClick={exportDeliberation}
+                disabled={exportingCsv}
+              >
+                <Download size={14} />
+                {exportingCsv ? 'Export...' : 'Exporter CSV'}
+              </button>
+              <button
+                className="btn-outline flex items-center gap-2"
+                type="button"
+                onClick={() => window.print()}
+              >
+                <Printer size={14} />
+                Imprimer
+              </button>
+            </div>
           )}
         </div>
 

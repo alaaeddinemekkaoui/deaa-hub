@@ -3,6 +3,7 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   MaxLength,
@@ -33,6 +34,18 @@ export class CreateElementDto {
   @IsOptional()
   @IsEnum(ElementType)
   type?: ElementType;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  ponderation?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  coefficient?: number;
 
   @IsOptional()
   @Type(() => Number)

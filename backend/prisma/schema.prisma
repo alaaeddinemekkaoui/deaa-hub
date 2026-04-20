@@ -79,6 +79,7 @@ enum GroupType {
   FILIERE
   DEPARTMENT
   CYCLE
+  CLASS
   CUSTOM
 }
 
@@ -100,6 +101,7 @@ model User {
   groupMemberships      MessageGroupMember[]
   notifications         Notification[]
   studentProfile        Student?
+  teacherProfile        Teacher?
 }
 
 model UserDepartment {
@@ -230,12 +232,14 @@ model Teacher {
   filiereId       Int?
   roleId          Int
   gradeId         Int
+  userId          Int?               @unique
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   department      Department         @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   filiere         Filiere?           @relation(fields: [filiereId], references: [id], onDelete: SetNull)
   role            TeacherRole        @relation(fields: [roleId], references: [id], onDelete: Restrict)
   grade           TeacherGrade       @relation(fields: [gradeId], references: [id], onDelete: Restrict)
+  user            User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
   taughtClasses   TeacherClass[]
   taughtCours     CoursClass[]
   sessions        TimetableSession[]
@@ -630,6 +634,8 @@ model ElementModule {
   classId               Int?
   volumeHoraire         Int?
   type                  ElementType             @default(CM)
+  ponderation           Float                   @default(1)
+  coefficient           Float                   @default(1)
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
   module                Module                  @relation(fields: [moduleId], references: [id], onDelete: Restrict)

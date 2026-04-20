@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -32,6 +33,15 @@ export class UsersController {
     return this.usersService.findAll();
   }
 
+  @Get('for-messaging')
+  @Roles(
+    UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER,
+    UserRole.USER, UserRole.TEACHER, UserRole.STUDENT, UserRole.INSPECTOR,
+  )
+  findForMessaging() {
+    return this.usersService.findForMessaging();
+  }
+
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   findOne(@Param('id', ParseIntPipe) id: number) {
@@ -54,6 +64,21 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.remove(id);
+  }
+
+  @Get('unlinked-profiles')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  getUnlinkedProfiles() {
+    return this.usersService.getUnlinkedProfiles();
+  }
+
+  @Post('bulk-import-accounts')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  bulkImportAccounts(@Body('defaultPassword') defaultPassword: string) {
+    if (!defaultPassword || defaultPassword.length < 6) {
+      throw new BadRequestException('Password must be at least 6 characters');
+    }
+    return this.usersService.bulkImportAccounts(defaultPassword);
   }
 
   @Get('backup/sql')

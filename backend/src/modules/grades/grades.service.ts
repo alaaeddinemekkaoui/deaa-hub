@@ -621,6 +621,8 @@ export class GradesService {
                     name: true,
                     type: true,
                     volumeHoraire: true,
+                    ponderation: true,
+                    coefficient: true,
                   },
                   orderBy: { name: 'asc' },
                 },
@@ -705,12 +707,24 @@ export class GradesService {
         if (elementGrades.length === 0) {
           moduleAverages[mod.id] = null;
         } else {
-          // Normalize to /20 and average
+          let weightedSum = 0;
+          let totalWeight = 0;
+          for (const el of mod.elements) {
+            const grade = studentGradeMap.get(el.id);
+            if (!grade) continue;
+            const weight = el.ponderation * el.coefficient;
+            if (weight <= 0) continue;
+            weightedSum += (grade.score / grade.maxScore) * 20 * weight;
+            totalWeight += weight;
+          }
+
           const avg =
-            elementGrades.reduce(
-              (sum, g) => sum + (g.score / g.maxScore) * 20,
-              0,
-            ) / elementGrades.length;
+            totalWeight > 0
+              ? weightedSum / totalWeight
+              : elementGrades.reduce(
+                  (sum, g) => sum + (g.score / g.maxScore) * 20,
+                  0,
+                ) / elementGrades.length;
           moduleAverages[mod.id] = Math.round(avg * 100) / 100;
         }
       }

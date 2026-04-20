@@ -8,7 +8,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { TransferStudentsDto } from './dto/transfer-students.dto';
 import { ProgressStudentsDto } from './dto/progress-students.dto';
-import { PrepaYear, Prisma, StudentCycle } from '@prisma/client';
+import { GroupType, PrepaYear, Prisma, StudentCycle } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
@@ -135,6 +135,9 @@ export class StudentsService {
       payload.firstYearEntry ?? dto.firstYearEntry,
     );
 
+    // Auto-provision account (fire-and-forget; errors are suppressed)
+    this.autoProvisionAccount(student.id, dto.codeMassar).catch(() => {/* non-blocking */});
+
     return this.findOne(student.id);
   }
 
@@ -193,6 +196,11 @@ export class StudentsService {
         ? payload.firstYearEntry
         : existing.firstYearEntry,
     );
+
+    // Sync group membership when class/filière changes
+    if (dto.classId !== undefined || dto.filiereId !== undefined) {
+      this.syncStudentGroupMembership(updated.id).catch(() => {/* non-blocking */});
+    }
 
     return this.findOne(updated.id);
   }
@@ -628,6 +636,11 @@ export class StudentsService {
       });
     }
 
+    // Sync group membership for transferred students (non-blocking)
+    for (const s of validStudents) {
+      this.syncStudentGroupMembership(s.id).catch(() => {/* non-blocking */});
+    }
+
     if (userId) {
       await this.prisma.activityLog.create({
         data: {
@@ -735,6 +748,11 @@ export class StudentsService {
           );
         }
       });
+    }
+
+    // Sync group membership for promoted students (non-blocking)
+    for (const s of admisGroup) {
+      this.syncStudentGroupMembership(s.id).catch(() => {/* non-blocking */});
     }
 
     if (userId) {
@@ -927,7 +945,139 @@ export class StudentsService {
       data: { userId: user.id },
     });
 
+    // Add new user to message groups (non-blocking)
+    this.addUserToGroups(
+      user.id,
+      student.classId,
+      student.filiereId,
+      departmentId,
+    ).catch(() => {/* non-blocking */});
+
     return { user, studentId };
+  }
+
+  // ─── Private helpers ─────────────────────────────────────────────────────────
+
+  /**
+   * Silently provision an account for a newly-created student.
+   * Uses codeMassar as the default password. Skips if account already exists.
+   */
+  private async autoProvisionAccount(
+    studentId: number,
+    defaultPassword: string,
+  ): Promise<void> {
+    const s = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: { userId: true },
+    });
+    if (s?.userId) return; // already has account
+
+    try {
+      await this.createAccount(studentId, defaultPassword);
+    } catch {
+      // ConflictException (duplicate email) or other — silently skip
+    }
+  }
+
+  /**
+   * Add a user to the relevant message groups:
+   *  - EVERYONE (id=1)
+   *  - CLASS group for their class
+   *  - FILIERE group for their filière
+   *  - DEPARTMENT group for their department
+   */
+  private async addUserToGroups(
+    userId: number,
+    classId: number | null | undefined,
+    filiereId: number | null | undefined,
+    departmentId: number | null | undefined,
+  ): Promise<void> {
+    // Always add to EVERYONE
+    await this.prisma.messageGroupMember.upsert({
+      where: { groupId_userId: { groupId: 1, userId } },
+      update: {},
+      create: { groupId: 1, userId, canSend: false },
+    });
+
+    if (classId) {
+      const groupId = await this.ensureClassMessageGroup(classId);
+      await this.prisma.messageGroupMember.upsert({
+        where: { groupId_userId: { groupId, userId } },
+        update: {},
+        create: { groupId, userId, canSend: false },
+      });
+    }
+
+    if (filiereId) {
+      const fg = await this.prisma.messageGroup.findFirst({
+        where: { type: GroupType.FILIERE, referenceId: filiereId },
+        select: { id: true },
+      });
+      if (fg) {
+        await this.prisma.messageGroupMember.upsert({
+          where: { groupId_userId: { groupId: fg.id, userId } },
+          update: {},
+          create: { groupId: fg.id, userId, canSend: false },
+        });
+      }
+    }
+
+    if (departmentId) {
+      const dg = await this.prisma.messageGroup.findFirst({
+        where: { type: GroupType.DEPARTMENT, referenceId: departmentId },
+        select: { id: true },
+      });
+      if (dg) {
+        await this.prisma.messageGroupMember.upsert({
+          where: { groupId_userId: { groupId: dg.id, userId } },
+          update: {},
+          create: { groupId: dg.id, userId, canSend: false },
+        });
+      }
+    }
+  }
+
+  /** Sync a student's user account into the correct messaging groups based on current class/filière/dept. */
+  private async syncStudentGroupMembership(studentId: number): Promise<void> {
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: {
+        userId: true,
+        classId: true,
+        filiereId: true,
+        filiere: { select: { departmentId: true } },
+        academicClass: { select: { filiere: { select: { departmentId: true } } } },
+      },
+    });
+    if (!student?.userId) return;
+    const departmentId =
+      student.academicClass?.filiere?.departmentId ??
+      student.filiere?.departmentId ??
+      null;
+    await this.addUserToGroups(student.userId, student.classId, student.filiereId, departmentId);
+  }
+
+  /** Ensure a CLASS message group exists for the given classId, creating it if needed. */
+  private async ensureClassMessageGroup(classId: number): Promise<number> {
+    const existing = await this.prisma.messageGroup.findFirst({
+      where: { type: GroupType.CLASS, referenceId: classId },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+
+    const cls = await this.prisma.academicClass.findUnique({
+      where: { id: classId },
+      select: { name: true },
+    });
+    const group = await this.prisma.messageGroup.create({
+      data: {
+        name: `Classe: ${cls?.name ?? classId}`,
+        type: GroupType.CLASS,
+        referenceId: classId,
+      },
+      select: { id: true },
+    });
+    return group.id;
   }
 
   /**

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { BookOpen, CalendarRange, GraduationCap, Search } from 'lucide-react';
+import { BookOpen, CalendarRange, GraduationCap, KeyRound, Search, UserPlus, Users } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
 import { ExportDataButton } from '@/components/admin/export-data-button';
 import { ImportDataButton } from '@/components/admin/import-data-button';
@@ -32,6 +32,7 @@ type Student = {
   sex: 'male' | 'female';
   firstYearEntry: number;
   codeMassar: string;
+  codeEtudiant?: string | null;
   cin: string;
   dateNaissance?: string;
   email?: string;
@@ -41,6 +42,7 @@ type Student = {
   bacType?: string | null;
   filiereId?: number | null;
   classId?: number | null;
+  userId?: number | null;
   filiere?: { name: string } | null;
   academicClass?: { id?: number; name: string; year: number } | null;
   classHistory?: StudentClassHistory[];
@@ -71,6 +73,7 @@ export default function StudentsPage() {
   const [firstYearEntry, setFirstYearEntry] = useState(String(new Date().getFullYear()));
   const [cin, setCin] = useState('');
   const [codeMassar, setCodeMassar] = useState('');
+  const [codeEtudiant, setCodeEtudiant] = useState('');
   const [dateNaissance, setDateNaissance] = useState('2000-01-01');
   const [email, setEmail] = useState('');
   const [telephone, setTelephone] = useState('');
@@ -81,6 +84,17 @@ export default function StudentsPage() {
   const [dateInscription, setDateInscription] = useState(new Date().toISOString().split('T')[0]);
   const [isLaureate, setIsLaureate] = useState(false);
   const [graduationYear, setGraduationYear] = useState(String(new Date().getFullYear()));
+
+  // Account-creation modal (single student)
+  const [accountStudentId, setAccountStudentId] = useState<number | null>(null);
+  const [accountStudentName, setAccountStudentName] = useState('');
+  const [accountPassword, setAccountPassword] = useState('');
+  const [accountSaving, setAccountSaving] = useState(false);
+
+  // Bulk create-accounts modal
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [bulkPassword, setBulkPassword] = useState('');
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const parseOptionalId = (value: string): number | undefined => {
     const trimmed = value.trim();
@@ -177,6 +191,7 @@ export default function StudentsPage() {
     setFirstYearEntry(String(new Date().getFullYear()));
     setCin('');
     setCodeMassar('');
+    setCodeEtudiant('');
     setDateNaissance('2000-01-01');
     setEmail('');
     setTelephone('');
@@ -221,6 +236,7 @@ export default function StudentsPage() {
         firstYearEntry: Number(firstYearEntry),
         cin: cin.trim(),
         codeMassar: codeMassar.trim(),
+        codeEtudiant: codeEtudiant.trim() || undefined,
         dateNaissance,
         email: email.trim() || undefined,
         telephone: telephone.trim() || undefined,
@@ -246,17 +262,17 @@ export default function StudentsPage() {
           await api.delete(`/students/${editingId}/remove-laureate`).catch(() => {});
         }
 
-        toast.success('Student updated successfully');
+        toast.success('Étudiant mis à jour avec succès');
       } else {
         await api.post('/students', payload);
-        toast.success('Student created successfully');
+        toast.success('Étudiant créé avec succès');
       }
 
       resetForm();
       setIsModalOpen(false);
       setRefreshKey((value) => value + 1);
     } catch {
-      toast.error('Failed to save student');
+      toast.error('Échec de l\'enregistrement de l\'étudiant');
     } finally {
       setSaving(false);
     }
@@ -266,13 +282,56 @@ export default function StudentsPage() {
     if (!window.confirm('Supprimer cet étudiant ?')) return;
     try {
       await api.delete(`/students/${id}`);
-      toast.success('Student deleted successfully');
+      toast.success('Étudiant supprimé avec succès');
       if (editingId === id) resetForm();
       setRefreshKey((value) => value + 1);
     } catch {
-      toast.error('Failed to delete student');
+      toast.error('Échec de la suppression de l\'étudiant');
     }
   };
+
+  const onCreateAccount = async () => {
+    if (!accountStudentId || accountPassword.length < 6) return;
+    setAccountSaving(true);
+    try {
+      await api.post(`/students/${accountStudentId}/create-account`, { password: accountPassword });
+      toast.success(`Compte créé pour ${accountStudentName}`);
+      setAccountStudentId(null);
+      setAccountStudentName('');
+      setAccountPassword('');
+      setRefreshKey((v) => v + 1);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Échec de la création du compte'));
+    } finally {
+      setAccountSaving(false);
+    }
+  };
+
+  const onBulkCreateAccounts = async () => {
+    if (bulkPassword.length < 6) return;
+    const withoutAccount = students.filter((s) => !s.userId).map((s) => s.id);
+    if (withoutAccount.length === 0) {
+      toast.info('Tous les étudiants ont déjà un compte');
+      return;
+    }
+    setBulkSaving(true);
+    try {
+      const res = await api.post<{ created: number; skipped: number }>(
+        '/students/bulk-create-accounts',
+        { studentIds: withoutAccount, defaultPassword: bulkPassword },
+      );
+      toast.success(`${res.data.created} compte(s) créé(s), ${res.data.skipped} ignoré(s)`);
+      setBulkModalOpen(false);
+      setBulkPassword('');
+      setRefreshKey((v) => v + 1);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Échec de la création en masse'));
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const studentsWithoutAccount = students.filter((s) => !s.userId).length;
 
   return (
     <div className="space-y-6">
@@ -305,6 +364,16 @@ export default function StudentsPage() {
       <section className="flex justify-end gap-2">
         <ImportDataButton onSuccess={() => setRefreshKey((k) => k + 1)} />
         <ExportDataButton />
+        {studentsWithoutAccount > 0 && (
+          <button
+            className="btn-outline flex items-center gap-1.5"
+            type="button"
+            onClick={() => setBulkModalOpen(true)}
+          >
+            <Users size={15} />
+            Créer comptes ({studentsWithoutAccount})
+          </button>
+        )}
         <button className="btn-primary" type="button" onClick={openCreateModal}>
           Ajouter un étudiant
         </button>
@@ -355,8 +424,9 @@ export default function StudentsPage() {
                 <th>ID</th>
                 <th>Nom complet</th>
                 <th>Sexe</th>
-                <th>Année d’entrée</th>
+                <th>Année d'entrée</th>
                 <th>Code Massar</th>
+                <th>Code Étudiant</th>
                 <th>CIN</th>
                 <th>Filière</th>
                 <th>Classe actuelle</th>
@@ -365,6 +435,7 @@ export default function StudentsPage() {
                 <th>Historique</th>
                 <th>E-mail</th>
                 <th>Téléphone</th>
+                <th>Compte</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -385,6 +456,7 @@ export default function StudentsPage() {
                   <td>{student.sex}</td>
                   <td>{student.firstYearEntry}</td>
                   <td>{student.codeMassar}</td>
+                  <td>{student.codeEtudiant ?? '-'}</td>
                   <td>{student.cin}</td>
                   <td>{student.filiere?.name ?? '-'}</td>
                   <td>{student.academicClass ? `${student.academicClass.name} (Année ${student.academicClass.year})` : '-'}</td>
@@ -422,6 +494,13 @@ export default function StudentsPage() {
                   <td>{student.email ?? '-'}</td>
                   <td>{student.telephone ?? '-'}</td>
                   <td>
+                    {student.userId ? (
+                      <span className="status-chip status-chip--ok">Actif</span>
+                    ) : (
+                      <span className="status-chip status-chip--muted">Aucun</span>
+                    )}
+                  </td>
+                  <td>
                     <div className="flex flex-wrap gap-2">
                       <Link className="btn-outline" href={`/students/${student.id}`}>
                         Profil
@@ -445,6 +524,7 @@ export default function StudentsPage() {
                           setFirstYearEntry(String(student.firstYearEntry));
                           setCin(student.cin);
                           setCodeMassar(student.codeMassar);
+                          setCodeEtudiant(student.codeEtudiant ?? '');
                           setDateNaissance(student.dateNaissance ? student.dateNaissance.split('T')[0] : '2000-01-01');
                           setEmail(student.email ?? '');
                           setTelephone(student.telephone ?? '');
@@ -460,6 +540,21 @@ export default function StudentsPage() {
                       >
                         Modifier
                       </button>
+                      {!student.userId && (
+                        <button
+                          type="button"
+                          className="btn-outline flex items-center gap-1"
+                          title="Créer un compte pour cet étudiant"
+                          onClick={() => {
+                            setAccountStudentId(student.id);
+                            setAccountStudentName(student.fullName);
+                            setAccountPassword('');
+                          }}
+                        >
+                          <UserPlus size={13} />
+                          Compte
+                        </button>
+                      )}
                       {canDelete && (
                         <button type="button" className="btn-outline" onClick={() => onDelete(student.id)}>
                           Supprimer
@@ -475,10 +570,11 @@ export default function StudentsPage() {
       </div>
       )}
 
+      {/* Add / Edit student modal */}
       <ModalShell
         open={isModalOpen}
-        title={editingId ? 'Modifier l’étudiant' : 'Ajouter un étudiant'}
-        description="Créez ou mettez à jour les détails du profil d’étudiant, le placement en classe et les informations de type bac."
+        title={editingId ? 'Modifier l\'étudiant' : 'Ajouter un étudiant'}
+        description="Créez ou mettez à jour les détails du profil d'étudiant, le placement en classe et les informations de type bac."
         onClose={closeModal}
         footer={
           <>
@@ -513,7 +609,7 @@ export default function StudentsPage() {
             </select>
           </div>
           <div className="field-stack">
-            <label className="field-label">Année d’entrée</label>
+            <label className="field-label">Année d'entrée</label>
             <input
               className="input"
               type="number"
@@ -532,6 +628,10 @@ export default function StudentsPage() {
             <input className="input" value={codeMassar} onChange={(event) => setCodeMassar(event.target.value)} />
           </div>
           <div className="field-stack">
+            <label className="field-label">Code Étudiant</label>
+            <input className="input" value={codeEtudiant} onChange={(event) => setCodeEtudiant(event.target.value)} placeholder="Ex. ET2025001" />
+          </div>
+          <div className="field-stack">
             <label className="field-label">Date de naissance</label>
             <input className="input" type="date" value={dateNaissance} onChange={(event) => setDateNaissance(event.target.value)} />
           </div>
@@ -540,7 +640,7 @@ export default function StudentsPage() {
             <input className="input" value={anneeAcademique} onChange={(event) => setAnneeAcademique(event.target.value)} />
           </div>
           <div className="field-stack">
-            <label className="field-label">Date d’inscription</label>
+            <label className="field-label">Date d'inscription</label>
             <input className="input" type="date" value={dateInscription} onChange={(event) => setDateInscription(event.target.value)} />
           </div>
           <div className="field-stack">
@@ -618,6 +718,95 @@ export default function StudentsPage() {
               </div>
             )}
           </div>
+        </div>
+      </ModalShell>
+
+      {/* Single account creation modal */}
+      <ModalShell
+        open={accountStudentId !== null}
+        title="Créer un compte étudiant"
+        description={`Créer un compte utilisateur pour ${accountStudentName}. Le code étudiant sera utilisé comme identifiant de connexion.`}
+        onClose={() => { setAccountStudentId(null); setAccountPassword(''); }}
+        footer={
+          <>
+            <button
+              className="btn-primary flex items-center gap-1.5"
+              type="button"
+              onClick={onCreateAccount}
+              disabled={accountSaving || accountPassword.length < 6}
+            >
+              <KeyRound size={14} />
+              {accountSaving ? 'Création...' : 'Créer le compte'}
+            </button>
+            <button
+              className="btn-outline"
+              type="button"
+              onClick={() => { setAccountStudentId(null); setAccountPassword(''); }}
+            >
+              Annuler
+            </button>
+          </>
+        }
+      >
+        <div className="field-stack">
+          <label className="field-label">Mot de passe par défaut</label>
+          <input
+            className="input"
+            type="password"
+            value={accountPassword}
+            onChange={(e) => setAccountPassword(e.target.value)}
+            placeholder="Minimum 6 caractères"
+            autoComplete="new-password"
+          />
+          {accountPassword.length > 0 && accountPassword.length < 6 && (
+            <p className="text-xs text-red-500">Le mot de passe doit comporter au moins 6 caractères.</p>
+          )}
+        </div>
+      </ModalShell>
+
+      {/* Bulk account creation modal */}
+      <ModalShell
+        open={bulkModalOpen}
+        title="Créer des comptes en masse"
+        description={`Créer des comptes pour ${studentsWithoutAccount} étudiant(s) sans compte. Un mot de passe commun sera appliqué à tous.`}
+        onClose={() => { setBulkModalOpen(false); setBulkPassword(''); }}
+        footer={
+          <>
+            <button
+              className="btn-primary flex items-center gap-1.5"
+              type="button"
+              onClick={onBulkCreateAccounts}
+              disabled={bulkSaving || bulkPassword.length < 6}
+            >
+              <Users size={14} />
+              {bulkSaving ? 'Création...' : `Créer ${studentsWithoutAccount} compte(s)`}
+            </button>
+            <button
+              className="btn-outline"
+              type="button"
+              onClick={() => { setBulkModalOpen(false); setBulkPassword(''); }}
+            >
+              Annuler
+            </button>
+          </>
+        }
+      >
+        <div className="field-stack">
+          <label className="field-label">Mot de passe commun</label>
+          <input
+            className="input"
+            type="password"
+            value={bulkPassword}
+            onChange={(e) => setBulkPassword(e.target.value)}
+            placeholder="Minimum 6 caractères"
+            autoComplete="new-password"
+          />
+          {bulkPassword.length > 0 && bulkPassword.length < 6 && (
+            <p className="text-xs text-red-500">Le mot de passe doit comporter au moins 6 caractères.</p>
+          )}
+          <p className="text-xs text-slate-500 mt-1">
+            Les étudiants disposant déjà d'un compte seront ignorés automatiquement.
+          </p>
         </div>
       </ModalShell>
     </div>

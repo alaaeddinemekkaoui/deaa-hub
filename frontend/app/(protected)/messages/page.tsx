@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   MessageSquare,
   Plus,
@@ -23,7 +24,7 @@ import { cn } from '@/lib/utils';
 type Group = {
   id: number;
   name: string;
-  type: 'EVERYONE' | 'ADMINS_ONLY' | 'FILIERE' | 'DEPARTMENT' | 'CYCLE' | 'CUSTOM';
+  type: 'EVERYONE' | 'ADMINS_ONLY' | 'FILIERE' | 'DEPARTMENT' | 'CYCLE' | 'CLASS' | 'CUSTOM';
   _count: { members: number; messages: number };
 };
 
@@ -48,6 +49,20 @@ type ConversationPeer = {
   lastAt?: string;
 };
 
+type InboxThread = {
+  peer: ConversationPeer;
+  lastMessage: string;
+  lastAt: string;
+  messageId: number;
+};
+
+type InboxPayload = {
+  groups: Group[];
+  directMessages: Message[];
+  received: InboxThread[];
+  sent: InboxThread[];
+};
+
 type Thread =
   | { kind: 'group'; group: Group }
   | { kind: 'direct'; peer: ConversationPeer };
@@ -60,6 +75,7 @@ const GROUP_TYPE_ICONS: Record<Group['type'], React.ReactNode> = {
   FILIERE: <Hash size={13} />,
   DEPARTMENT: <Hash size={13} />,
   CYCLE: <Hash size={13} />,
+  CLASS: <Users size={13} />,
   CUSTOM: <Users size={13} />,
 };
 
@@ -69,6 +85,7 @@ const GROUP_TYPE_LABELS: Record<Group['type'], string> = {
   FILIERE: 'Filière',
   DEPARTMENT: 'Département',
   CYCLE: 'Cycle',
+  CLASS: 'Classe',
   CUSTOM: 'Personnalisé',
 };
 
@@ -106,8 +123,8 @@ function ComposeModal({
   useEffect(() => {
     if (target !== 'direct') return;
     api
-      .get<{ data: User[] }>('/users', { params: { limit: 200 } })
-      .then((r) => setUsers(r.data.data ?? []))
+      .get<User[]>('/users/for-messaging')
+      .then((r) => setUsers(r.data ?? []))
       .catch(() => {});
   }, [target]);
 
@@ -244,36 +261,49 @@ function ComposeModal({
   );
 }
 
-// ─── Message bubble ───────────────────────────────────────────────────────────
+// ─── Message card (email style) ──────────────────────────────────────────────
 
-function MessageBubble({ msg, isMine }: { msg: Message; isMine: boolean }) {
+function MessageCard({ msg, isMine }: { msg: Message; isMine: boolean }) {
   return (
-    <div className={cn('flex gap-2 max-w-[80%]', isMine ? 'ml-auto flex-row-reverse' : '')}>
-      <div className={cn(
-        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white',
-        isMine ? 'bg-emerald-600' : 'bg-slate-400',
-      )}>
-        {msg.sender.fullName.charAt(0).toUpperCase()}
-      </div>
-      <div>
-        {!isMine && (
-          <p className="mb-0.5 text-[10px] font-semibold text-slate-500">{msg.sender.fullName}</p>
-        )}
-        <div className={cn(
-          'rounded-2xl px-3.5 py-2.5 text-sm leading-snug',
-          isMine ? 'bg-emerald-600 text-white rounded-tr-sm' : 'bg-slate-100 text-slate-800 rounded-tl-sm',
-        )}>
-          {msg.content}
-          {msg.fileUrl && (
-            <a href={msg.fileUrl} target="_blank" rel="noreferrer" className="mt-1 block text-xs underline opacity-80">
-              Pièce jointe
-            </a>
+    <div className={cn(
+      'rounded-xl border px-4 py-3 space-y-1.5',
+      isMine
+        ? 'border-emerald-100 bg-emerald-50'
+        : 'border-slate-200 bg-white',
+    )}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className={cn(
+            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white',
+            isMine ? 'bg-emerald-600' : 'bg-slate-400',
+          )}>
+            {msg.sender.fullName.charAt(0).toUpperCase()}
+          </div>
+          <span className={cn(
+            'text-[12px] font-semibold truncate',
+            isMine ? 'text-emerald-800' : 'text-slate-800',
+          )}>
+            {isMine ? 'Moi' : msg.sender.fullName}
+          </span>
+          {!isMine && (
+            <span className="text-[10px] text-slate-400 capitalize shrink-0">
+              {msg.sender.role}
+            </span>
           )}
         </div>
-        <p className={cn('mt-1 text-[10px] text-slate-400', isMine && 'text-right')}>
-          {formatTime(msg.createdAt)}
-        </p>
+        <span className="text-[10px] text-slate-400 shrink-0">{formatTime(msg.createdAt)}</span>
       </div>
+      <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+      {msg.fileUrl && (
+        <a
+          href={msg.fileUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-block text-xs text-blue-600 underline"
+        >
+          Pièce jointe
+        </a>
+      )}
     </div>
   );
 }
@@ -283,8 +313,18 @@ function MessageBubble({ msg, isMine }: { msg: Message; isMine: boolean }) {
 export default function MessagesPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'staff';
+  const searchParams = useSearchParams();
 
   const [groups, setGroups] = useState<Group[]>([]);
+  const [receivedThreads, setReceivedThreads] = useState<InboxThread[]>([]);
+  const [sentThreads, setSentThreads] = useState<InboxThread[]>([]);
+
+  const initialTab = (() => {
+    const t = searchParams.get('tab');
+    if (t === 'received' || t === 'sent') return t;
+    return 'groups' as const;
+  })();
+  const [activeTab, setActiveTab] = useState<'groups' | 'received' | 'sent'>(initialTab);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [msgLoading, setMsgLoading] = useState(false);
@@ -302,30 +342,52 @@ export default function MessagesPage() {
     } catch { /* silent */ }
   }, []);
 
-  useEffect(() => { void loadGroups(); }, [loadGroups]);
+  const loadInbox = useCallback(async () => {
+    try {
+      const res = await api.get<InboxPayload>('/messaging/inbox');
+      setReceivedThreads(res.data.received ?? []);
+      setSentThreads(res.data.sent ?? []);
+    } catch {
+      // silent
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadGroups();
+    void loadInbox();
+  }, [loadGroups, loadInbox]);
+
+  // Load messages for active thread
+  const loadThreadMessages = useCallback(async (showLoader = false) => {
+    if (!activeThread) return;
+    if (showLoader) { setMsgLoading(true); setMessages([]); }
+    try {
+      let res;
+      if (activeThread.kind === 'group') {
+        res = await api.get<Message[]>(`/messaging/groups/${activeThread.group.id}/messages`);
+      } else {
+        res = await api.get<Message[]>(`/messaging/conversation/${activeThread.peer.id}`);
+      }
+      setMessages((res.data as Message[]).reverse());
+    } catch (err) {
+      if (showLoader) toast.error(getApiErrorMessage(err, 'Impossible de charger les messages.'));
+    } finally {
+      if (showLoader) setMsgLoading(false);
+    }
+  }, [activeThread]);
 
   // Load messages when thread changes
   useEffect(() => {
     if (!activeThread) { setMessages([]); return; }
-    const load = async () => {
-      setMsgLoading(true);
-      setMessages([]);
-      try {
-        let res;
-        if (activeThread.kind === 'group') {
-          res = await api.get<Message[]>(`/messaging/groups/${activeThread.group.id}/messages`);
-        } else {
-          res = await api.get<Message[]>(`/messaging/conversation/${activeThread.peer.id}`);
-        }
-        setMessages((res.data as Message[]).reverse());
-      } catch (err) {
-        toast.error(getApiErrorMessage(err, 'Impossible de charger les messages.'));
-      } finally {
-        setMsgLoading(false);
-      }
-    };
-    void load();
-  }, [activeThread]);
+    void loadThreadMessages(true);
+  }, [activeThread]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Poll active thread every 10s for new messages from others
+  useEffect(() => {
+    if (!activeThread) return;
+    const interval = setInterval(() => void loadThreadMessages(false), 10_000);
+    return () => clearInterval(interval);
+  }, [activeThread, loadThreadMessages]);
 
   // Scroll to bottom when messages load
   useEffect(() => {
@@ -340,9 +402,9 @@ export default function MessagesPage() {
       if (activeThread.kind === 'group') body.groupId = activeThread.group.id;
       else body.recipientId = activeThread.peer.id;
 
-      const res = await api.post<Message>('/messaging/send', body);
-      setMessages((prev) => [...prev, { ...res.data, sender: { id: user.id, fullName: user.fullName ?? user.email, role: user.role } }]);
+      await api.post<Message>('/messaging/send', body);
       setReplyText('');
+      await Promise.all([loadThreadMessages(false), loadInbox()]);
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Échec de l'envoi"));
     } finally {
@@ -352,6 +414,14 @@ export default function MessagesPage() {
 
   const filteredGroups = groups.filter((g) =>
     g.name.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const filteredReceived = receivedThreads.filter((item) =>
+    item.peer.fullName.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const filteredSent = sentThreads.filter((item) =>
+    item.peer.fullName.toLowerCase().includes(search.toLowerCase()),
   );
 
   const threadTitle =
@@ -382,7 +452,7 @@ export default function MessagesPage() {
         )}>
           {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <span className="text-sm font-semibold text-slate-800">Canaux & Conversations</span>
+            <span className="text-sm font-semibold text-slate-800">Messages</span>
             <button
               type="button"
               onClick={() => setComposeOpen(true)}
@@ -395,11 +465,53 @@ export default function MessagesPage() {
 
           {/* Search */}
           <div className="px-3 py-2 border-b border-slate-50">
+            <div className="mb-2 flex rounded-xl border border-slate-200 bg-slate-50 p-0.5">
+              <button
+                type="button"
+                className={cn(
+                  'flex-1 rounded-lg py-1 text-[11px] font-semibold transition-all',
+                  activeTab === 'groups'
+                    ? 'bg-white text-slate-800 shadow-sm'
+                    : 'text-slate-500',
+                )}
+                onClick={() => setActiveTab('groups')}
+              >
+                Groupes
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  'flex-1 rounded-lg py-1 text-[11px] font-semibold transition-all',
+                  activeTab === 'received'
+                    ? 'bg-white text-slate-800 shadow-sm'
+                    : 'text-slate-500',
+                )}
+                onClick={() => setActiveTab('received')}
+              >
+                Reçus
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  'flex-1 rounded-lg py-1 text-[11px] font-semibold transition-all',
+                  activeTab === 'sent'
+                    ? 'bg-white text-slate-800 shadow-sm'
+                    : 'text-slate-500',
+                )}
+                onClick={() => setActiveTab('sent')}
+              >
+                Envoyés
+              </button>
+            </div>
             <div className="relative">
               <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 className="input pl-8 py-1.5 text-xs"
-                placeholder="Rechercher un groupe…"
+                placeholder={
+                  activeTab === 'groups'
+                    ? 'Rechercher un groupe…'
+                    : 'Rechercher un contact…'
+                }
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -408,9 +520,10 @@ export default function MessagesPage() {
 
           {/* Groups list */}
           <div className="flex-1 overflow-y-auto">
-            {filteredGroups.length === 0 ? (
-              <p className="py-8 text-center text-xs text-slate-400">Aucun groupe</p>
-            ) : (
+            {activeTab === 'groups' ? (
+              filteredGroups.length === 0 ? (
+                <p className="py-8 text-center text-xs text-slate-400">Aucun groupe</p>
+              ) : (
               <div className="py-1">
                 <p className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
                   Groupes
@@ -431,6 +544,7 @@ export default function MessagesPage() {
                         'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white',
                         g.type === 'EVERYONE' ? 'bg-blue-500' :
                         g.type === 'ADMINS_ONLY' ? 'bg-red-500' :
+                        g.type === 'CLASS' ? 'bg-amber-500' :
                         'bg-emerald-600',
                       )}>
                         {GROUP_TYPE_ICONS[g.type]}
@@ -442,6 +556,83 @@ export default function MessagesPage() {
                         <p className="text-[10px] text-slate-400">
                           {g._count.members} membre{g._count.members !== 1 ? 's' : ''} · {g._count.messages} message{g._count.messages !== 1 ? 's' : ''}
                         </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              )
+            ) : activeTab === 'received' ? (
+              filteredReceived.length === 0 ? (
+                <p className="py-8 text-center text-xs text-slate-400">Aucun message reçu</p>
+              ) : (
+                <div className="py-1">
+                  <p className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                    Expéditeurs
+                  </p>
+                  {filteredReceived.map((item) => {
+                    const active =
+                      activeThread?.kind === 'direct' &&
+                      activeThread.peer.id === item.peer.id;
+                    return (
+                      <button
+                        key={`received-${item.messageId}-${item.peer.id}`}
+                        type="button"
+                        className={cn(
+                          'flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-slate-50',
+                          active && 'bg-emerald-50',
+                        )}
+                        onClick={() => setActiveThread({ kind: 'direct', peer: item.peer })}
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-300 text-[11px] font-semibold text-white">
+                          {item.peer.fullName.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className={cn('truncate text-[13px] font-medium', active ? 'text-emerald-700' : 'text-slate-800')}>
+                              {item.peer.fullName}
+                            </p>
+                            <span className="shrink-0 text-[10px] text-slate-400">{formatTime(item.lastAt)}</span>
+                          </div>
+                          <p className="truncate text-[11px] text-slate-500">{item.lastMessage}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )
+            ) : filteredSent.length === 0 ? (
+              <p className="py-8 text-center text-xs text-slate-400">Aucun message envoyé</p>
+            ) : (
+              <div className="py-1">
+                <p className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                  Destinataires
+                </p>
+                {filteredSent.map((item) => {
+                  const active =
+                    activeThread?.kind === 'direct' &&
+                    activeThread.peer.id === item.peer.id;
+                  return (
+                    <button
+                      key={`sent-${item.messageId}-${item.peer.id}`}
+                      type="button"
+                      className={cn(
+                        'flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-slate-50',
+                        active && 'bg-emerald-50',
+                      )}
+                      onClick={() => setActiveThread({ kind: 'direct', peer: item.peer })}
+                    >
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[11px] font-semibold text-white">
+                        {item.peer.fullName.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className={cn('truncate text-[13px] font-medium', active ? 'text-emerald-700' : 'text-slate-800')}>
+                            {item.peer.fullName}
+                          </p>
+                          <span className="shrink-0 text-[10px] text-slate-400">{formatTime(item.lastAt)}</span>
+                        </div>
+                        <p className="truncate text-[11px] text-slate-500">{item.lastMessage}</p>
                       </div>
                     </button>
                   );
@@ -485,6 +676,7 @@ export default function MessagesPage() {
                     'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white',
                     activeThread.group.type === 'EVERYONE' ? 'bg-blue-500' :
                     activeThread.group.type === 'ADMINS_ONLY' ? 'bg-red-500' :
+                    activeThread.group.type === 'CLASS' ? 'bg-amber-500' :
                     'bg-emerald-600',
                   )}>
                     {GROUP_TYPE_ICONS[activeThread.group.type]}
@@ -503,8 +695,8 @@ export default function MessagesPage() {
                 </div>
               </div>
 
-              {/* Messages */}
-              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+              {/* Messages — email-card list */}
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
                 {msgLoading ? (
                   <div className="flex items-center justify-center py-12 text-xs text-slate-400">
                     Chargement…
@@ -516,7 +708,7 @@ export default function MessagesPage() {
                   </div>
                 ) : (
                   messages.map((msg) => (
-                    <MessageBubble
+                    <MessageCard
                       key={msg.id}
                       msg={msg}
                       isMine={msg.senderId === user?.id}
@@ -526,12 +718,15 @@ export default function MessagesPage() {
                 <div ref={bottomRef} />
               </div>
 
-              {/* Reply box */}
-              {canSendInThread && (
-                <div className="border-t border-slate-100 px-4 py-3">
+              {/* Compose / reply area */}
+              {canSendInThread ? (
+                <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                    {activeThread.kind === 'group' ? 'Envoyer au groupe' : 'Répondre'}
+                  </p>
                   <div className="flex items-end gap-2">
                     <textarea
-                      className="input flex-1 resize-none text-sm"
+                      className="input flex-1 resize-none text-sm bg-white"
                       rows={2}
                       placeholder="Votre message… (Ctrl+Entrée pour envoyer)"
                       value={replyText}
@@ -554,12 +749,10 @@ export default function MessagesPage() {
                     </button>
                   </div>
                 </div>
-              )}
-
-              {!canSendInThread && (
+              ) : (
                 <div className="border-t border-slate-100 px-4 py-3">
                   <p className="text-center text-xs text-slate-400">
-                    Vous pouvez uniquement lire ce canal.
+                    Lecture seule — vous ne pouvez pas envoyer dans ce canal.
                   </p>
                 </div>
               )}
@@ -574,7 +767,10 @@ export default function MessagesPage() {
           currentUser={user}
           groups={groups}
           onClose={() => setComposeOpen(false)}
-          onSent={() => void loadGroups()}
+          onSent={() => {
+            void loadGroups();
+            void loadInbox();
+          }}
         />
       )}
     </div>

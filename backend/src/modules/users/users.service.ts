@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { GroupType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { TtlCache } from '../../common/utils/ttl-cache';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -61,6 +62,13 @@ export class UsersService {
     });
   }
 
+  findForMessaging() {
+    return this.prisma.user.findMany({
+      select: { id: true, fullName: true, email: true, role: true },
+      orderBy: { fullName: 'asc' },
+    });
+  }
+
   async findOne(id: number) {
     const user = await this.prisma.user.findUnique({
       where: { id },
@@ -112,6 +120,13 @@ export class UsersService {
       },
       select: USER_SELECT,
     });
+
+    await this.syncUserMessagingGroups({
+      userId: user.id,
+      role: user.role,
+      departmentIds: user.departments.map((ud) => ud.department.id),
+    });
+
     this.listCache.invalidate();
     return mapDepartments(user);
   }
@@ -144,6 +159,12 @@ export class UsersService {
       });
     });
 
+    await this.syncUserMessagingGroups({
+      userId: user.id,
+      role: user.role,
+      departmentIds: user.departments.map((ud) => ud.department.id),
+    });
+
     this.listCache.invalidate();
     return mapDepartments(user);
   }
@@ -151,5 +172,249 @@ export class UsersService {
   remove(id: number) {
     this.listCache.invalidate();
     return this.prisma.user.delete({ where: { id } });
+  }
+
+  // ─── Account reconciliation ──────────────────────────────────────────────
+
+  async getUnlinkedProfiles() {
+    const [students, teachers] = await Promise.all([
+      this.prisma.student.findMany({
+        where: { userId: null },
+        select: { id: true, fullName: true, codeMassar: true, codeEtudiant: true },
+        orderBy: { fullName: 'asc' },
+      }),
+      this.prisma.teacher.findMany({
+        where: { userId: null },
+        select: { id: true, firstName: true, lastName: true, email: true, cin: true },
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+      }),
+    ]);
+
+    return {
+      students: students.map((s) => ({
+        id: s.id,
+        fullName: s.fullName,
+        identifier: s.codeEtudiant ?? s.codeMassar,
+      })),
+      teachers: teachers.map((t) => ({
+        id: t.id,
+        fullName: `${t.firstName} ${t.lastName}`.trim(),
+        identifier: t.email ?? t.cin ?? null,
+      })),
+    };
+  }
+
+  /**
+   * Bulk-create User accounts for all unlinked students and teachers.
+   * Uses codeMassar as default password for students, cin / last.first as identifier.
+   */
+  async bulkImportAccounts(
+    defaultPassword: string,
+  ): Promise<{ students: { created: number; skipped: number }; teachers: { created: number; skipped: number }; errors: string[] }> {
+    const passwordHash = await bcrypt.hash(defaultPassword, 10);
+    const errors: string[] = [];
+
+    const [unlinkedStudents, unlinkedTeachers] = await Promise.all([
+      this.prisma.student.findMany({
+        where: { userId: null },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          codeEtudiant: true,
+          codeMassar: true,
+          classId: true,
+          filiereId: true,
+          filiere: { select: { departmentId: true } },
+          academicClass: { select: { filiere: { select: { departmentId: true } } } },
+        },
+      }),
+      this.prisma.teacher.findMany({
+        where: { userId: null },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          cin: true,
+          departmentId: true,
+          filiereId: true,
+        },
+      }),
+    ]);
+
+    let studentsCreated = 0;
+    let studentsSkipped = 0;
+    let teachersCreated = 0;
+    let teachersSkipped = 0;
+
+    // Students
+    for (const s of unlinkedStudents) {
+      try {
+        const identifier = s.codeEtudiant ?? s.codeMassar;
+        const email = s.email ?? `${identifier}@iav.ac.ma`;
+        const existing = await this.prisma.user.findUnique({ where: { email } });
+        if (existing) { studentsSkipped++; continue; }
+        const departmentId = s.academicClass?.filiere?.departmentId ?? s.filiere?.departmentId ?? null;
+        const user = await this.prisma.user.create({
+          data: {
+            fullName: s.fullName,
+            email,
+            role: 'student',
+            passwordHash,
+            ...(departmentId ? { departments: { create: [{ departmentId }] } } : {}),
+          },
+          select: { id: true },
+        });
+        await this.prisma.student.update({ where: { id: s.id }, data: { userId: user.id } });
+        await this.syncUserMessagingGroups({
+          userId: user.id,
+          role: 'student',
+          departmentIds: departmentId ? [departmentId] : [],
+        });
+        studentsCreated++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(`Student ${s.id}: ${msg}`);
+      }
+    }
+
+    // Teachers
+    for (const t of unlinkedTeachers) {
+      try {
+        const identifier = t.cin ?? `${t.lastName.toLowerCase()}.${t.firstName.toLowerCase()}`;
+        const email = t.email ?? `${identifier}@iav.ac.ma`;
+        const existing = await this.prisma.user.findUnique({ where: { email } });
+        if (existing) { teachersSkipped++; continue; }
+        const user = await this.prisma.user.create({
+          data: {
+            fullName: `${t.firstName} ${t.lastName}`.trim(),
+            email,
+            role: 'teacher',
+            passwordHash,
+            departments: { create: [{ departmentId: t.departmentId }] },
+          },
+          select: { id: true },
+        });
+        await this.prisma.teacher.update({ where: { id: t.id }, data: { userId: user.id } });
+        await this.syncUserMessagingGroups({
+          userId: user.id,
+          role: 'teacher',
+          departmentIds: [t.departmentId],
+        });
+        teachersCreated++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(`Teacher ${t.id}: ${msg}`);
+      }
+    }
+
+    this.listCache.invalidate();
+    return {
+      students: { created: studentsCreated, skipped: studentsSkipped },
+      teachers: { created: teachersCreated, skipped: teachersSkipped },
+      errors,
+    };
+  }
+
+  private isAdminLikeRole(role: string): boolean {
+    return role === 'admin' || role === 'staff';
+  }
+
+  /**
+   * Keep user membership synchronized with messaging policy:
+   * - Everyone group (all users)
+   * - Admins-only group (admin/staff only)
+   * - Department groups (department-scoped users)
+   */
+  private async syncUserMessagingGroups(params: {
+    userId: number;
+    role: string;
+    departmentIds: number[];
+  }): Promise<void> {
+    const { userId, role, departmentIds } = params;
+    const isAdminLike = this.isAdminLikeRole(role);
+
+    const everyoneGroup = await this.prisma.messageGroup.findFirst({
+      where: { type: GroupType.EVERYONE },
+      select: { id: true },
+    });
+
+    if (everyoneGroup) {
+      await this.prisma.messageGroupMember.upsert({
+        where: {
+          groupId_userId: { groupId: everyoneGroup.id, userId },
+        },
+        update: { canSend: isAdminLike },
+        create: {
+          groupId: everyoneGroup.id,
+          userId,
+          canSend: isAdminLike,
+        },
+      });
+    }
+
+    const adminsOnlyGroup = await this.prisma.messageGroup.findFirst({
+      where: { type: GroupType.ADMINS_ONLY },
+      select: { id: true },
+    });
+
+    if (adminsOnlyGroup) {
+      if (isAdminLike) {
+        await this.prisma.messageGroupMember.upsert({
+          where: {
+            groupId_userId: { groupId: adminsOnlyGroup.id, userId },
+          },
+          update: { canSend: true },
+          create: {
+            groupId: adminsOnlyGroup.id,
+            userId,
+            canSend: true,
+          },
+        });
+      } else {
+        await this.prisma.messageGroupMember.deleteMany({
+          where: { groupId: adminsOnlyGroup.id, userId },
+        });
+      }
+    }
+
+    const currentDepartmentGroupMemberships = await this.prisma.messageGroupMember.findMany({
+      where: {
+        userId,
+        group: { type: GroupType.DEPARTMENT },
+      },
+      select: { groupId: true },
+    });
+
+    if (currentDepartmentGroupMemberships.length > 0) {
+      await this.prisma.messageGroupMember.deleteMany({
+        where: {
+          userId,
+          groupId: { in: currentDepartmentGroupMemberships.map((m) => m.groupId) },
+        },
+      });
+    }
+
+    if (departmentIds.length > 0) {
+      const targetDepartmentGroups = await this.prisma.messageGroup.findMany({
+        where: {
+          type: GroupType.DEPARTMENT,
+          referenceId: { in: departmentIds },
+        },
+        select: { id: true },
+      });
+
+      if (targetDepartmentGroups.length > 0) {
+        await this.prisma.messageGroupMember.createMany({
+          data: targetDepartmentGroups.map((group) => ({
+            groupId: group.id,
+            userId,
+            canSend: false,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
   }
 }
