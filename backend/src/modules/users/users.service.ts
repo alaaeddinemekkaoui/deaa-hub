@@ -317,6 +317,30 @@ export class UsersService {
     };
   }
 
+  async syncMessagingGroups() {
+    const users = await this.prisma.user.findMany({
+      select: {
+        id: true,
+        role: true,
+        departments: { select: { departmentId: true } },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    for (const user of users) {
+      await this.syncUserMessagingGroups({
+        userId: user.id,
+        role: user.role,
+        departmentIds: user.departments.map((item) => item.departmentId),
+      });
+    }
+
+    return {
+      processedUsers: users.length,
+      message: 'Synchronisation des groupes de messagerie terminée',
+    };
+  }
+
   private isAdminLikeRole(role: string): boolean {
     return role === 'admin' || role === 'staff';
   }

@@ -424,7 +424,7 @@ export default function StudentsPage() {
                 <th>ID</th>
                 <th>Nom complet</th>
                 <th>Sexe</th>
-                <th>Année d'entrée</th>
+                <th>Année d&apos;entrée</th>
                 <th>Code Massar</th>
                 <th>Code Étudiant</th>
                 <th>CIN</th>
@@ -609,7 +609,7 @@ export default function StudentsPage() {
             </select>
           </div>
           <div className="field-stack">
-            <label className="field-label">Année d'entrée</label>
+            <label className="field-label">Année d&apos;entrée</label>
             <input
               className="input"
               type="number"
@@ -640,7 +640,7 @@ export default function StudentsPage() {
             <input className="input" value={anneeAcademique} onChange={(event) => setAnneeAcademique(event.target.value)} />
           </div>
           <div className="field-stack">
-            <label className="field-label">Date d'inscription</label>
+            <label className="field-label">Date d&apos;inscription</label>
             <input className="input" type="date" value={dateInscription} onChange={(event) => setDateInscription(event.target.value)} />
           </div>
           <div className="field-stack">
@@ -805,7 +805,7 @@ export default function StudentsPage() {
             <p className="text-xs text-red-500">Le mot de passe doit comporter au moins 6 caractères.</p>
           )}
           <p className="text-xs text-slate-500 mt-1">
-            Les étudiants disposant déjà d'un compte seront ignorés automatiquement.
+            Les étudiants disposant déjà d&apos;un compte seront ignorés automatiquement.
           </p>
         </div>
       </ModalShell>

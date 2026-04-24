@@ -41,6 +41,8 @@ type ElementRow = {
   name: string;
   type: 'CM' | 'TD' | 'TP';
   volumeHoraire?: number | null;
+  ponderation?: number | null;
+  coefficient?: number | null;
 };
 
 type ModuleRow = {
@@ -83,32 +85,55 @@ type ComputedStudent = StudentRow & {
   filteredOverallAverage: number | null;
 };
 
+function elementWeight(element: ElementRow): number {
+  const ponderation = element.ponderation ?? 1;
+  const coefficient = element.coefficient ?? 1;
+  return ponderation * coefficient;
+}
+
 function computeStudentAverages(
   student: StudentRow,
   modules: ModuleRow[],
 ): ComputedStudent {
   const filteredModuleAverages: Record<number, number | null> = {};
+  let overallWeightedSum = 0;
+  let overallWeight = 0;
 
   for (const mod of modules) {
     const elementGrades = mod.elements
-      .map((el) => student.grades[el.id])
-      .filter((g): g is GradeCell => g !== undefined);
+      .map((el) => ({ element: el, grade: student.grades[el.id] }))
+      .filter((entry): entry is { element: ElementRow; grade: GradeCell } => entry.grade !== undefined);
 
     if (elementGrades.length === 0) {
       filteredModuleAverages[mod.id] = null;
     } else {
-      const avg =
-        elementGrades.reduce((sum, g) => sum + (g.score / g.maxScore) * 20, 0) /
-        elementGrades.length;
+      const weighted = elementGrades.reduce(
+        (acc, { element, grade }) => {
+          const weight = elementWeight(element);
+          if (weight <= 0) return acc;
+          return {
+            sum: acc.sum + (grade.score / grade.maxScore) * 20 * weight,
+            weight: acc.weight + weight,
+          };
+        },
+        { sum: 0, weight: 0 },
+      );
+      const avg = weighted.weight > 0
+        ? weighted.sum / weighted.weight
+        : elementGrades.reduce((sum, { grade }) => sum + (grade.score / grade.maxScore) * 20, 0) /
+          elementGrades.length;
       filteredModuleAverages[mod.id] = Math.round(avg * 100) / 100;
+      overallWeightedSum += weighted.sum;
+      overallWeight += weighted.weight;
     }
   }
 
   const validAverages = Object.values(filteredModuleAverages).filter(
     (v): v is number => v !== null,
   );
-  const filteredOverallAverage =
-    validAverages.length > 0
+  const filteredOverallAverage = overallWeight > 0
+    ? Math.round((overallWeightedSum / overallWeight) * 100) / 100
+    : validAverages.length > 0
       ? Math.round(
           (validAverages.reduce((sum, v) => sum + v, 0) / validAverages.length) * 100,
         ) / 100
@@ -128,15 +153,6 @@ function fmtAvg(avg: number | null): string {
   return avg.toFixed(2);
 }
 
-function mention(avg: number | null): string {
-  if (avg === null) return '—';
-  if (avg >= 16) return 'Très bien';
-  if (avg >= 14) return 'Bien';
-  if (avg >= 12) return 'Assez bien';
-  if (avg >= 10) return 'Passable';
-  return 'Insuffisant';
-}
-
 function mentionColor(avg: number | null): string {
   if (avg === null) return 'text-slate-400';
   if (avg >= 16) return 'text-emerald-600 font-semibold';
@@ -144,6 +160,15 @@ function mentionColor(avg: number | null): string {
   if (avg >= 12) return 'text-cyan-600';
   if (avg >= 10) return 'text-amber-600';
   return 'text-red-600 font-semibold';
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -175,7 +200,7 @@ export default function DeliberationPage() {
   // UI state
   const [activeTab, setActiveTab] = useState<'classe' | 'releve'>('classe');
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
-  const [decisionOverrides, setDecisionOverrides] = useState<Record<number, 'admis' | 'ajourné'>>({});
+  const tableExportRef = useRef<HTMLElement | null>(null);
 
   // ─── Reference data visibility ─────────────────────────────────────────────
 
@@ -232,102 +257,71 @@ export default function DeliberationPage() {
     return data.students.map((s) => computeStudentAverages(s, visibleModules));
   }, [data, visibleModules]);
 
-  const passCount = useMemo(
-    () =>
-      computedStudents.filter((s) => {
-        const override = decisionOverrides[s.id];
-        if (override !== undefined) return override === 'admis';
-        return (s.filteredOverallAverage ?? 0) >= 10;
-      }).length,
-    [computedStudents, decisionOverrides],
-  );
-  const failCount = useMemo(
-    () =>
-      computedStudents.filter((s) => {
-        if (s.filteredOverallAverage === null) return false;
-        const override = decisionOverrides[s.id];
-        if (override !== undefined) return override === 'ajourné';
-        return s.filteredOverallAverage < 10;
-      }).length,
-    [computedStudents, decisionOverrides],
-  );
-
   const selectedStudent = useMemo(
     () => computedStudents.find((s) => s.id === selectedStudentId) ?? null,
     [computedStudents, selectedStudentId],
   );
 
-  const [exportingCsv, setExportingCsv] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const exportDeliberation = () => {
-    if (!data) return;
-    setExportingCsv(true);
+    if (!data || !tableExportRef.current) return;
+    setExportingPdf(true);
     try {
-      const csvEscape = (v: string) =>
-        v.includes(',') || v.includes('"') ? `"${v.replace(/"/g, '""')}"` : v;
-
-      const sorted = [...computedStudents].sort((a, b) => {
-        if (a.filteredOverallAverage === null && b.filteredOverallAverage === null) return 0;
-        if (a.filteredOverallAverage === null) return 1;
-        if (b.filteredOverallAverage === null) return -1;
-        return b.filteredOverallAverage - a.filteredOverallAverage;
-      });
-
-      const elementHeaders: string[] = [];
-      const moduleAvgHeaders: string[] = [];
-      for (const mod of visibleModules) {
-        for (const el of mod.elements) {
-          elementHeaders.push(csvEscape(`${mod.name} — ${el.name} (${el.type})`));
-        }
-        moduleAvgHeaders.push(csvEscape(`Moy. ${mod.name}`));
+      const tableHtml = tableExportRef.current.querySelector('table')?.outerHTML;
+      if (!tableHtml) {
+        toast.error('Aucun tableau à exporter.');
+        return;
       }
-      const allHeaders = [
-        'Rang', 'Code Massar', 'Nom',
-        ...elementHeaders,
-        ...moduleAvgHeaders,
-        'Moyenne générale', 'Mention', 'Décision',
-      ];
+      const periodPart = [data.academicYear, semester].filter(Boolean).join(' — ');
+      const title = `Délibération — ${data.class.name}${periodPart ? ` — ${periodPart}` : ''}`;
+      const safeTitle = escapeHtml(title);
+      const printWindow = window.open('', '_blank', 'width=1200,height=800');
+      if (!printWindow) {
+        toast.error('Impossible d’ouvrir la fenêtre d’export PDF.');
+        return;
+      }
 
-      const rows = sorted.map((s, idx) => {
-        const elementCols: string[] = [];
-        for (const mod of visibleModules) {
-          for (const el of mod.elements) {
-            const g = s.grades[el.id];
-            elementCols.push(g ? String(g.score) : '');
-          }
-        }
-        const modAvgCols = visibleModules.map((mod) => {
-          const avg = s.filteredModuleAverages[mod.id];
-          return avg !== null && avg !== undefined ? avg.toFixed(2) : '';
-        });
-        const overall = s.filteredOverallAverage !== null && s.filteredOverallAverage !== undefined
-          ? s.filteredOverallAverage.toFixed(2)
-          : '';
-        const override = decisionOverrides[s.id];
-        const autoAdmit = (s.filteredOverallAverage ?? 0) >= 10;
-        const effective = override !== undefined ? override === 'admis' : autoAdmit;
-        const decision = s.filteredOverallAverage === null ? '' : (effective ? 'Admis' : 'Ajourné');
-        return [
-          String(idx + 1), s.codeMassar, csvEscape(s.fullName),
-          ...elementCols,
-          ...modAvgCols,
-          overall, csvEscape(mention(s.filteredOverallAverage)), csvEscape(decision),
-        ].join(',');
-      });
-
-      const periodPart = [data.academicYear, data.semester].filter(Boolean).join(' — ');
-      const titleRow = `Délibération — ${data.class.name}${periodPart ? ` — ${periodPart}` : ''}`;
-      const csvContent = [titleRow, allHeaders.join(','), ...rows].join('\n');
-
-      const className = data.class.name.replace(/\s+/g, '_');
-      const yearPart = (data.academicYear ?? 'all').replace(/\//g, '-');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `deliberation_${className}_${yearPart}.csv`; a.click();
-      URL.revokeObjectURL(url);
+      printWindow.document.write(`
+        <!doctype html>
+        <html>
+          <head>
+            <title>${safeTitle}</title>
+            <style>
+              @page { size: A4 landscape; margin: 10mm; }
+              * { box-sizing: border-box; }
+              body { font-family: Arial, sans-serif; color: #0f172a; margin: 0; }
+              h1 { font-size: 18px; margin: 0 0 4px; }
+              p { margin: 0 0 12px; color: #475569; font-size: 12px; }
+              table { width: 100%; border-collapse: collapse; font-size: 10px; }
+              th, td { border: 1px solid #cbd5e1; padding: 5px 6px; }
+              th { background: #f1f5f9; color: #334155; font-weight: 700; }
+              .bg-emerald-50, .bg-emerald-50\\/40, .bg-emerald-50\\/60 { background: #ecfdf5; }
+              .bg-amber-50, .bg-amber-50\\/40 { background: #fffbeb; }
+              .text-red-600 { color: #dc2626; }
+              .text-emerald-600, .text-emerald-700 { color: #059669; }
+              .text-blue-600 { color: #2563eb; }
+              .text-cyan-600 { color: #0891b2; }
+              .text-amber-600 { color: #d97706; }
+              .text-slate-300, .text-slate-400, .text-slate-500 { color: #64748b; }
+              .font-semibold, .font-bold { font-weight: 700; }
+              .text-center { text-align: center; }
+              .text-left { text-align: left; }
+              .whitespace-nowrap { white-space: nowrap; }
+            </style>
+          </head>
+          <body>
+            <h1>${safeTitle}</h1>
+            <p>Tableau exporté tel qu’affiché.</p>
+            ${tableHtml}
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
     } finally {
-      setExportingCsv(false);
+      setExportingPdf(false);
     }
   };
 
@@ -395,7 +389,6 @@ export default function DeliberationPage() {
   useEffect(() => {
     setSemester('');
     setSelectedStudentId(null);
-    setDecisionOverrides({});
   }, [classId]);
 
   // ─── Load deliberation ──────────────────────────────────────────────────────
@@ -442,7 +435,7 @@ export default function DeliberationPage() {
       />
 
       {/* Metrics */}
-      <section className="grid gap-4 md:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-2">
         <MetricCard
           label="Étudiants"
           value={data?.students.length ?? 0}
@@ -455,8 +448,6 @@ export default function DeliberationPage() {
           hint={semester ? `Semestre ${semester}` : 'Tous les semestres'}
           icon={BookOpen}
         />
-        <MetricCard label="Admis" value={passCount} hint="Selon décision du jury" icon={GraduationCap} />
-        <MetricCard label="Ajournés" value={failCount} hint="Selon décision du jury" icon={User} />
       </section>
 
       {/* Filters */}
@@ -474,10 +465,10 @@ export default function DeliberationPage() {
                 className="btn-outline flex items-center gap-2"
                 type="button"
                 onClick={exportDeliberation}
-                disabled={exportingCsv}
+                disabled={exportingPdf}
               >
                 <Download size={14} />
-                {exportingCsv ? 'Export...' : 'Exporter CSV'}
+                {exportingPdf ? 'Export...' : 'Exporter PDF'}
               </button>
               <button
                 className="btn-outline flex items-center gap-2"
@@ -630,7 +621,7 @@ export default function DeliberationPage() {
 
           {/* ── Tab: Vue classe ──────────────────────────────────────────────── */}
           {activeTab === 'classe' && (
-            <section className="surface-card space-y-4">
+            <section ref={tableExportRef} className="surface-card space-y-4">
               {/* Print header */}
               <div className="hidden print:block space-y-1 mb-4">
                 <p className="text-xs text-slate-500 uppercase tracking-widest">
@@ -715,18 +706,6 @@ export default function DeliberationPage() {
                         >
                           Moy. générale
                         </th>
-                        <th
-                          rowSpan={2}
-                          className="border border-slate-300 px-2 py-2 text-center font-semibold text-slate-700 text-xs bg-amber-50"
-                        >
-                          Mention
-                        </th>
-                        <th
-                          rowSpan={2}
-                          className="border border-slate-300 px-2 py-2 text-center font-semibold text-slate-700 text-xs bg-amber-50"
-                        >
-                          Décision
-                        </th>
                       </tr>
                       {/* Element header row */}
                       <tr className="bg-slate-50">
@@ -739,7 +718,9 @@ export default function DeliberationPage() {
                               >
                                 {el.name}
                                 <br />
-                                <span className="text-slate-400 text-[10px]">{el.type}</span>
+                                <span className="text-slate-400 text-[10px]">
+                                  {el.type} · Pond. {el.ponderation ?? 1} · coefficient {el.coefficient ?? 1}
+                                </span>
                               </th>
                             ))}
                             <th className="border border-slate-300 px-2 py-1.5 text-center text-[11px] font-semibold text-slate-700 bg-emerald-50/60 whitespace-nowrap">
@@ -752,11 +733,6 @@ export default function DeliberationPage() {
                     <tbody>
                       {computedStudents.map((student, idx) => {
                         const avg = student.filteredOverallAverage;
-                        const autoAdmitted = (avg ?? 0) >= 10;
-                        const override = decisionOverrides[student.id];
-                        const effectiveAdmitted = override !== undefined
-                          ? override === 'admis'
-                          : autoAdmitted;
                         return (
                           <tr
                             key={student.id}
@@ -807,52 +783,6 @@ export default function DeliberationPage() {
                             <td className="border border-slate-200 px-2 py-2 text-center text-xs font-bold bg-amber-50/40">
                               <span className={mentionColor(avg)}>{fmtAvg(avg)}</span>
                             </td>
-                            <td className="border border-slate-200 px-2 py-2 text-center text-[11px] bg-amber-50/40">
-                              <span className={mentionColor(avg)}>{mention(avg)}</span>
-                            </td>
-                            <td className="border border-slate-200 px-1 py-1 text-center text-[11px] font-semibold bg-amber-50/40">
-                              {avg === null ? (
-                                <span className="text-slate-400">—</span>
-                              ) : (
-                                <>
-                                  <select
-                                    className={`print:hidden rounded-full px-2 py-0.5 text-[11px] font-semibold border cursor-pointer outline-none transition-colors ${
-                                      effectiveAdmitted
-                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:border-emerald-500'
-                                        : 'bg-red-50 text-red-700 border-red-300 hover:border-red-500'
-                                    }${override !== undefined ? ' ring-1 ring-offset-1 ring-amber-400' : ''}`}
-                                    value={override ?? 'auto'}
-                                    title="Modifier la décision du jury"
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      if (val === 'auto') {
-                                        setDecisionOverrides((prev) => {
-                                          const next = { ...prev };
-                                          delete next[student.id];
-                                          return next;
-                                        });
-                                      } else {
-                                        setDecisionOverrides((prev) => ({
-                                          ...prev,
-                                          [student.id]: val as 'admis' | 'ajourné',
-                                        }));
-                                      }
-                                    }}
-                                  >
-                                    <option value="auto">
-                                      {autoAdmitted ? 'Admis' : 'Ajourné'}
-                                    </option>
-                                    <option value="admis">Admis ✓</option>
-                                    <option value="ajourné">Ajourné ✗</option>
-                                  </select>
-                                  <span
-                                    className={`hidden print:inline ${effectiveAdmitted ? 'text-emerald-700' : 'text-red-700'}`}
-                                  >
-                                    {effectiveAdmitted ? 'Admis' : 'Ajourné'}
-                                  </span>
-                                </>
-                              )}
-                            </td>
                           </tr>
                         );
                       })}
@@ -866,20 +796,6 @@ export default function DeliberationPage() {
                 <div className="flex flex-wrap gap-4 pt-2 text-sm text-slate-600 print:pt-4">
                   <span>
                     Total : <strong>{computedStudents.length}</strong> étudiant(s)
-                  </span>
-                  <span className="text-emerald-700">
-                    Admis : <strong>{passCount}</strong>
-                  </span>
-                  <span className="text-red-700">
-                    Ajournés : <strong>{failCount}</strong>
-                  </span>
-                  <span>
-                    Taux de réussite :{' '}
-                    <strong>
-                      {computedStudents.length > 0
-                        ? `${Math.round((passCount / computedStudents.length) * 100)}%`
-                        : '—'}
-                    </strong>
                   </span>
                 </div>
               )}
@@ -929,11 +845,6 @@ export default function DeliberationPage() {
                   classInfo={data.class}
                   academicYear={data.academicYear}
                   semester={semester}
-                  decisionOverride={
-                    selectedStudent.id in decisionOverrides
-                      ? decisionOverrides[selectedStudent.id] === 'admis'
-                      : undefined
-                  }
                 />
               )}
             </section>
@@ -952,15 +863,10 @@ type ReleveProps = {
   classInfo: DeliberationData['class'];
   academicYear: string | null;
   semester: string;
-  /** If defined, overrides the auto-computed Admis/Ajourné decision. */
-  decisionOverride?: boolean;
 };
 
-function ReleveDeNote({ student, modules, classInfo, academicYear, semester, decisionOverride }: ReleveProps) {
+function ReleveDeNote({ student, modules, classInfo, academicYear, semester }: ReleveProps) {
   const avg = student.filteredOverallAverage;
-  const autoAdmitted = (avg ?? 0) >= 10;
-  const admitted = decisionOverride !== undefined ? decisionOverride : autoAdmitted;
-  const isOverridden = decisionOverride !== undefined && decisionOverride !== autoAdmitted;
 
   return (
     <div className="space-y-6">
@@ -1020,6 +926,12 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester, dec
               <th className="border border-slate-300 px-2 py-2.5 text-center font-semibold text-slate-700">
                 Type
               </th>
+              <th className="border border-slate-300 px-2 py-2.5 text-center font-semibold text-slate-700">
+                Pond.
+              </th>
+              <th className="border border-slate-300 px-2 py-2.5 text-center font-semibold text-slate-700">
+                coefficient
+              </th>
               <th className="border border-slate-300 px-3 py-2.5 text-center font-semibold text-slate-700">
                 Note
               </th>
@@ -1042,7 +954,7 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester, dec
                     {mod.name}
                   </td>
                   <td
-                    colSpan={5}
+                    colSpan={7}
                     className="border border-slate-200 px-4 py-2 text-slate-400 text-center"
                   >
                     Aucun élément
@@ -1083,6 +995,12 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester, dec
                       <td className="border border-slate-200 px-2 py-2 text-center text-xs text-slate-500">
                         {el.type}
                       </td>
+                      <td className="border border-slate-200 px-2 py-2 text-center text-xs text-slate-500">
+                        {el.ponderation ?? 1}
+                      </td>
+                      <td className="border border-slate-200 px-2 py-2 text-center text-xs text-slate-500">
+                        {el.coefficient ?? 1}
+                      </td>
                       <td className="border border-slate-200 px-3 py-2 text-center font-medium">
                         {g ? (
                           <span
@@ -1115,7 +1033,7 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester, dec
           <tfoot>
             <tr className="bg-amber-50 font-bold">
               <td
-                colSpan={5}
+                colSpan={7}
                 className="border border-slate-300 px-4 py-3 text-right text-slate-800"
               >
                 Moyenne générale
@@ -1130,27 +1048,14 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester, dec
         </table>
       </div>
 
-      {/* Decision box */}
       <div className="flex flex-wrap gap-4 items-center">
-        <div
-          className={`rounded-2xl px-6 py-4 flex-1 text-center ${
-            admitted
-              ? 'bg-emerald-50 border border-emerald-200'
-              : 'bg-red-50 border border-red-200'
-          }`}
-        >
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-4 flex-1 text-center">
           <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">
-            Décision du jury
+            Note générale
           </p>
-          <p className={`text-2xl font-bold ${admitted ? 'text-emerald-700' : 'text-red-700'}`}>
-            {avg === null ? 'Notes manquantes' : admitted ? 'ADMIS(E)' : 'AJOURNÉ(E)'}
+          <p className={`text-2xl font-bold ${mentionColor(avg)}`}>
+            {fmtAvg(avg)}
           </p>
-          <p className={`text-sm mt-1 ${mentionColor(avg)}`}>{mention(avg)}</p>
-          {isOverridden && (
-            <p className="text-[11px] text-amber-600 mt-1 font-medium">
-              Décision modifiée manuellement
-            </p>
-          )}
         </div>
         <div className="rounded-2xl border border-slate-200 px-6 py-4 flex-1 text-center space-y-1">
           <p className="text-xs text-slate-500 uppercase tracking-widest">

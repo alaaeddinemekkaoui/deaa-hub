@@ -13,8 +13,9 @@ export class CreateWorkflowDto {
   @IsEnum(WorkflowStatus)
   status?: WorkflowStatus;
 
+  @IsOptional()
   @IsInt()
-  assignedToId: number;
+  assignedToId?: number;
 
   @IsOptional()
   @IsInt()

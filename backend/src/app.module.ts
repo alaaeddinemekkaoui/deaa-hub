@@ -29,6 +29,8 @@ import { AcademicYearsModule } from './modules/academic-years/academic-years.mod
 import { DocumentTypesModule } from './modules/document-types/document-types.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { RestaurationModule } from './modules/restauration/restauration.module';
+import { CoursResourcesModule } from './modules/cours-resources/cours-resources.module';
 
 @Module({
   imports: [
@@ -60,6 +62,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     DocumentTypesModule,
     MessagingModule,
     NotificationsModule,
+    RestaurationModule,
+    CoursResourcesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -38,13 +38,12 @@ type Demande = {
   status: Status;
   createdAt: string;
   updatedAt: string;
-  assignedTo: { id: number; fullName: string; role: string };
+  assignedTo?: { id: number; fullName: string; role: string };
   student?: { id: number; fullName: string; codeMassar: string; filiere?: { name: string } } | null;
   documentType?: { id: number; name: string } | null;
   timeline: TimelineEntry[];
 };
 
-type StaffUser = { id: number; fullName: string };
 type Student  = { id: number; fullName: string; codeMassar: string };
 
 /* ── Constants ────────────────────────────────────────────────────── */
@@ -142,7 +141,7 @@ function DemandeCard({
                 <Clock size={11} />
                 {fmtDate(item.createdAt)}
               </span>
-              <span>Chargé : {item.assignedTo.fullName}</span>
+              {item.assignedTo && <span>Chargé : {item.assignedTo.fullName}</span>}
             </div>
           </div>
 
@@ -198,7 +197,6 @@ export default function DemandesPage() {
 
   const [items, setItems]       = useState<Demande[]>([]);
   const [docTypes, setDocTypes] = useState<DocumentType[]>([]);
-  const [users, setUsers]       = useState<StaffUser[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading]   = useState(true);
   const [activeTab, setActiveTab] = useState<Status | 'all'>('all');
@@ -209,23 +207,19 @@ export default function DemandesPage() {
   const [formDesc, setFormDesc]     = useState('');
   const [formDocTypeId, setFormDocTypeId] = useState('');
   const [formStudentId, setFormStudentId] = useState('');
-  const [formAssignedId, setFormAssignedId] = useState('');
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [demandesRes, docTypesRes, usersData, studentsData] = await Promise.all([
+      const [demandesRes, docTypesRes, studentsData] = await Promise.all([
         api.get<Demande[]>('/workflows'),
         api.get<DocumentType[]>('/document-types'),
-        fetchCollectionRef<StaffUser>('/users'),
         fetchCollectionRef<Student>('/students', { page: 1, limit: 500 }),
       ]);
       setItems(demandesRes.data);
       setDocTypes(docTypesRes.data);
-      setUsers(usersData);
       setStudents(studentsData);
-      if (usersData.length > 0) setFormAssignedId(String(usersData[0].id));
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Impossible de charger les demandes'));
     } finally {
@@ -238,14 +232,13 @@ export default function DemandesPage() {
   const resetForm = () => {
     setFormTitle(''); setFormDesc(''); setFormDocTypeId('');
     setFormStudentId('');
-    setFormAssignedId(users.length > 0 ? String(users[0].id) : '');
   };
 
   const openModal = () => { resetForm(); setModalOpen(true); };
 
   const onSubmit = async () => {
-    if (!formTitle.trim() || !formAssignedId) {
-      toast.error('Le titre et le responsable sont requis.');
+    if (!formTitle.trim()) {
+      toast.error('Le titre est requis.');
       return;
     }
     setSaving(true);
@@ -253,7 +246,6 @@ export default function DemandesPage() {
       await api.post('/workflows', {
         title: formTitle.trim(),
         description: formDesc.trim() || undefined,
-        assignedToId: Number(formAssignedId),
         studentId: formStudentId ? Number(formStudentId) : undefined,
         documentTypeId: formDocTypeId ? Number(formDocTypeId) : undefined,
       });
@@ -397,16 +389,6 @@ export default function DemandesPage() {
           </div>
 
           <div className="field-stack">
-            <label className="field-label">Responsable <span className="text-red-500">*</span></label>
-            <select className="input" value={formAssignedId} onChange={(e) => setFormAssignedId(e.target.value)}>
-              <option value="">— Sélectionner —</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>{u.fullName}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="field-stack">
             <label className="field-label">Description / Remarques</label>
             <textarea
               className="input resize-none"
@@ -425,7 +407,7 @@ export default function DemandesPage() {
               type="button"
               className="btn-primary"
               onClick={onSubmit}
-              disabled={saving || !formTitle.trim() || !formAssignedId}
+              disabled={saving || !formTitle.trim()}
             >
               {saving ? 'Enregistrement…' : 'Créer la demande'}
             </button>

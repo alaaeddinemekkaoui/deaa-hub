@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Activity,
   ArrowLeftRight,
@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Scale,
   Settings,
+  Utensils,
   UserCog,
   Users,
 } from 'lucide-react';
@@ -46,6 +47,10 @@ type NavGroup = {
   /** Roles that can see this group. Omit = everyone. */
   roles?: string[];
 };
+
+const ACADEMIC_ROLES = ['admin', 'staff', 'viewer', 'user', 'teacher', 'student', 'inspector'];
+const ADMIN_ROLES = ['admin', 'staff'];
+const RESTAURATION_ROLES = ['admin', 'staff', 'restauration', 'student'];
 
 const navigation: NavGroup[] = [
   {
@@ -74,12 +79,15 @@ const navigation: NavGroup[] = [
   },
   {
     heading: 'Structure Académique',
+    roles: ACADEMIC_ROLES,
     items: [
       { href: '/academic', label: 'Modules & Éléments', caption: 'Modules · CM · TD · TP', icon: BookOpenCheck },
+      { href: '/cours-resources', label: 'Ressources cours', caption: 'Supports et fichiers', icon: FileText },
     ],
   },
   {
     heading: 'Classes',
+    roles: ACADEMIC_ROLES,
     items: [
       { href: '/classes',          label: 'Gestion des Classes', caption: 'Cohortes et groupes',   icon: CalendarRange },
       { href: '/classes/cours',    label: 'Cours par classe',    caption: 'Affectation des cours', icon: NotebookPen },
@@ -88,6 +96,7 @@ const navigation: NavGroup[] = [
   },
   {
     heading: 'Emploi du Temps & Salles',
+    roles: ACADEMIC_ROLES,
     items: [
       { href: '/timetable',         label: 'Emploi du temps',      caption: 'Planification hebdomadaire', icon: CalendarDays },
       { href: '/rooms',             label: 'Gestion des salles',   caption: 'Espaces et équipements',     icon: DoorOpen },
@@ -96,6 +105,7 @@ const navigation: NavGroup[] = [
   },
   {
     heading: 'Structure Organisationnelle',
+    roles: ACADEMIC_ROLES,
     items: [
       { href: '/departments', label: 'Départements', caption: "Structures de l'établissement", icon: Building2 },
       { href: '/filieres',    label: 'Filières',     caption: 'Programmes et voies',           icon: BookOpen },
@@ -105,8 +115,16 @@ const navigation: NavGroup[] = [
   },
   {
     heading: 'Messagerie',
+    roles: ACADEMIC_ROLES,
     items: [
       { href: '/messages', label: 'Messages', caption: 'Groupes et conversations', icon: MessageSquare },
+    ],
+  },
+  {
+    heading: 'Restauration',
+    roles: RESTAURATION_ROLES,
+    items: [
+      { href: '/restauration', label: 'Restauration', caption: 'Repas, solde et reçus', icon: Utensils },
     ],
   },
   {
@@ -118,7 +136,7 @@ const navigation: NavGroup[] = [
   },
   {
     heading: 'Administration',
-    roles: ['admin', 'staff'],
+    roles: ADMIN_ROLES,
     items: [
       { href: '/users',       label: 'Utilisateurs', caption: 'Accès et rôles',         icon: UserCog },
       { href: '/statistics',  label: 'Statistiques', caption: 'Données et exports CSV', icon: BarChart2 },
@@ -126,11 +144,14 @@ const navigation: NavGroup[] = [
   },
   {
     heading: 'Paramètres',
-    roles: ['admin', 'staff'],
+    roles: ADMIN_ROLES,
     items: [
-      { href: '/settings/academic-years',   label: 'Années académiques', caption: 'Gérer les années académiques',  icon: Settings },
-      { href: '/settings/document-types',   label: 'Types de documents', caption: 'Catégories de documents admin', icon: FileStack },
-      { href: '/activity-logs',             label: 'Journaux',           caption: "Historique d'activité",         icon: Activity },
+      { href: '/settings/academic-years',   label: 'Années académiques',  caption: 'Gérer les années académiques',    icon: Settings },
+      { href: '/settings/restauration',     label: 'Repas restauration',  caption: 'Prix et repas actifs',             icon: Utensils },
+      { href: '/settings/document-types',   label: 'Types de documents',  caption: 'Catégories de documents admin',   icon: FileStack },
+      { href: '/settings/teacher-roles',    label: 'Rôles enseignants',   caption: 'Fonctions : permanent, vacataire', icon: Users },
+      { href: '/settings/teacher-grades',   label: 'Grades enseignants',  caption: 'PH, PA, assistant, doctorant',     icon: GraduationCap },
+      { href: '/activity-logs',             label: 'Journaux',            caption: "Historique d'activité",           icon: Activity },
     ],
   },
 ];
@@ -163,16 +184,11 @@ export function Sidebar() {
     () => new Set(navigation.map((g) => g.heading)),
   );
 
-  // Auto-expand the active group when pathname changes
-  useEffect(() => {
-    const activeGroup = getActiveGroup(pathname);
-    if (activeGroup) {
-      setOpenGroups((prev) => {
-        if (prev.has(activeGroup)) return prev;
-        return new Set([...prev, activeGroup]);
-      });
-    }
-  }, [pathname]);
+  const activeGroup = getActiveGroup(pathname);
+  const effectiveOpenGroups =
+    activeGroup && !openGroups.has(activeGroup)
+      ? new Set([...openGroups, activeGroup])
+      : openGroups;
 
   const toggleGroup = (heading: string) => {
     setOpenGroups((prev) => {
@@ -222,7 +238,7 @@ export function Sidebar() {
         {/* Navigation groups */}
         <nav className="grid gap-1">
           {visibleGroups.map((group) => {
-            const isOpen = openGroups.has(group.heading);
+            const isOpen = effectiveOpenGroups.has(group.heading);
             return (
               <div key={group.heading}>
                 {/* Group header — clickable to collapse/expand */}

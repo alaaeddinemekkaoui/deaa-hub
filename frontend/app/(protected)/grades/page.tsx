@@ -58,6 +58,8 @@ type ElementModule = {
   name: string;
   type: 'CM' | 'TD' | 'TP';
   volumeHoraire?: number | null;
+  ponderation?: number | null;
+  coefficient?: number | null;
 };
 
 type Student = {
@@ -703,7 +705,7 @@ export default function EpreuvesPage() {
                 <option value="">Choisir</option>
                 {elementModules.map((e) => (
                   <option key={e.id} value={e.id}>
-                    {e.name} ({e.type})
+                    {e.name} ({e.type}) — Pond. {e.ponderation ?? 1} — coefficient {e.coefficient ?? 1}
                   </option>
                 ))}
               </select>

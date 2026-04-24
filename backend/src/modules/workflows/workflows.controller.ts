@@ -48,8 +48,11 @@ export class WorkflowsController {
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.STAFF)
-  create(@Body() dto: CreateWorkflowDto) {
-    return this.workflowsService.create(dto);
+  create(@Body() dto: CreateWorkflowDto, @CurrentUser() payload: JwtPayload) {
+    return this.workflowsService.create({
+      ...dto,
+      assignedToId: dto.assignedToId ?? payload.sub,
+    });
   }
 
   @Patch(':id')

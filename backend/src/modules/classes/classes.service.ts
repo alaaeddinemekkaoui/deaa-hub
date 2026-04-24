@@ -308,6 +308,8 @@ export class ClassesService {
               moduleId: newModule.id,
               volumeHoraire: el.volumeHoraire,
               type: el.type,
+              ponderation: el.ponderation,
+              coefficient: el.coefficient,
             },
           });
         }

@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Database, Download, RefreshCw, Server, ShieldCheck, UserCheck, UserCog, Users2 } from 'lucide-react';
+import { AlertTriangle, Database, Download, MessageSquare, RefreshCw, Server, ShieldCheck, UserCheck, UserCog, Users2 } from 'lucide-react';
 import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
@@ -19,145 +20,20 @@ type User = {
   departments: Department[];
 };
 type TeacherRole = { id: number; name: string; _count?: { teachers: number } };
-type TeacherGrade = { id: number; name: string; _count?: { teachers: number } };
 type AppStatus = { service: string; status: string; timestamp: string };
 type DatabaseStatus = { dbConnected: boolean; message: string; timestamp: string };
 type UnlinkedProfiles = {
   students: { id: number; fullName: string; identifier: string }[];
   teachers: { id: number; fullName: string; identifier: string | null }[];
 };
-
-type ExportEntity =
-  | 'students'
-  | 'teachers'
-  | 'departments'
-  | 'filieres'
-  | 'laureates'
-  | 'laureates_retrieved'
-  | 'laureates_not_retrieved'
-  | 'everything';
-
-type FieldDef = { key: string; label: string; get: (r: Record<string, unknown>) => string };
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const gPath = (obj: unknown, path: string): string => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let cur: any = obj;
-  for (const p of path.split('.')) cur = cur?.[p];
-  return cur != null ? String(cur) : '';
+type MessageGroupSummary = {
+  id: number;
+  name: string;
+  type: string;
+  _count?: { members: number; messages: number };
 };
 
-const LAUREATE_FIELDS: FieldDef[] = [
-  { key: 'fullName',       label: 'Nom complet',       get: r => gPath(r, 'student.fullName') },
-  { key: 'codeMassar',     label: 'Code Massar',       get: r => gPath(r, 'student.codeMassar') },
-  { key: 'cin',            label: 'CIN',               get: r => gPath(r, 'student.cin') },
-  { key: 'email',          label: 'Email',             get: r => gPath(r, 'student.email') },
-  { key: 'filiere',        label: 'Filière',           get: r => gPath(r, 'filiere.name') || gPath(r, 'student.filiere.name') },
-  { key: 'graduationYear', label: 'Année de diplôme',  get: r => gPath(r, 'graduationYear') },
-  { key: 'diplomaStatus',  label: 'Statut diplôme',    get: r => gPath(r, 'diplomaStatus') === 'retrieved' ? 'Récupéré' : 'En attente' },
-];
-
-const ENTITY_CONFIG: Record<Exclude<ExportEntity, 'everything'>, { label: string; fields: FieldDef[] }> = {
-  students: {
-    label: 'Étudiants',
-    fields: [
-      { key: 'fullName',       label: 'Nom complet',          get: r => gPath(r, 'fullName') },
-      { key: 'codeMassar',     label: 'Code Massar',          get: r => gPath(r, 'codeMassar') },
-      { key: 'cin',            label: 'CIN',                  get: r => gPath(r, 'cin') },
-      { key: 'email',          label: 'Email',                get: r => gPath(r, 'email') },
-      { key: 'phone',          label: 'Téléphone',            get: r => gPath(r, 'phone') },
-      { key: 'birthDate',      label: 'Date de naissance',    get: r => { const d = gPath(r, 'birthDate'); return d ? new Date(d).toLocaleDateString('fr-FR') : ''; } },
-      { key: 'enrollmentYear', label: "Année d'inscription",  get: r => gPath(r, 'enrollmentYear') },
-      { key: 'filiere',        label: 'Filière',              get: r => gPath(r, 'filiere.name') },
-      { key: 'class',          label: 'Classe',               get: r => gPath(r, 'class.name') },
-    ],
-  },
-  teachers: {
-    label: 'Enseignants',
-    fields: [
-      { key: 'lastName',       label: 'Nom',              get: r => gPath(r, 'lastName') },
-      { key: 'firstName',      label: 'Prénom',           get: r => gPath(r, 'firstName') },
-      { key: 'email',          label: 'Email',            get: r => gPath(r, 'email') },
-      { key: 'phone',          label: 'Téléphone',        get: r => gPath(r, 'phone') },
-      { key: 'cin',            label: 'CIN',              get: r => gPath(r, 'cin') },
-      { key: 'specialization', label: 'Spécialisation',   get: r => gPath(r, 'specialization') },
-      { key: 'role',           label: 'Rôle',             get: r => gPath(r, 'role.name') },
-      { key: 'grade',          label: 'Grade',            get: r => gPath(r, 'grade.name') },
-      { key: 'department',     label: 'Département',      get: r => gPath(r, 'department.name') },
-    ],
-  },
-  departments: {
-    label: 'Départements',
-    fields: [
-      { key: 'name', label: 'Nom',  get: r => gPath(r, 'name') },
-      { key: 'code', label: 'Code', get: r => gPath(r, 'code') },
-    ],
-  },
-  filieres: {
-    label: 'Filières',
-    fields: [
-      { key: 'name',       label: 'Nom',         get: r => gPath(r, 'name') },
-      { key: 'code',       label: 'Code',        get: r => gPath(r, 'code') },
-      { key: 'department', label: 'Département', get: r => gPath(r, 'department.name') },
-    ],
-  },
-  laureates:               { label: 'Lauréats (tous)',        fields: LAUREATE_FIELDS },
-  laureates_retrieved:     { label: 'Lauréats avec diplôme',  fields: LAUREATE_FIELDS },
-  laureates_not_retrieved: { label: 'Lauréats sans diplôme',  fields: LAUREATE_FIELDS },
-};
-
-function buildCsv(rows: Record<string, unknown>[], fields: FieldDef[]): string {
-  const header = fields.map(f => `"${f.label.replace(/"/g, '""')}"`).join(',');
-  const lines = rows.map(r =>
-    fields.map(f => `"${f.get(r).replace(/"/g, '""')}"`).join(','),
-  );
-  return '\uFEFF' + [header, ...lines].join('\r\n');
-}
-
-function triggerCsvDownload(csv: string, filename: string) {
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-async function fetchEntityRows(entity: Exclude<ExportEntity, 'everything'>): Promise<Record<string, unknown>[]> {
-  const fetchPages = async (endpoint: string): Promise<Record<string, unknown>[]> => {
-    const rows: Record<string, unknown>[] = [];
-    let page = 1;
-    let hasNext = true;
-    while (hasNext) {
-      const resp = await api.get<PaginatedResponse<Record<string, unknown>>>(endpoint, { params: { page, limit: 200 } });
-      rows.push(...resp.data.data);
-      hasNext = resp.data.meta.hasNextPage;
-      page++;
-      if (page > 100) break;
-    }
-    return rows;
-  };
-  switch (entity) {
-    case 'students':              return fetchPages('/students');
-    case 'teachers':              return fetchPages('/teachers');
-    case 'departments':           return fetchPages('/departments');
-    case 'filieres':              return fetchPages('/filieres');
-    case 'laureates': {
-      const r = await api.get<Record<string, unknown>[]>('/laureates');
-      return r.data;
-    }
-    case 'laureates_retrieved': {
-      const r = await api.get<Record<string, unknown>[]>('/laureates');
-      return (r.data as Record<string, unknown>[]).filter(x => x.diplomaStatus === 'retrieved');
-    }
-    case 'laureates_not_retrieved': {
-      const r = await api.get<Record<string, unknown>[]>('/laureates');
-      return (r.data as Record<string, unknown>[]).filter(x => x.diplomaStatus === 'not_retrieved');
-    }
-    default: return [];
-  }
-}
+const PAGE_SIZE_OPTIONS = [5, 10, 15, 25, 50, 100] as const;
 
 const ROLE_LABELS: Record<string, string> = {
   admin:     'Administrateur',
@@ -167,9 +43,9 @@ const ROLE_LABELS: Record<string, string> = {
   teacher:   'Enseignant',
   student:   'Étudiant',
   inspector: 'Inspecteur',
+  restauration: 'Restauration',
 };
 
-/** Roles that are department-scoped (need dept assignment) */
 const DEPT_SCOPED_ROLES = new Set(['user', 'teacher', 'student', 'inspector']);
 
 export default function UsersPage() {
@@ -177,6 +53,8 @@ export default function UsersPage() {
   const isAdmin = user?.role === 'admin';
 
   const [rows, setRows] = useState<User[]>([]);
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersPageSize, setUsersPageSize] = useState(10);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -186,29 +64,27 @@ export default function UsersPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [teacherRoles, setTeacherRoles] = useState<TeacherRole[]>([]);
-  const [teacherGrades, setTeacherGrades] = useState<TeacherGrade[]>([]);
-  const [roleName, setRoleName] = useState('');
-  const [gradeName, setGradeName] = useState('');
-  const [editingRoleId, setEditingRoleId] = useState<number | null>(null);
-  const [editingGradeId, setEditingGradeId] = useState<number | null>(null);
-  const [settingsSaving, setSettingsSaving] = useState(false);
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
   const [dbStatus, setDbStatus] = useState<DatabaseStatus | null>(null);
-  const [exportEntity, setExportEntity] = useState<ExportEntity>('students');
-  const [selectedFields, setSelectedFields] = useState<string[]>(ENTITY_CONFIG.students.fields.map(f => f.key));
-  const [exporting, setExporting] = useState(false);
   const [downloadingBackup, setDownloadingBackup] = useState(false);
+  const [syncingMessagingGroups, setSyncingMessagingGroups] = useState(false);
+  const [messagingGroups, setMessagingGroups] = useState<MessageGroupSummary[]>([]);
+  const [groupsPageSize, setGroupsPageSize] = useState<number>(10);
+  const [groupsPage, setGroupsPage] = useState(1);
 
-  // Account reconciliation
   const [unlinked, setUnlinked] = useState<UnlinkedProfiles | null>(null);
   const [unlinkedLoading, setUnlinkedLoading] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPassword, setImportPassword] = useState('');
   const [importing, setImporting] = useState(false);
 
+  const usersTotalPages = Math.max(1, Math.ceil(rows.length / usersPageSize));
+  const pagedUsers = rows.slice((usersPage - 1) * usersPageSize, usersPage * usersPageSize);
+
   const loadUsers = async () => {
     const response = await api.get<User[]>('/users');
     setRows(response.data);
+    setUsersPage(1);
   };
 
   const loadDepartments = async () => {
@@ -218,17 +94,16 @@ export default function UsersPage() {
 
   const loadAdminSettings = async () => {
     if (!isAdmin) return;
-    const [rolesResponse, gradesResponse, appResponse, dbResponse] =
-      await Promise.all([
-        api.get<TeacherRole[]>('/teachers/roles'),
-        api.get<TeacherGrade[]>('/teachers/grades'),
-        api.get<AppStatus>('/'),
-        api.get<DatabaseStatus>('/db-status'),
-      ]);
+    const [rolesResponse, appResponse, dbResponse, groupsResponse] = await Promise.all([
+      api.get<TeacherRole[]>('/teachers/roles'),
+      api.get<AppStatus>('/'),
+      api.get<DatabaseStatus>('/db-status'),
+      api.get<MessageGroupSummary[]>('/messaging/groups'),
+    ]);
     setTeacherRoles(rolesResponse.data);
-    setTeacherGrades(gradesResponse.data);
     setAppStatus(appResponse.data);
     setDbStatus(dbResponse.data);
+    setMessagingGroups(groupsResponse.data ?? []);
   };
 
   const loadUnlinkedProfiles = async () => {
@@ -268,48 +143,16 @@ export default function UsersPage() {
     }
   };
 
-  useEffect(() => {
-    void loadUsers();
-    void loadDepartments();
-    void loadUnlinkedProfiles();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    void loadAdminSettings();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin]);
-
-  useEffect(() => {
-    if (exportEntity !== 'everything') {
-      setSelectedFields(ENTITY_CONFIG[exportEntity].fields.map(f => f.key));
-    }
-  }, [exportEntity]);
-
-  const doExport = async () => {
-    setExporting(true);
+  const syncMessagingGroups = async () => {
+    setSyncingMessagingGroups(true);
     try {
-      const date = new Date().toISOString().slice(0, 10);
-      if (exportEntity === 'everything') {
-        const entities = (['students', 'teachers', 'departments', 'filieres', 'laureates'] as const);
-        for (const ent of entities) {
-          const rows = await fetchEntityRows(ent);
-          const csv = buildCsv(rows, ENTITY_CONFIG[ent].fields);
-          triggerCsvDownload(csv, `${ent}-${date}.csv`);
-          await new Promise<void>(resolve => setTimeout(resolve, 600));
-        }
-      } else {
-        const rows = await fetchEntityRows(exportEntity);
-        const activeFields = ENTITY_CONFIG[exportEntity].fields.filter(f => selectedFields.includes(f.key));
-        const csv = buildCsv(rows, activeFields);
-        triggerCsvDownload(csv, `${exportEntity}-${date}.csv`);
-      }
-      toast.success('Export téléchargé avec succès');
-    } catch (exportError) {
-      toast.error(getApiErrorMessage(exportError, "Échec de l'export"));
+      const res = await api.post<{ processedUsers: number }>('/users/sync-messaging-groups');
+      toast.success(`${res.data.processedUsers} utilisateur(s) synchronisé(s)`);
+      if (isAdmin) await loadAdminSettings();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Échec de la synchronisation des groupes messagerie'));
     } finally {
-      setExporting(false);
+      setSyncingMessagingGroups(false);
     }
   };
 
@@ -332,6 +175,24 @@ export default function UsersPage() {
     }
   };
 
+  useEffect(() => {
+    void loadUsers();
+    void loadDepartments();
+    void loadUnlinkedProfiles();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void loadAdminSettings();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
+
+  useEffect(() => {
+    const pageCount = Math.max(1, Math.ceil(messagingGroups.length / groupsPageSize));
+    if (groupsPage > pageCount) setGroupsPage(pageCount);
+  }, [groupsPage, groupsPageSize, messagingGroups.length]);
+
   const resetUserForm = () => {
     setEditingId(null);
     setFullName('');
@@ -345,9 +206,7 @@ export default function UsersPage() {
     if (!fullName.trim() || !email.trim()) return;
     setSaving(true);
     try {
-      // Admins don't have department assignments
-      const deptIds = userRole === 'user' ? selectedDeptIds : [];
-
+      const deptIds = DEPT_SCOPED_ROLES.has(userRole) ? selectedDeptIds : [];
       if (editingId) {
         const payload: Record<string, unknown> = {
           fullName: fullName.trim(),
@@ -396,75 +255,7 @@ export default function UsersPage() {
     setEmail(item.email);
     setUserRole(item.role);
     setPassword('');
-    // Load departments for dept-scoped roles; admins/staff/viewer don't need them
     setSelectedDeptIds(DEPT_SCOPED_ROLES.has(item.role) ? item.departments.map((d) => d.id) : []);
-  };
-
-  const resetRoleForm = () => { setEditingRoleId(null); setRoleName(''); };
-  const resetGradeForm = () => { setEditingGradeId(null); setGradeName(''); };
-
-  const onSubmitRole = async () => {
-    if (!roleName.trim()) return;
-    setSettingsSaving(true);
-    try {
-      if (editingRoleId) {
-        await api.patch(`/teachers/roles/${editingRoleId}`, { name: roleName.trim() });
-        toast.success("Rôle d'enseignant mis à jour avec succès");
-      } else {
-        await api.post('/teachers/roles', { name: roleName.trim() });
-        toast.success("Rôle d'enseignant créé avec succès");
-      }
-      resetRoleForm();
-      await loadAdminSettings();
-    } catch (saveError) {
-      toast.error(getApiErrorMessage(saveError, "Échec de l'enregistrement du rôle d'enseignant"));
-    } finally {
-      setSettingsSaving(false);
-    }
-  };
-
-  const onSubmitGrade = async () => {
-    if (!gradeName.trim()) return;
-    setSettingsSaving(true);
-    try {
-      if (editingGradeId) {
-        await api.patch(`/teachers/grades/${editingGradeId}`, { name: gradeName.trim() });
-        toast.success("Grade d'enseignant mis à jour avec succès");
-      } else {
-        await api.post('/teachers/grades', { name: gradeName.trim() });
-        toast.success("Grade d'enseignant créé avec succès");
-      }
-      resetGradeForm();
-      await loadAdminSettings();
-    } catch (saveError) {
-      toast.error(getApiErrorMessage(saveError, "Échec de l'enregistrement du grade d'enseignant"));
-    } finally {
-      setSettingsSaving(false);
-    }
-  };
-
-  const onDeleteRole = async (id: number) => {
-    if (!window.confirm("Supprimer ce rôle d'enseignant?")) return;
-    try {
-      await api.delete(`/teachers/roles/${id}`);
-      toast.success("Rôle d'enseignant supprimé avec succès");
-      if (editingRoleId === id) resetRoleForm();
-      await loadAdminSettings();
-    } catch (deleteError) {
-      toast.error(getApiErrorMessage(deleteError, "Échec de la suppression du rôle d'enseignant"));
-    }
-  };
-
-  const onDeleteGrade = async (id: number) => {
-    if (!window.confirm("Supprimer ce grade d'enseignant?")) return;
-    try {
-      await api.delete(`/teachers/grades/${id}`);
-      toast.success("Grade d'enseignant supprimé avec succès");
-      if (editingGradeId === id) resetGradeForm();
-      await loadAdminSettings();
-    } catch (deleteError) {
-      toast.error(getApiErrorMessage(deleteError, "Échec de la suppression du grade d'enseignant"));
-    }
   };
 
   return (
@@ -502,6 +293,7 @@ export default function UsersPage() {
         />
       </section>
 
+      {/* ── User registry ── */}
       <section className="surface-card space-y-5">
         <div className="panel-header">
           <div>
@@ -516,30 +308,20 @@ export default function UsersPage() {
           <div className="form-grid md:grid-cols-2 xl:grid-cols-4">
             <div className="field-stack">
               <label className="field-label">Nom complet</label>
-              <input
-                className="input"
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-              />
+              <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} />
             </div>
             <div className="field-stack">
               <label className="field-label">Email</label>
-              <input
-                className="input"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
+              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
             <div className="field-stack">
               <label className="field-label">Rôle</label>
               <select
                 className="input"
                 value={userRole}
-                onChange={(event) => {
-                  const next = event.target.value;
+                onChange={(e) => {
+                  const next = e.target.value;
                   setUserRole(next);
-                  // Clear dept assignment for non dept-scoped roles
                   if (!DEPT_SCOPED_ROLES.has(next)) setSelectedDeptIds([]);
                 }}
               >
@@ -547,6 +329,7 @@ export default function UsersPage() {
                   <option value="admin">Administrateur</option>
                   <option value="staff">Personnel</option>
                   <option value="viewer">Spectateur</option>
+                  <option value="restauration">Restauration</option>
                 </optgroup>
                 <optgroup label="Utilisateurs département">
                   <option value="teacher">Enseignant</option>
@@ -557,19 +340,11 @@ export default function UsersPage() {
               </select>
             </div>
             <div className="field-stack">
-              <label className="field-label">
-                Mot de passe {editingId ? '(optionnel)' : ''}
-              </label>
-              <input
-                className="input"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
+              <label className="field-label">Mot de passe {editingId ? '(optionnel)' : ''}</label>
+              <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
           </div>
 
-          {/* Department assignment — shown for all dept-scoped roles */}
           {DEPT_SCOPED_ROLES.has(userRole) && (
             <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 space-y-3">
               <div>
@@ -578,37 +353,26 @@ export default function UsersPage() {
                   L&apos;utilisateur ne verra que les données des départements sélectionnés.
                 </p>
               </div>
-
               <select
                 className="input"
                 value=""
                 onChange={(e) => {
                   const id = Number(e.target.value);
-                  if (id && !selectedDeptIds.includes(id)) {
-                    setSelectedDeptIds((prev) => [...prev, id]);
-                  }
+                  if (id && !selectedDeptIds.includes(id)) setSelectedDeptIds((prev) => [...prev, id]);
                 }}
               >
                 <option value="">Ajouter un département…</option>
-                {departments
-                  .filter((d) => !selectedDeptIds.includes(d.id))
-                  .map((dept) => (
-                    <option key={dept.id} value={dept.id}>
-                      {dept.name}
-                    </option>
-                  ))}
+                {departments.filter((d) => !selectedDeptIds.includes(d.id)).map((dept) => (
+                  <option key={dept.id} value={dept.id}>{dept.name}</option>
+                ))}
               </select>
-
               {selectedDeptIds.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {selectedDeptIds.map((id) => {
                     const dept = departments.find((d) => d.id === id);
                     if (!dept) return null;
                     return (
-                      <span
-                        key={id}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-sm font-medium text-blue-800"
-                      >
+                      <span key={id} className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-sm font-medium text-blue-800">
                         {dept.name}
                         <button
                           type="button"
@@ -632,411 +396,375 @@ export default function UsersPage() {
 
           <div className="flex items-center gap-2">
             <ExportDataButton />
-            <button
-              className="btn-primary"
-              type="button"
-              onClick={onSubmit}
-              disabled={saving}
-            >
+            <button className="btn-primary" type="button" onClick={onSubmit} disabled={saving}>
               {editingId ? 'Enregistrer' : 'Créer'}
             </button>
             {editingId ? (
-              <button className="btn-outline" type="button" onClick={resetUserForm}>
-                Annuler
-              </button>
+              <button className="btn-outline" type="button" onClick={resetUserForm}>Annuler</button>
             ) : null}
           </div>
         </div>
 
-        <div className="data-table-wrap">
-          <div className="table-scroll">
-            <table className="table-base">
-              <thead>
-                <tr>
-                  <th>Nom complet</th>
-                  <th>Email</th>
-                  <th>Rôle</th>
-                  <th>Départements</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.fullName}</td>
-                    <td>{item.email}</td>
-                    <td>
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                          item.role === 'admin'    ? 'bg-purple-100 text-purple-800' :
-                          item.role === 'staff'    ? 'bg-blue-100 text-blue-800' :
-                          item.role === 'viewer'   ? 'bg-slate-100 text-slate-600' :
-                          item.role === 'teacher'  ? 'bg-emerald-100 text-emerald-800' :
-                          item.role === 'student'  ? 'bg-amber-100 text-amber-800' :
-                          item.role === 'inspector'? 'bg-orange-100 text-orange-800' :
-                                                     'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {ROLE_LABELS[item.role] ?? item.role}
-                      </span>
-                    </td>
-                    <td>
-                      {item.departments.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {item.departments.map((d) => (
-                            <span
-                              key={d.id}
-                              className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700"
-                            >
-                              {d.name}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 text-sm">—</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className="btn-outline"
-                          onClick={() => startEdit(item)}
-                        >
-                          Modifier
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-outline"
-                          onClick={() => onDelete(item.id)}
-                        >
-                          Supprimer
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+        {/* User list with pagination */}
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-slate-500">{rows.length} utilisateur{rows.length !== 1 ? 's' : ''}</p>
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-slate-500">Par page</span>
+              <select
+                className="input h-9 py-0 pr-8"
+                value={usersPageSize}
+                onChange={(e) => { setUsersPageSize(Number(e.target.value)); setUsersPage(1); }}
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>{size}</option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+            </div>
+          </div>
+
+          <div className="data-table-wrap">
+            <div className="table-scroll">
+              <table className="table-base">
+                <thead>
+                  <tr>
+                    <th>Nom complet</th>
+                    <th>Email</th>
+                    <th>Rôle</th>
+                    <th>Départements</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedUsers.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.fullName}</td>
+                      <td>{item.email}</td>
+                      <td>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          item.role === 'admin'       ? 'bg-purple-100 text-purple-800' :
+                          item.role === 'staff'       ? 'bg-blue-100 text-blue-800' :
+                          item.role === 'viewer'      ? 'bg-slate-100 text-slate-600' :
+                          item.role === 'teacher'     ? 'bg-emerald-100 text-emerald-800' :
+                          item.role === 'student'     ? 'bg-amber-100 text-amber-800' :
+                          item.role === 'inspector'   ? 'bg-orange-100 text-orange-800' :
+                          item.role === 'restauration'? 'bg-lime-100 text-lime-800' :
+                                                        'bg-slate-100 text-slate-700'
+                        }`}>
+                          {ROLE_LABELS[item.role] ?? item.role}
+                        </span>
+                      </td>
+                      <td>
+                        {item.departments.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {item.departments.map((d) => (
+                              <span key={d.id} className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
+                                {d.name}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-sm">—</span>
+                        )}
+                      </td>
+                      <td>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" className="btn-outline" onClick={() => startEdit(item)}>Modifier</button>
+                          <button type="button" className="btn-outline" onClick={() => onDelete(item.id)}>Supprimer</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-1 text-sm">
+            <button
+              type="button"
+              className="btn-outline"
+              disabled={usersPage <= 1}
+              onClick={() => setUsersPage((p) => Math.max(1, p - 1))}
+            >
+              Précédent
+            </button>
+            <span className="text-slate-500">Page {usersPage} / {usersTotalPages}</span>
+            <button
+              type="button"
+              className="btn-outline"
+              disabled={usersPage >= usersTotalPages}
+              onClick={() => setUsersPage((p) => Math.min(usersTotalPages, p + 1))}
+            >
+              Suivant
+            </button>
           </div>
         </div>
       </section>
 
+      {/* ── Messaging groups (admin only) ── */}
       {isAdmin ? (
         <section className="surface-card space-y-6">
           <div className="panel-header">
             <div>
-              <h2 className="panel-title">Paramètres d&apos;administration</h2>
-              <p className="panel-copy">
-                Statut système et gestion des catalogues d&apos;enseignants.
-              </p>
+              <h2 className="panel-title">Gestion des groupes messagerie</h2>
+              <p className="panel-copy">Groupes visibles et pagination 5 / 10 / 15 / 25 / 50 / 100.</p>
             </div>
           </div>
 
           <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h3 className="text-base font-semibold text-slate-950">Statut du système</h3>
-                <p className="text-sm text-slate-500">Vérifications en temps réel pour le serveur et la base de données.</p>
+                <h3 className="text-base font-semibold text-slate-950">Groupes messagerie</h3>
+                <p className="text-sm text-slate-500">Vue d&apos;ensemble et synchronisation des groupes.</p>
               </div>
-              <button type="button" className="btn-outline" onClick={() => void loadAdminSettings()}>
-                Actualiser le statut
-              </button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">API Serveur</p>
-                <p className="mt-2 text-lg font-semibold text-slate-950">{appStatus?.service ?? 'Indisponible'}</p>
-                <p className="mt-1 text-sm text-slate-600">Statut: {appStatus?.status ?? 'inconnu'}</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Vérifiée: {appStatus ? new Date(appStatus.timestamp).toLocaleString() : '-'}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Base de données</p>
-                <p className="mt-2 text-lg font-semibold text-slate-950">
-                  {dbStatus?.dbConnected ? 'Connectée' : 'Indisponible'}
-                </p>
-                <p className="mt-1 text-sm text-slate-600">{dbStatus?.message ?? 'Aucun statut disponible'}</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Vérifiée: {dbStatus ? new Date(dbStatus.timestamp).toLocaleString() : '-'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 space-y-4">
-            <div>
-              <h3 className="text-base font-semibold text-slate-950">Rôles d&apos;enseignants</h3>
-              <p className="text-sm text-slate-500">Gérez les rôles comme enseignant, chef de filière et chef de département.</p>
-            </div>
-            <div className="space-y-3">
-              <input
-                className="input"
-                value={roleName}
-                onChange={(event) => setRoleName(event.target.value)}
-                placeholder="Ajouter un rôle d'enseignant"
-              />
               <div className="flex flex-wrap gap-2">
-                <button className="btn-primary" type="button" onClick={onSubmitRole} disabled={settingsSaving}>
-                  {editingRoleId ? 'Enregistrer le rôle' : 'Ajouter un rôle'}
+                <button
+                  type="button"
+                  className="btn-outline"
+                  onClick={() => void syncMessagingGroups()}
+                  disabled={syncingMessagingGroups}
+                >
+                  {syncingMessagingGroups ? 'Synchronisation...' : 'Auto affecter utilisateurs'}
                 </button>
-                {editingRoleId ? (
-                  <button className="btn-outline" type="button" onClick={resetRoleForm}>Annuler</button>
-                ) : null}
+                <Link href="/messages" className="btn-primary">Ouvrir messagerie</Link>
               </div>
             </div>
-            <div className="space-y-2">
-              {teacherRoles.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-slate-950">{item.name}</p>
-                      <p className="text-sm text-slate-500">{item._count?.teachers ?? 0} enseignants assignés</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="button" className="btn-outline" onClick={() => { setEditingRoleId(item.id); setRoleName(item.name); }}>Modifier</button>
-                      <button type="button" className="btn-outline" onClick={() => onDeleteRole(item.id)}>Supprimer</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 space-y-4">
-            <div>
-              <h3 className="text-base font-semibold text-slate-950">Export des données</h3>
-              <p className="text-sm text-slate-500">Exportez les données en CSV. Sélectionnez l&apos;entité et les champs à inclure.</p>
-            </div>
-
-            <div className="field-stack">
-              <label className="field-label">Entité à exporter</label>
-              <select
-                className="input"
-                value={exportEntity}
-                onChange={e => setExportEntity(e.target.value as ExportEntity)}
-              >
-                <option value="students">Étudiants</option>
-                <option value="teachers">Enseignants</option>
-                <option value="departments">Départements</option>
-                <option value="filieres">Filières</option>
-                <option value="laureates">Lauréats (tous)</option>
-                <option value="laureates_retrieved">Lauréats avec diplôme</option>
-                <option value="laureates_not_retrieved">Lauréats sans diplôme</option>
-                <option value="everything">Tout exporter (tous les fichiers)</option>
-              </select>
-            </div>
-
-            {exportEntity !== 'everything' && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="field-label">Champs à inclure</span>
-                  <div className="ml-auto flex gap-3">
-                    <button
-                      type="button"
-                      className="text-xs text-blue-600 hover:underline"
-                      onClick={() => setSelectedFields(ENTITY_CONFIG[exportEntity].fields.map(f => f.key))}
-                    >
-                      Tout sélectionner
-                    </button>
-                    <span className="text-slate-300">|</span>
-                    <button
-                      type="button"
-                      className="text-xs text-slate-500 hover:underline"
-                      onClick={() => setSelectedFields([])}
-                    >
-                      Effacer
-                    </button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {ENTITY_CONFIG[exportEntity].fields.map(f => (
-                    <label key={f.key} className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        className="rounded border-slate-300"
-                        checked={selectedFields.includes(f.key)}
-                        onChange={e => {
-                          if (e.target.checked) {
-                            setSelectedFields(prev => [...prev, f.key]);
-                          } else {
-                            setSelectedFields(prev => prev.filter(k => k !== f.key));
-                          }
-                        }}
-                      />
-                      {f.label}
-                    </label>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-500">{messagingGroups.length} groupe(s)</p>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-slate-500">Par page</span>
+                <select
+                  className="input h-9 py-0 pr-8"
+                  value={groupsPageSize}
+                  onChange={(e) => { setGroupsPageSize(Number(e.target.value)); setGroupsPage(1); }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>{size}</option>
                   ))}
-                </div>
+                </select>
               </div>
+            </div>
+
+            {messagingGroups.length === 0 ? (
+              <p className="text-sm text-slate-500">Aucun groupe de messagerie disponible.</p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  {messagingGroups
+                    .slice((groupsPage - 1) * groupsPageSize, groupsPage * groupsPageSize)
+                    .map((group) => (
+                      <div key={group.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium text-slate-950">{group.name}</p>
+                            <p className="text-xs uppercase tracking-wide text-slate-500">Type: {group.type}</p>
+                          </div>
+                          <div className="text-right text-sm text-slate-600">
+                            <p>{group._count?.members ?? 0} membres</p>
+                            <p>{group._count?.messages ?? 0} messages</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+                <div className="flex items-center justify-between pt-1 text-sm">
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    disabled={groupsPage <= 1}
+                    onClick={() => setGroupsPage((p) => Math.max(1, p - 1))}
+                  >
+                    Précédent
+                  </button>
+                  <span className="text-slate-500">
+                    Page {groupsPage} / {Math.max(1, Math.ceil(messagingGroups.length / groupsPageSize))}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    disabled={groupsPage >= Math.max(1, Math.ceil(messagingGroups.length / groupsPageSize))}
+                    onClick={() => setGroupsPage((p) => Math.min(Math.ceil(messagingGroups.length / groupsPageSize), p + 1))}
+                  >
+                    Suivant
+                  </button>
+                </div>
+              </>
             )}
-
-            <button
-              type="button"
-              className="btn-primary gap-2"
-              onClick={() => void doExport()}
-              disabled={exporting || (exportEntity !== 'everything' && selectedFields.length === 0)}
-            >
-              <Download size={16} />
-              {exporting ? 'Export en cours…' : 'Exporter en CSV'}
-            </button>
-          </div>
-
-          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 space-y-4">
-            <div>
-              <h3 className="text-base font-semibold text-slate-950">Sauvegarde SQL</h3>
-              <p className="text-sm text-slate-500">
-                Téléchargez une sauvegarde complète de la base de données PostgreSQL au format{' '}
-                <code className="rounded bg-slate-100 px-1 text-xs">.sql</code>.
-                Nécessite que <code className="rounded bg-slate-100 px-1 text-xs">pg_dump</code> soit disponible sur le serveur.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="btn-primary gap-2"
-              onClick={() => void downloadSqlBackup()}
-              disabled={downloadingBackup}
-            >
-              <Database size={16} />
-              {downloadingBackup ? 'Téléchargement…' : 'Télécharger la sauvegarde SQL'}
-            </button>
-          </div>
-
-          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 space-y-4">
-            <div>
-              <h3 className="text-base font-semibold text-slate-950">Grades d&apos;enseignants</h3>
-              <p className="text-sm text-slate-500">Ce catalogue est affiché sous les rôles pour une hiérarchie de configuration claire.</p>
-            </div>
-            <div className="space-y-3">
-              <input
-                className="input"
-                value={gradeName}
-                onChange={(event) => setGradeName(event.target.value)}
-                placeholder="Ajouter un grade d'enseignant"
-              />
-              <div className="flex flex-wrap gap-2">
-                <button className="btn-primary" type="button" onClick={onSubmitGrade} disabled={settingsSaving}>
-                  {editingGradeId ? 'Enregistrer le grade' : 'Ajouter un grade'}
-                </button>
-                {editingGradeId ? (
-                  <button className="btn-outline" type="button" onClick={resetGradeForm}>Annuler</button>
-                ) : null}
-              </div>
-            </div>
-            <div className="space-y-2">
-              {teacherGrades.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-slate-950">{item.name}</p>
-                      <p className="text-sm text-slate-500">{item._count?.teachers ?? 0} enseignants assignés</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="button" className="btn-outline" onClick={() => { setEditingGradeId(item.id); setGradeName(item.name); }}>Modifier</button>
-                      <button type="button" className="btn-outline" onClick={() => onDeleteGrade(item.id)}>Supprimer</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         </section>
       ) : null}
 
-      {/* ── Account reconciliation panel ── */}
-      <section className="surface-card space-y-5">
+      {/* ── Système & Maintenance ── */}
+      <section className="surface-card space-y-6">
         <div className="panel-header">
           <div>
-            <h2 className="panel-title">Vérification des comptes</h2>
-            <p className="panel-copy">
-              Étudiants et enseignants sans compte utilisateur. Utilisez le bouton d&apos;import pour créer tous les comptes manquants en une seule opération.
-            </p>
+            <h2 className="panel-title">Système &amp; Maintenance</h2>
+            <p className="panel-copy">Statut du serveur, sauvegarde et vérification des comptes.</p>
           </div>
-          <button
-            type="button"
-            className="btn-outline flex items-center gap-1.5"
-            onClick={() => void loadUnlinkedProfiles()}
-            disabled={unlinkedLoading}
-          >
-            <RefreshCw size={14} className={unlinkedLoading ? 'animate-spin' : ''} />
-            Actualiser
-          </button>
         </div>
 
-        {unlinkedLoading && <p className="empty-note">Chargement...</p>}
-
-        {!unlinkedLoading && unlinked && (
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Students */}
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {unlinked.students.length > 0
-                    ? <AlertTriangle size={16} className="text-amber-500" />
-                    : <UserCheck size={16} className="text-emerald-500" />
-                  }
-                  <span className="font-semibold text-slate-900">Étudiants</span>
+        {isAdmin && (
+          <>
+            <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 space-y-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-950">Statut du système</h3>
+                  <p className="text-sm text-slate-500">Vérifications en temps réel pour le serveur et la base de données.</p>
                 </div>
-                <span className={`status-chip ${unlinked.students.length > 0 ? 'status-chip--warn' : 'status-chip--ok'}`}>
-                  {unlinked.students.length} sans compte
-                </span>
+                <button type="button" className="btn-outline" onClick={() => void loadAdminSettings()}>
+                  Actualiser le statut
+                </button>
               </div>
-              {unlinked.students.length > 0 ? (
-                <div className="max-h-40 overflow-y-auto space-y-1">
-                  {unlinked.students.map((s) => (
-                    <div key={s.id} className="flex items-center justify-between text-sm">
-                      <span className="text-slate-700 truncate">{s.fullName}</span>
-                      <span className="text-slate-400 text-xs ml-2 shrink-0">{s.identifier}</span>
-                    </div>
-                  ))}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">API Serveur</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-950">{appStatus?.service ?? 'Indisponible'}</p>
+                  <p className="mt-1 text-sm text-slate-600">Statut: {appStatus?.status ?? 'inconnu'}</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Vérifiée: {appStatus ? new Date(appStatus.timestamp).toLocaleString() : '-'}
+                  </p>
                 </div>
-              ) : (
-                <p className="text-sm text-emerald-600">Tous les étudiants ont un compte.</p>
-              )}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Base de données</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-950">
+                    {dbStatus?.dbConnected ? 'Connectée' : 'Indisponible'}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">{dbStatus?.message ?? 'Aucun statut disponible'}</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Vérifiée: {dbStatus ? new Date(dbStatus.timestamp).toLocaleString() : '-'}
+                  </p>
+                </div>
+              </div>
             </div>
 
-            {/* Teachers */}
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {unlinked.teachers.length > 0
-                    ? <AlertTriangle size={16} className="text-amber-500" />
-                    : <UserCheck size={16} className="text-emerald-500" />
-                  }
-                  <span className="font-semibold text-slate-900">Enseignants</span>
-                </div>
-                <span className={`status-chip ${unlinked.teachers.length > 0 ? 'status-chip--warn' : 'status-chip--ok'}`}>
-                  {unlinked.teachers.length} sans compte
-                </span>
+            <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 space-y-4">
+              <div>
+                <h3 className="text-base font-semibold text-slate-950">Sauvegarde SQL</h3>
+                <p className="text-sm text-slate-500">
+                  Téléchargez une sauvegarde complète de la base de données PostgreSQL au format{' '}
+                  <code className="rounded bg-slate-100 px-1 text-xs">.sql</code>.
+                  Nécessite que <code className="rounded bg-slate-100 px-1 text-xs">pg_dump</code> soit disponible sur le serveur.
+                </p>
               </div>
-              {unlinked.teachers.length > 0 ? (
-                <div className="max-h-40 overflow-y-auto space-y-1">
-                  {unlinked.teachers.map((t) => (
-                    <div key={t.id} className="flex items-center justify-between text-sm">
-                      <span className="text-slate-700 truncate">{t.fullName}</span>
-                      <span className="text-slate-400 text-xs ml-2 shrink-0">{t.identifier ?? '—'}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-emerald-600">Tous les enseignants ont un compte.</p>
-              )}
+              <button
+                type="button"
+                className="btn-primary gap-2"
+                onClick={() => void downloadSqlBackup()}
+                disabled={downloadingBackup}
+              >
+                <Database size={16} />
+                {downloadingBackup ? 'Téléchargement…' : 'Télécharger la sauvegarde SQL'}
+              </button>
             </div>
+          </>
+        )}
+
+        {/* Account reconciliation */}
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h3 className="text-base font-semibold text-slate-950">Vérification des comptes</h3>
+              <p className="text-sm text-slate-500">
+                Étudiants et enseignants sans compte utilisateur. Utilisez le bouton d&apos;import pour créer tous les comptes manquants en une seule opération.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn-outline flex items-center gap-1.5"
+              onClick={() => void loadUnlinkedProfiles()}
+              disabled={unlinkedLoading}
+            >
+              <RefreshCw size={14} className={unlinkedLoading ? 'animate-spin' : ''} />
+              Actualiser
+            </button>
           </div>
-        )}
 
-        {!unlinkedLoading && unlinked && (unlinked.students.length > 0 || unlinked.teachers.length > 0) && (
-          <button
-            type="button"
-            className="btn-primary flex items-center gap-2"
-            onClick={() => setImportModalOpen(true)}
-          >
-            <UserCheck size={15} />
-            Importer tous les comptes manquants ({(unlinked.students.length + unlinked.teachers.length)})
-          </button>
-        )}
+          {unlinkedLoading && <p className="empty-note">Chargement...</p>}
+
+          {!unlinkedLoading && unlinked && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {unlinked.students.length > 0
+                      ? <AlertTriangle size={16} className="text-amber-500" />
+                      : <UserCheck size={16} className="text-emerald-500" />
+                    }
+                    <span className="font-semibold text-slate-900">Étudiants</span>
+                  </div>
+                  <span className={`status-chip ${unlinked.students.length > 0 ? 'status-chip--warn' : 'status-chip--ok'}`}>
+                    {unlinked.students.length} sans compte
+                  </span>
+                </div>
+                {unlinked.students.length > 0 ? (
+                  <div className="max-h-40 overflow-y-auto space-y-1">
+                    {unlinked.students.map((s) => (
+                      <div key={s.id} className="flex items-center justify-between text-sm">
+                        <span className="text-slate-700 truncate">{s.fullName}</span>
+                        <span className="text-slate-400 text-xs ml-2 shrink-0">{s.identifier}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-emerald-600">Tous les étudiants ont un compte.</p>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {unlinked.teachers.length > 0
+                      ? <AlertTriangle size={16} className="text-amber-500" />
+                      : <UserCheck size={16} className="text-emerald-500" />
+                    }
+                    <span className="font-semibold text-slate-900">Enseignants</span>
+                  </div>
+                  <span className={`status-chip ${unlinked.teachers.length > 0 ? 'status-chip--warn' : 'status-chip--ok'}`}>
+                    {unlinked.teachers.length} sans compte
+                  </span>
+                </div>
+                {unlinked.teachers.length > 0 ? (
+                  <div className="max-h-40 overflow-y-auto space-y-1">
+                    {unlinked.teachers.map((t) => (
+                      <div key={t.id} className="flex items-center justify-between text-sm">
+                        <span className="text-slate-700 truncate">{t.fullName}</span>
+                        <span className="text-slate-400 text-xs ml-2 shrink-0">{t.identifier ?? '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-emerald-600">Tous les enseignants ont un compte.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!unlinkedLoading && unlinked && (
+            <div className="flex flex-wrap gap-2">
+              {(unlinked.students.length > 0 || unlinked.teachers.length > 0) && (
+                <button
+                  type="button"
+                  className="btn-primary flex items-center gap-2"
+                  onClick={() => setImportModalOpen(true)}
+                >
+                  <UserCheck size={15} />
+                  Importer tous les comptes manquants ({unlinked.students.length + unlinked.teachers.length})
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn-outline flex items-center gap-2"
+                onClick={() => void syncMessagingGroups()}
+                disabled={syncingMessagingGroups}
+              >
+                <MessageSquare size={15} />
+                {syncingMessagingGroups ? 'Synchronisation...' : 'Auto affecter groupes messagerie'}
+              </button>
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Bulk import modal */}

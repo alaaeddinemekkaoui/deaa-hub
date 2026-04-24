@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateWorkflowDto } from './dto/create-workflow.dto';
 import { UpdateWorkflowDto } from './dto/update-workflow.dto';
@@ -60,6 +60,10 @@ export class WorkflowsService {
   }
 
   async create(dto: CreateWorkflowDto) {
+    if (dto.assignedToId === undefined) {
+      throw new BadRequestException('assignedToId is required');
+    }
+
     const task = await this.prisma.workflowTask.create({
       data: {
         title: dto.title,

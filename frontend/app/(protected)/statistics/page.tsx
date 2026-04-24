@@ -27,7 +27,7 @@ import {
 import { EmptyState } from '@/components/admin/empty-state';
 import { MetricCard } from '@/components/admin/metric-card';
 import { PageHeader } from '@/components/admin/page-header';
-import { api, getApiErrorMessage } from '@/services/api';
+import { api, getApiErrorMessage, type PaginatedResponse } from '@/services/api';
 import { toast } from 'sonner';
 
 /* ── Types ────────────────────────────────────────────────────────── */
@@ -101,9 +101,9 @@ const ENTITY_LABELS: Record<ExportEntity, string> = {
 };
 
 const ENTITY_ENDPOINT: Record<ExportEntity, string> = {
-  students:    '/students?limit=2000',
-  teachers:    '/teachers?limit=2000',
-  departments: '/departments?limit=500',
+  students:    '/students',
+  teachers:    '/teachers',
+  departments: '/departments',
 };
 
 const CHART_COLORS = ['#1a6b4a', '#2f855a', '#c97b2f', '#0f766e', '#475569'];
@@ -125,6 +125,23 @@ function downloadCsv(csv: string, filename: string) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+async function fetchAllRows(endpoint: string): Promise<Record<string, unknown>[]> {
+  const rows: Record<string, unknown>[] = [];
+  let page = 1;
+  let hasNext = true;
+
+  while (hasNext && page <= 100) {
+    const res = await api.get<PaginatedResponse<Record<string, unknown>>>(endpoint, {
+      params: { page, limit: 200 },
+    });
+    rows.push(...(res.data.data ?? []));
+    hasNext = Boolean(res.data.meta?.hasNextPage);
+    page += 1;
+  }
+
+  return rows;
 }
 
 /* ── Export panel ─────────────────────────────────────────────────── */
@@ -153,10 +170,7 @@ function ExportPanel() {
     if (!entity || selected.size === 0) return;
     setExporting(true);
     try {
-      const res = await api.get<{ data: Record<string, unknown>[] }>(ENTITY_ENDPOINT[entity]);
-      const rows: Record<string, unknown>[] = Array.isArray(res.data)
-        ? (res.data as Record<string, unknown>[])
-        : (res.data?.data ?? []);
+      const rows = await fetchAllRows(ENTITY_ENDPOINT[entity]);
       const chosenFields = fields.filter((f) => selected.has(f.key));
       const csv = buildCsv(rows, chosenFields);
       const date = new Date().toISOString().slice(0, 10);

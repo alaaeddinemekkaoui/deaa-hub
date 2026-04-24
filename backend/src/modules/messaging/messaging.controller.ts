@@ -57,6 +57,23 @@ export class MessagingController {
     return this.messagingService.removeGroupMember(id, userId, user);
   }
 
+  @Patch('groups/:id')
+  updateGroup(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('name') name: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.messagingService.updateGroup(id, name, user);
+  }
+
+  @Delete('groups/:id')
+  deleteGroup(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.messagingService.deleteGroup(id, user);
+  }
+
   @Patch('groups/:id/members/:userId/can-send')
   setCanSend(
     @Param('id', ParseIntPipe) id: number,

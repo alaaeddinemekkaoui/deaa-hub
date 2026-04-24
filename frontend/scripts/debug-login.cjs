@@ -1,6 +1,5 @@
-const { chromium } = require('playwright');
-
 (async () => {
+  const { chromium } = await import('playwright');
   const browser = await chromium.launch({ headless: true, args: ['--no-proxy-server'] });
   const context = await browser.newContext({ viewport: { width: 1600, height: 900 } });
   const page = await context.newPage();

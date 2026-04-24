@@ -25,6 +25,7 @@ type AcademicModule = {
 type ElementModule = {
   id: number; name: string; type: 'CM' | 'TD' | 'TP';
   volumeHoraire?: number | null; moduleId: number;
+  ponderation?: number | null; coefficient?: number | null;
   _count?: { sessions: number };
 };
 
@@ -72,6 +73,8 @@ export default function AcademicPage() {
   const [elName, setElName] = useState('');
   const [elType, setElType] = useState<'CM' | 'TD' | 'TP'>('CM');
   const [elVolume, setElVolume] = useState('');
+  const [elPonderation, setElPonderation] = useState('1');
+  const [elCoefficient, setElCoefficient] = useState('1');
   const [elModuleId, setElModuleId] = useState('');
   const [savingEl, setSavingEl] = useState(false);
 
@@ -216,19 +219,28 @@ export default function AcademicPage() {
   // ── Element CRUD ──
   const openCreateEl = () => {
     setEditingElId(null); setElName(''); setElType('CM'); setElVolume('');
+    setElPonderation('1'); setElCoefficient('1');
     setElModuleId(String(selectedModule?.id ?? ''));
     setElModal(true);
   };
   const openEditEl = (el: ElementModule) => {
     setEditingElId(el.id); setElName(el.name); setElType(el.type);
-    setElVolume(String(el.volumeHoraire ?? '')); setElModuleId(String(el.moduleId));
+    setElVolume(String(el.volumeHoraire ?? '')); setElPonderation(String(el.ponderation ?? 1));
+    setElCoefficient(String(el.coefficient ?? 1)); setElModuleId(String(el.moduleId));
     setElModal(true);
   };
   const saveEl = async () => {
     if (!elName.trim() || !elModuleId) return;
     setSavingEl(true);
     try {
-      const data = { name: elName.trim(), type: elType, volumeHoraire: elVolume ? Number(elVolume) : null, moduleId: Number(elModuleId) };
+      const data = {
+        name: elName.trim(),
+        type: elType,
+        volumeHoraire: elVolume ? Number(elVolume) : null,
+        ponderation: elPonderation ? Number(elPonderation) : 1,
+        coefficient: elCoefficient ? Number(elCoefficient) : 1,
+        moduleId: Number(elModuleId),
+      };
       if (editingElId) await api.patch(`/element-modules/${editingElId}`, data);
       else await api.post('/element-modules', data);
       toast.success(editingElId ? 'Élément mis à jour' : 'Élément créé — cours générés pour toutes les classes du module');
@@ -367,6 +379,8 @@ export default function AcademicPage() {
                     <p className="truncate text-sm font-medium text-slate-800">{el.name}</p>
                     <p className="text-xs text-slate-400">
                       {el.volumeHoraire ? `${el.volumeHoraire}h` : 'Volume non défini'}
+                      {' • '}Pond. {el.ponderation ?? 1}
+                      {' • '}Coefficient {el.coefficient ?? 1}
                       {' • '}{el._count?.sessions ?? 0} session{(el._count?.sessions ?? 0) !== 1 ? 's' : ''}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1">
@@ -511,6 +525,32 @@ export default function AcademicPage() {
             <div className="field-stack">
               <label className="field-label">Volume horaire (h)</label>
               <input className="input" type="number" min={1} value={elVolume} onChange={(e) => setElVolume(e.target.value)} placeholder="ex. 30" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="field-stack">
+              <label className="field-label">Pondération</label>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                step="0.01"
+                value={elPonderation}
+                onChange={(e) => setElPonderation(e.target.value)}
+                placeholder="ex. 1"
+              />
+            </div>
+            <div className="field-stack">
+              <label className="field-label">Coefficient</label>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                step="0.01"
+                value={elCoefficient}
+                onChange={(e) => setElCoefficient(e.target.value)}
+                placeholder="ex. 1"
+              />
             </div>
           </div>
           {selectedModule && selectedModule.classes.length > 0 && (

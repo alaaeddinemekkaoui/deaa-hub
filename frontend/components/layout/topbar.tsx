@@ -226,10 +226,15 @@ type Notification = {
   read: boolean;
   createdAt: string;
   type: string;
-  message?: { id: number; sender?: { fullName: string }; group?: { name: string } } | null;
+  message?: {
+    id: number;
+    sender?: { id: number; fullName: string };
+    group?: { id: number; name: string };
+  } | null;
 };
 
 function NotificationBell() {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(0);
   const [items, setItems] = useState<Notification[]>([]);
@@ -291,6 +296,27 @@ function NotificationBell() {
     } catch { /* silent */ }
   };
 
+  const openFromNotification = (notification: Notification) => {
+    if (!notification.read) void markRead(notification.id);
+
+    const groupId = notification.message?.group?.id;
+    const senderId = notification.message?.sender?.id;
+
+    setOpen(false);
+
+    if (groupId) {
+      router.push(`/messages?tab=groups&groupId=${groupId}`);
+      return;
+    }
+
+    if (senderId) {
+      router.push(`/messages?tab=received&peerId=${senderId}`);
+      return;
+    }
+
+    router.push('/messages');
+  };
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -327,7 +353,7 @@ function NotificationBell() {
                 <div
                   key={n.id}
                   className={cn('flex gap-2.5 px-4 py-3 hover:bg-slate-50 cursor-pointer transition-colors', !n.read && 'bg-emerald-50/60')}
-                  onClick={() => { if (!n.read) void markRead(n.id); }}
+                  onClick={() => openFromNotification(n)}
                 >
                   <div className={cn('mt-0.5 h-2 w-2 shrink-0 rounded-full', n.read ? 'bg-slate-200' : 'bg-emerald-500')} />
                   <div className="flex-1 min-w-0">

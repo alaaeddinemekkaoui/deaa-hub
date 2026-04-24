@@ -700,6 +700,8 @@ export class GradesService {
 
       // Compute module averages
       const moduleAverages: Record<number, number | null> = {};
+      let overallWeightedSum = 0;
+      let overallWeight = 0;
       for (const mod of modules) {
         const elementGrades = mod.elements
           .map((el) => studentGradeMap.get(el.id))
@@ -726,6 +728,8 @@ export class GradesService {
                   0,
                 ) / elementGrades.length;
           moduleAverages[mod.id] = Math.round(avg * 100) / 100;
+          overallWeightedSum += weightedSum;
+          overallWeight += totalWeight;
         }
       }
 
@@ -734,7 +738,9 @@ export class GradesService {
         (v): v is number => v !== null,
       );
       const overallAverage =
-        validModuleAverages.length > 0
+        overallWeight > 0
+          ? Math.round((overallWeightedSum / overallWeight) * 100) / 100
+          : validModuleAverages.length > 0
           ? Math.round(
               (validModuleAverages.reduce((sum, v) => sum + v, 0) /
                 validModuleAverages.length) *

@@ -15,6 +15,8 @@ const USER_ROLE_BLOCKED = [
   '/statistics',
 ];
 
+const RESTAURATION_ALLOWED = ['/dashboard', '/restauration'];
+
 export default function ProtectedLayout({
   children,
 }: {
@@ -37,6 +39,14 @@ export default function ProtectedLayout({
       USER_ROLE_BLOCKED.some((blocked) => pathname === blocked || pathname.startsWith(`${blocked}/`))
     ) {
       router.replace('/dashboard');
+    }
+
+    if (
+      !loading &&
+      user?.role === 'restauration' &&
+      !RESTAURATION_ALLOWED.some((allowed) => pathname === allowed || pathname.startsWith(`${allowed}/`))
+    ) {
+      router.replace('/restauration');
     }
   }, [loading, user, router, pathname]);
 

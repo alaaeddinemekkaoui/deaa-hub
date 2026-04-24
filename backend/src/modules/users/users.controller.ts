@@ -81,6 +81,12 @@ export class UsersController {
     return this.usersService.bulkImportAccounts(defaultPassword);
   }
 
+  @Post('sync-messaging-groups')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  syncMessagingGroups() {
+    return this.usersService.syncMessagingGroups();
+  }
+
   @Get('backup/sql')
   @Roles(UserRole.ADMIN)
   async downloadBackup(@Res() res: Response) {
