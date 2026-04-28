@@ -7,6 +7,10 @@ Centralized administrative platform for **Direction de l’Enseignement et des A
 For the complete product, setup, API, and operations guide, see:
 
 - [docs/deaa-hub-complete-manual.md](docs/deaa-hub-complete-manual.md)
+- [docs/deaa-hub-manuel-utilisation.md](docs/deaa-hub-manuel-utilisation.md) for the single-file user manual with screenshots
+- [docs/deaa-hub-manuel-utilisation.docx](docs/deaa-hub-manuel-utilisation.docx) for the Word version
+- [docs/deaa-hub-manuel-utilisation.pdf](docs/deaa-hub-manuel-utilisation.pdf) for the PDF version
+- [docs/user-manual/index.md](docs/user-manual/index.md) for the page-by-page user manual with screenshots
 
 ## Stack
 

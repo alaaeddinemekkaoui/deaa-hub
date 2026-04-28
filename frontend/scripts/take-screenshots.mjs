@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const baseUrl = 'http://127.0.0.1:3000';
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:5000/api';
 const outDir = path.resolve(process.cwd(), '..', 'docs', 'screenshots');
 
 fs.mkdirSync(outDir, { recursive: true });
@@ -46,19 +47,30 @@ const browser = await chromium.launch({ headless: true, args: ['--no-proxy-serve
 const context = await browser.newContext({ viewport: { width: 1600, height: 900 } });
 const page = await context.newPage();
 
+async function getAdminToken() {
+  const response = await fetch(`${apiUrl}/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ identifier: 'admin', password: 'admin' }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not log in to API (${response.status})`);
+  }
+
+  const data = await response.json();
+  return data.access_token;
+}
+
 for (const t of targets) {
   const url = `${baseUrl}${t.path}`;
   await page.goto(url, { waitUntil: 'domcontentloaded' });
 
   if (t.path === '/login') {
-    if (page.url().includes('/login')) {
-      await page.waitForSelector('button[type="submit"]', { timeout: 20000 });
-      await page.click('button[type="submit"]');
-      await page.waitForURL('**/dashboard', { timeout: 25000 });
-    }
-  }
-
-  if (t.path !== '/login') {
+    await page.waitForSelector('button[type="submit"]', { timeout: 20000 });
+  } else {
+    const token = await getAdminToken();
+    await page.evaluate((value) => localStorage.setItem('deaa_token', value), token);
     await page.goto(url, { waitUntil: 'domcontentloaded' });
   }
 
