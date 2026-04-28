@@ -44,7 +44,10 @@ export class CoursResourcesService {
       .toLowerCase();
   }
 
-  async findAll(query: { classId?: number; coursId?: number }, user: JwtPayload) {
+  async findAll(
+    query: { classId?: number; coursId?: number },
+    user: JwtPayload,
+  ) {
     const where: Prisma.CoursResourceWhereInput = {};
     if (query.classId) where.classId = query.classId;
     if (query.coursId) where.coursId = query.coursId;
@@ -100,7 +103,12 @@ export class CoursResourcesService {
     });
   }
 
-  async download(id: number, user: JwtPayload, res: Response, disposition: 'inline' | 'attachment') {
+  async download(
+    id: number,
+    user: JwtPayload,
+    res: Response,
+    disposition: 'inline' | 'attachment',
+  ) {
     const resource = await this.getAuthorizedResource(id, user);
     if (!existsSync(resource.path)) {
       throw new NotFoundException('Fichier introuvable');
@@ -137,7 +145,9 @@ export class CoursResourcesService {
     return this.prisma.coursResource.update({
       where: { id: resource.id },
       data: {
-        ...(dto.title !== undefined ? { title: dto.title.trim() || resource.fileName } : {}),
+        ...(dto.title !== undefined
+          ? { title: dto.title.trim() || resource.fileName }
+          : {}),
         ...(dto.coursId !== undefined ? { coursId: dto.coursId } : {}),
         ...(dto.classId !== undefined ? { classId: dto.classId } : {}),
         ...(dto.teacherId !== undefined ? { teacherId: dto.teacherId } : {}),
@@ -164,10 +174,14 @@ export class CoursResourcesService {
   }
 
   private async ensureCanManageResource(
-    resource: Prisma.CoursResourceGetPayload<{ include: typeof RESOURCE_INCLUDE }>,
+    resource: Prisma.CoursResourceGetPayload<{
+      include: typeof RESOURCE_INCLUDE;
+    }>,
     user: JwtPayload,
   ) {
-    if (![UserRole.ADMIN, UserRole.STAFF, UserRole.TEACHER].includes(user.role)) {
+    if (
+      ![UserRole.ADMIN, UserRole.STAFF, UserRole.TEACHER].includes(user.role)
+    ) {
       throw new ForbiddenException('Insufficient role permissions');
     }
 
@@ -188,11 +202,16 @@ export class CoursResourcesService {
       select: { id: true },
     });
     if (!assignment) {
-      throw new BadRequestException('Ce cours n’est pas affecté à cette classe');
+      throw new BadRequestException(
+        'Ce cours n’est pas affecté à cette classe',
+      );
     }
   }
 
-  private async resolveTeacherId(dto: UploadCoursResourceDto, user: JwtPayload) {
+  private async resolveTeacherId(
+    dto: UploadCoursResourceDto,
+    user: JwtPayload,
+  ) {
     if (user.role !== UserRole.TEACHER) {
       if (dto.teacherId) {
         await this.ensureTeacherExists(dto.teacherId);
@@ -207,7 +226,11 @@ export class CoursResourcesService {
     if (!teacher) throw new NotFoundException('Profil enseignant introuvable');
 
     const assignment = await this.prisma.coursClass.findFirst({
-      where: { coursId: dto.coursId, classId: dto.classId, teacherId: teacher.id },
+      where: {
+        coursId: dto.coursId,
+        classId: dto.classId,
+        teacherId: teacher.id,
+      },
       select: { id: true },
     });
     if (!assignment) {

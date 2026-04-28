@@ -117,6 +117,7 @@ export class DocumentsService {
           mimeType: file.mimetype,
           path: finalPath,
           studentId: student.id,
+          ...(dto.category ? { category: dto.category.trim() } : {}),
         },
       });
     }
@@ -149,8 +150,15 @@ export class DocumentsService {
         mimeType: file.mimetype,
         path: finalPath,
         teacherId: teacher.id,
+        ...(dto.category ? { category: dto.category.trim() } : {}),
       },
     });
+  }
+
+  async getFilePath(id: number) {
+    const doc = await this.prisma.document.findUnique({ where: { id } });
+    if (!doc) throw new NotFoundException('Document not found');
+    return doc;
   }
 
   findByStudent(studentId: number) {

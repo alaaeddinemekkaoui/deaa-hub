@@ -35,8 +35,13 @@ export class UsersController {
 
   @Get('for-messaging')
   @Roles(
-    UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER,
-    UserRole.USER, UserRole.TEACHER, UserRole.STUDENT, UserRole.INSPECTOR,
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.TEACHER,
+    UserRole.STUDENT,
+    UserRole.INSPECTOR,
   )
   findForMessaging() {
     return this.usersService.findForMessaging();

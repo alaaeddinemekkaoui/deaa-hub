@@ -7,12 +7,19 @@ import {
 import { Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { KeyedTtlCache } from '../../common/utils/keyed-ttl-cache';
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { DepartmentQueryDto } from './dto/department-query.dto';
 
 @Injectable()
 export class DepartmentsService {
+  private readonly listCache = new KeyedTtlCache<unknown>({
+    prefix: 'departments:list',
+    ttlMs: 60 * 1000,
+    staleTtlMs: 5 * 60 * 1000,
+  });
+
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: DepartmentQueryDto, departmentIds?: number[]) {
@@ -27,39 +34,50 @@ export class DepartmentsService {
     const where: Prisma.DepartmentWhereInput =
       filters.length > 1 ? { AND: filters } : (filters[0] ?? {});
 
-    const [data, total] = await Promise.all([
-      this.prisma.department.findMany({
-        where,
-        select: {
-          id: true,
-          name: true,
-          createdAt: true,
-          updatedAt: true,
-          _count: {
-            select: {
-              filieres: true,
-              teachers: true,
+    const cacheKey = JSON.stringify({
+      page,
+      limit,
+      search: search ?? null,
+      sortBy,
+      sortOrder,
+      departmentIds: departmentIds ?? null,
+    });
+
+    return this.listCache.getOrLoad(cacheKey, async () => {
+      const [data, total] = await Promise.all([
+        this.prisma.department.findMany({
+          where,
+          select: {
+            id: true,
+            name: true,
+            createdAt: true,
+            updatedAt: true,
+            _count: {
+              select: {
+                filieres: true,
+                teachers: true,
+              },
             },
           },
-        },
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { [sortBy]: sortOrder },
-      }),
-      this.prisma.department.count({ where }),
-    ]);
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: { [sortBy]: sortOrder },
+        }),
+        this.prisma.department.count({ where }),
+      ]);
 
-    return {
-      data,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit) || 1,
-        hasNextPage: page * limit < total,
-        hasPreviousPage: page > 1,
-      },
-    };
+      return {
+        data,
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit) || 1,
+          hasNextPage: page * limit < total,
+          hasPreviousPage: page > 1,
+        },
+      };
+    });
   }
 
   async findOne(id: number) {
@@ -98,7 +116,9 @@ export class DepartmentsService {
 
   async create(dto: CreateDepartmentDto) {
     await this.ensureNameAvailable(dto.name);
-    return this.prisma.department.create({ data: dto });
+    const created = await this.prisma.department.create({ data: dto });
+    this.listCache.invalidate();
+    return created;
   }
 
   async update(id: number, dto: UpdateDepartmentDto) {
@@ -107,7 +127,12 @@ export class DepartmentsService {
       await this.ensureNameAvailable(dto.name, id);
     }
 
-    return this.prisma.department.update({ where: { id }, data: dto });
+    const updated = await this.prisma.department.update({
+      where: { id },
+      data: dto,
+    });
+    this.listCache.invalidate();
+    return updated;
   }
 
   async remove(id: number) {
@@ -134,7 +159,9 @@ export class DepartmentsService {
       );
     }
 
-    return this.prisma.department.delete({ where: { id } });
+    const deleted = await this.prisma.department.delete({ where: { id } });
+    this.listCache.invalidate();
+    return deleted;
   }
 
   private async ensureDepartmentExists(id: number) {

@@ -5,8 +5,12 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   BookOpen,
   Building2,
+  Eye,
+  FolderOpen,
   GraduationCap,
+  Pencil,
   Search,
+  Trash2,
   Users,
 } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
@@ -14,10 +18,13 @@ import { ExportDataButton } from '@/components/admin/export-data-button';
 import { ImportDataButton } from '@/components/admin/import-data-button';
 import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
+import { ProfileDocsModal } from '@/components/profile/profile-docs-modal';
 import { PageHeader } from '@/components/admin/page-header';
 import { PaginationControls } from '@/components/admin/pagination-controls';
+import { TableActionButton, TableActionGrid, TableActionLink } from '@/components/admin/table-actions';
 import { api, fetchRef, getApiErrorMessage, PaginatedResponse } from '@/services/api';
 import { useAuth } from '@/features/auth/auth-context';
+import { confirmDelete } from '@/lib/confirm';
 import { toast } from 'sonner';
 
 type Department = { id: number; name: string };
@@ -58,6 +65,7 @@ const PAGE_SIZE = 8;
 export default function TeachersPage() {
   const { user } = useAuth();
   const canDelete = user?.role === 'admin';
+  const [docsTeacher, setDocsTeacher] = useState<{ id: number; name: string } | null>(null);
   const [rows, setRows] = useState<Teacher[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [filieres, setFilieres] = useState<Filiere[]>([]);
@@ -150,30 +158,6 @@ export default function TeachersPage() {
     setPage(1);
   };
 
-  const fetchAllPaginatedRows = async <T,>(
-    endpoint: string,
-    params: Record<string, string | number | undefined> = {},
-  ) => {
-    const collected: T[] = [];
-    let currentPage = 1;
-    let totalPages = 1;
-
-    do {
-      const response = await api.get<PaginatedResponse<T>>(endpoint, {
-        params: {
-          ...params,
-          page: currentPage,
-        },
-      });
-
-      collected.push(...response.data.data);
-      totalPages = response.data.meta?.totalPages ?? 1;
-      currentPage += 1;
-    } while (currentPage <= totalPages);
-
-    return collected;
-  };
-
   const resetForm = () => {
     setEditingId(null);
     setFirstName('');
@@ -195,6 +179,24 @@ export default function TeachersPage() {
 
   const openCreateModal = () => {
     resetForm();
+    setIsModalOpen(true);
+  };
+
+  const getTeacherName = (teacher: Teacher) =>
+    `${teacher.firstName} ${teacher.lastName}`.trim();
+
+  const openEditModal = (teacher: Teacher) => {
+    setEditingId(teacher.id);
+    setFirstName(teacher.firstName);
+    setLastName(teacher.lastName);
+    setCin(teacher.cin ?? '');
+    setDateInscription(teacher.dateInscription ? teacher.dateInscription.slice(0, 10) : '');
+    setEmail(teacher.email ?? '');
+    setPhoneNumber(teacher.phoneNumber ?? '');
+    setDepartmentId(String(teacher.departmentId));
+    setFiliereId(String(teacher.filiereId ?? ''));
+    setRoleId(String(teacher.roleId));
+    setGradeId(String(teacher.gradeId));
     setIsModalOpen(true);
   };
 
@@ -354,9 +356,9 @@ export default function TeachersPage() {
   };
 
   const onDelete = async (id: number) => {
-    if (!window.confirm('Supprimer cet enseignant ?')) {
-      return;
-    }
+    const teacher = rows.find((item) => item.id === id);
+    const name = teacher ? getTeacherName(teacher) : 'cet enseignant';
+    if (!confirmDelete(name)) return;
 
     try {
       await api.delete(`/teachers/${id}`);
@@ -600,9 +602,12 @@ export default function TeachersPage() {
                       <tr key={item.id}>
                         <td>
                           <div>
-                            <p className="font-medium text-slate-950">
-                              {item.firstName} {item.lastName}
-                            </p>
+                            <Link
+                              className="font-medium text-slate-950 transition hover:text-emerald-700 hover:underline"
+                              href={`/teachers/${item.id}`}
+                            >
+                              {getTeacherName(item)}
+                            </Link>
                             <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
                               {item.grade.name}
                             </p>
@@ -636,44 +641,34 @@ export default function TeachersPage() {
                         </td>
                         <td>{new Date(item.updatedAt).toLocaleString()}</td>
                         <td>
-                          <div className="flex flex-wrap gap-2">
-                            <Link className="btn-outline" href={`/teachers/${item.id}`}>
-                              Profil
-                            </Link>
-                            <button
-                              type="button"
-                              className="btn-outline"
-                              onClick={() => {
-                                setEditingId(item.id);
-                                setFirstName(item.firstName);
-                                setLastName(item.lastName);
-                                setCin(item.cin ?? '');
-                                setDateInscription(
-                                  item.dateInscription
-                                    ? item.dateInscription.slice(0, 10)
-                                    : '',
-                                );
-                                setEmail(item.email ?? '');
-                                setPhoneNumber(item.phoneNumber ?? '');
-                                setDepartmentId(String(item.departmentId));
-                                setFiliereId(String(item.filiereId ?? ''));
-                                setRoleId(String(item.roleId));
-                                setGradeId(String(item.gradeId));
-                                setIsModalOpen(true);
-                              }}
-                            >
-                              Modifier
-                            </button>
+                          <TableActionGrid>
+                            <TableActionLink
+                              href={`/teachers/${item.id}`}
+                              icon={Eye}
+                              tone="profile"
+                              label={`Voir le profil de ${getTeacherName(item)}`}
+                            />
+                            <TableActionButton
+                              icon={FolderOpen}
+                              tone="docs"
+                              label={`Ouvrir le dossier de ${getTeacherName(item)}`}
+                              onClick={() => setDocsTeacher({ id: item.id, name: getTeacherName(item) })}
+                            />
+                            <TableActionButton
+                              icon={Pencil}
+                              tone="edit"
+                              label={`Modifier ${getTeacherName(item)}`}
+                              onClick={() => openEditModal(item)}
+                            />
                             {canDelete && (
-                              <button
-                                type="button"
-                                className="btn-outline"
+                              <TableActionButton
+                                icon={Trash2}
+                                tone="delete"
+                                label={`Supprimer ${getTeacherName(item)}`}
                                 onClick={() => onDelete(item.id)}
-                              >
-                                Supprimer
-                              </button>
+                              />
                             )}
-                          </div>
+                          </TableActionGrid>
                         </td>
                       </tr>
                     ))}
@@ -832,6 +827,17 @@ export default function TeachersPage() {
           </div>
         </div>
       </ModalShell>
+
+      {docsTeacher && (
+        <ProfileDocsModal
+          open={true}
+          onClose={() => setDocsTeacher(null)}
+          entityType="teacher"
+          entityId={docsTeacher.id}
+          entityName={docsTeacher.name}
+          canEdit={['admin', 'staff'].includes(user?.role ?? '')}
+        />
+      )}
     </div>
   );
 }

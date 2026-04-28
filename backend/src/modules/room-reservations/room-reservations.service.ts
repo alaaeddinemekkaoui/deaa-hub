@@ -263,7 +263,7 @@ export class RoomReservationsService {
     // Department scoping for regular users
     if (
       currentUser &&
-      isDeptScoped(currentUser.role as UserRole) &&
+      isDeptScoped(currentUser.role) &&
       currentUser.departmentIds.length > 0
     ) {
       filters.push({
@@ -333,7 +333,7 @@ export class RoomReservationsService {
     roomDepartmentId: number | null,
     classDepartmentId: number | null,
   ) {
-    if (!isDeptScoped(currentUser.role as UserRole)) return;
+    if (!isDeptScoped(currentUser.role)) return;
 
     const allowedDepartmentIds = currentUser.departmentIds ?? [];
     if (allowedDepartmentIds.length === 0) {

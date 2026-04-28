@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './common/prisma/prisma.module';
@@ -31,10 +33,12 @@ import { MessagingModule } from './modules/messaging/messaging.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { RestaurationModule } from './modules/restauration/restauration.module';
 import { CoursResourcesModule } from './modules/cours-resources/cours-resources.module';
+import { ProfileDocumentTypesModule } from './modules/profile-document-types/profile-document-types.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 10000 }]),
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -64,8 +68,9 @@ import { CoursResourcesModule } from './modules/cours-resources/cours-resources.
     NotificationsModule,
     RestaurationModule,
     CoursResourcesModule,
+    ProfileDocumentTypesModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

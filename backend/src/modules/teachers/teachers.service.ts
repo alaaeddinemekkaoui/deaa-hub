@@ -19,6 +19,7 @@ import { CreateTeacherGradeDto } from './dto/create-teacher-grade.dto';
 import { UpdateTeacherGradeDto } from './dto/update-teacher-grade.dto';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 import { UserRole, isDeptScoped } from '../../common/types/role.type';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class TeachersService {
@@ -33,7 +34,10 @@ export class TeachersService {
     staleTtlMs: 30 * 60 * 1000,
   });
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly usersService: UsersService,
+  ) {}
 
   async findAll(query: TeacherQueryDto) {
     const {
@@ -340,7 +344,7 @@ export class TeachersService {
   async remove(id: number, currentUser?: JwtPayload) {
     const teacher = await this.prisma.teacher.findUnique({
       where: { id },
-      select: { id: true, departmentId: true },
+      select: { id: true, departmentId: true, userId: true },
     });
 
     if (!teacher) {
@@ -349,7 +353,18 @@ export class TeachersService {
 
     this.ensureCanManageDepartment(teacher.departmentId, currentUser);
 
-    return this.prisma.teacher.delete({ where: { id } });
+    const deleted = await this.prisma.$transaction(async (tx) => {
+      const removedTeacher = await tx.teacher.delete({ where: { id } });
+
+      if (teacher.userId) {
+        await tx.user.delete({ where: { id: teacher.userId } });
+      }
+
+      return removedTeacher;
+    });
+
+    if (teacher.userId) this.usersService.invalidateListCache();
+    return deleted;
   }
 
   private ensureCanManageDepartment(
@@ -358,8 +373,7 @@ export class TeachersService {
   ) {
     if (
       !currentUser ||
-      (!isDeptScoped(currentUser.role as UserRole) &&
-        currentUser.role !== UserRole.VIEWER)
+      (!isDeptScoped(currentUser.role) && currentUser.role !== UserRole.VIEWER)
     ) {
       return;
     }
@@ -825,7 +839,13 @@ export class TeachersService {
     });
 
     // Add to message groups (non-blocking)
-    this.addTeacherToGroups(user.id, teacher.filiereId, teacher.departmentId).catch(() => {/* non-blocking */});
+    this.addTeacherToGroups(
+      user.id,
+      teacher.filiereId,
+      teacher.departmentId,
+    ).catch(() => {
+      /* non-blocking */
+    });
 
     return { user, teacherId };
   }
@@ -846,7 +866,8 @@ export class TeachersService {
       } catch (err: unknown) {
         if (
           err instanceof ConflictException &&
-          (err.message.includes('already has') || err.message.includes('already in use'))
+          (err.message.includes('already has') ||
+            err.message.includes('already in use'))
         ) {
           skipped++;
         } else {
@@ -895,5 +916,21 @@ export class TeachersService {
         create: { groupId: dg.id, userId, canSend: false },
       });
     }
+  }
+
+  async updatePhoto(id: number, path: string) {
+    await this.prisma.teacher.update({
+      where: { id },
+      data: { photoPath: path },
+    });
+    return { success: true };
+  }
+
+  async getPhotoPath(id: number): Promise<string | null> {
+    const teacher = await this.prisma.teacher.findUnique({
+      where: { id },
+      select: { photoPath: true },
+    });
+    return teacher?.photoPath ?? null;
   }
 }

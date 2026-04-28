@@ -152,8 +152,7 @@ export class RoomsService {
   ) {
     if (
       !currentUser ||
-      (!isDeptScoped(currentUser.role as UserRole) &&
-        currentUser.role !== UserRole.VIEWER)
+      (!isDeptScoped(currentUser.role) && currentUser.role !== UserRole.VIEWER)
     ) {
       return;
     }

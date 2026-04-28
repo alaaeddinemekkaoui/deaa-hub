@@ -7,10 +7,14 @@ import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateLaureateDto } from './dto/create-laureate.dto';
 import { UpdateLaureateDto } from './dto/update-laureate.dto';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class LaureatesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly usersService: UsersService,
+  ) {}
 
   findAll() {
     return this.prisma.laureate.findMany({
@@ -136,11 +140,24 @@ export class LaureatesService {
   async remove(id: number, userId?: number) {
     const existing = await this.prisma.laureate.findUnique({
       where: { id },
-      include: { student: { select: { fullName: true } } },
+      include: { student: { select: { fullName: true, userId: true } } },
     });
     if (!existing) throw new NotFoundException(`Laureate ${id} not found`);
 
-    const deleted = await this.prisma.laureate.delete({ where: { id } });
+    const linkedUserId = existing.student.userId;
+    const deleted = await this.prisma.$transaction(async (tx) => {
+      const removedLaureate = await tx.laureate.delete({ where: { id } });
+
+      if (linkedUserId) {
+        await tx.student.update({
+          where: { id: existing.studentId },
+          data: { userId: null },
+        });
+        await tx.user.delete({ where: { id: linkedUserId } });
+      }
+
+      return removedLaureate;
+    });
 
     if (userId) {
       await this.log(userId, `Removed laureate: ${existing.student.fullName}`, {
@@ -149,6 +166,7 @@ export class LaureatesService {
       });
     }
 
+    if (linkedUserId) this.usersService.invalidateListCache();
     return deleted;
   }
 

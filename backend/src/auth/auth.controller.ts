@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+/*  */ import {
+  Body,
+  Controller,
+  Get,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -23,11 +30,10 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async me(@CurrentUser() payload: JwtPayload) {
     const user = await this.usersService.findOne(payload.sub);
-    const departments = await this.usersService.getUserDepartments(payload.sub);
     return {
       ...payload,
       fullName: user?.fullName,
-      departments,
+      departments: user?.departments ?? [],
     };
   }
 

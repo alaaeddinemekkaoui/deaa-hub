@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { KeyedTtlCache } from '../../common/utils/keyed-ttl-cache';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 import { UserRole, isDeptScoped } from '../../common/types/role.type';
 import { CreateGradeDto } from './dto/create-grade.dto';
@@ -58,6 +59,18 @@ type ElementGradeSummary = {
 
 @Injectable()
 export class GradesService {
+  private readonly listCache = new KeyedTtlCache<unknown>({
+    prefix: 'grades:list',
+    ttlMs: 30 * 1000,
+    staleTtlMs: 2 * 60 * 1000,
+  });
+
+  private readonly studentCache = new KeyedTtlCache<unknown>({
+    prefix: 'grades:student',
+    ttlMs: 30 * 1000,
+    staleTtlMs: 2 * 60 * 1000,
+  });
+
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: GradeQueryDto) {
@@ -115,13 +128,67 @@ export class GradesService {
     const where: Prisma.StudentGradeWhereInput =
       filters.length > 0 ? { AND: filters } : {};
 
-    const [data, total] = await Promise.all([
-      this.prisma.studentGrade.findMany({
-        where,
-        include: {
-          student: {
-            select: { id: true, fullName: true, codeMassar: true },
+    const cacheKey = JSON.stringify({
+      page: query.page,
+      limit: query.limit,
+      search: query.search ?? null,
+      studentId: query.studentId ?? null,
+      teacherId: query.teacherId ?? null,
+      classId: query.classId ?? null,
+      moduleId: query.moduleId ?? null,
+      elementModuleId: query.elementModuleId ?? null,
+      academicYear: query.academicYear ?? null,
+      semester: query.semester ?? null,
+      assessmentType: query.assessmentType ?? null,
+    });
+
+    return this.listCache.getOrLoad(cacheKey, async () => {
+      const [data, total] = await Promise.all([
+        this.prisma.studentGrade.findMany({
+          where,
+          include: {
+            student: {
+              select: { id: true, fullName: true, codeMassar: true },
+            },
+            teacher: {
+              select: { id: true, firstName: true, lastName: true },
+            },
+            academicClass: {
+              select: { id: true, name: true, year: true },
+            },
+            module: {
+              select: { id: true, name: true, semestre: true },
+            },
+            elementModule: {
+              select: { id: true, name: true, type: true },
+            },
           },
+          orderBy: [{ academicYear: 'desc' }, { createdAt: 'desc' }],
+          skip: (query.page - 1) * query.limit,
+          take: query.limit,
+        }),
+        this.prisma.studentGrade.count({ where }),
+      ]);
+
+      return {
+        data,
+        meta: {
+          page: query.page,
+          limit: query.limit,
+          total,
+          totalPages: Math.ceil(total / query.limit) || 1,
+          hasNextPage: query.page * query.limit < total,
+          hasPreviousPage: query.page > 1,
+        },
+      };
+    });
+  }
+
+  async findByStudent(studentId: number) {
+    return this.studentCache.getOrLoad(String(studentId), () =>
+      this.prisma.studentGrade.findMany({
+        where: { studentId },
+        include: {
           teacher: {
             select: { id: true, firstName: true, lastName: true },
           },
@@ -136,44 +203,8 @@ export class GradesService {
           },
         },
         orderBy: [{ academicYear: 'desc' }, { createdAt: 'desc' }],
-        skip: (query.page - 1) * query.limit,
-        take: query.limit,
       }),
-      this.prisma.studentGrade.count({ where }),
-    ]);
-
-    return {
-      data,
-      meta: {
-        page: query.page,
-        limit: query.limit,
-        total,
-        totalPages: Math.ceil(total / query.limit) || 1,
-        hasNextPage: query.page * query.limit < total,
-        hasPreviousPage: query.page > 1,
-      },
-    };
-  }
-
-  async findByStudent(studentId: number) {
-    return this.prisma.studentGrade.findMany({
-      where: { studentId },
-      include: {
-        teacher: {
-          select: { id: true, firstName: true, lastName: true },
-        },
-        academicClass: {
-          select: { id: true, name: true, year: true },
-        },
-        module: {
-          select: { id: true, name: true, semestre: true },
-        },
-        elementModule: {
-          select: { id: true, name: true, type: true },
-        },
-      },
-      orderBy: [{ academicYear: 'desc' }, { createdAt: 'desc' }],
-    });
+    );
   }
 
   async findByTeacher(teacherId: number) {
@@ -210,7 +241,7 @@ export class GradesService {
       await this.ensureTeacherExists(dto.teacherId);
     }
 
-    return this.prisma.studentGrade.create({
+    const created = await this.prisma.studentGrade.create({
       data: {
         studentId: dto.studentId,
         teacherId: dto.teacherId ?? null,
@@ -246,6 +277,9 @@ export class GradesService {
         },
       },
     });
+
+    this.invalidateGradeCaches(dto.studentId);
+    return created;
   }
 
   async update(id: number, dto: UpdateGradeDto, currentUser?: JwtPayload) {
@@ -309,7 +343,7 @@ export class GradesService {
       await this.ensureTeacherExists(teacherId);
     }
 
-    return this.prisma.studentGrade.update({
+    const updated = await this.prisma.studentGrade.update({
       where: { id },
       data: {
         ...(dto.studentId !== undefined ? { studentId: nextStudentId } : {}),
@@ -374,6 +408,12 @@ export class GradesService {
         },
       },
     });
+
+    this.invalidateGradeCaches(nextStudentId);
+    if (existing.student.id !== nextStudentId) {
+      this.invalidateGradeCaches(existing.student.id);
+    }
+    return updated;
   }
 
   async bulkUpsert(dto: BulkUpsertGradesDto, currentUser?: JwtPayload) {
@@ -465,6 +505,11 @@ export class GradesService {
 
       return { created, updated };
     });
+
+    for (const studentId of studentIds) {
+      this.studentCache.invalidate(String(studentId));
+    }
+    this.listCache.invalidate();
 
     return {
       ...result,
@@ -741,12 +786,12 @@ export class GradesService {
         overallWeight > 0
           ? Math.round((overallWeightedSum / overallWeight) * 100) / 100
           : validModuleAverages.length > 0
-          ? Math.round(
-              (validModuleAverages.reduce((sum, v) => sum + v, 0) /
-                validModuleAverages.length) *
-                100,
-            ) / 100
-          : null;
+            ? Math.round(
+                (validModuleAverages.reduce((sum, v) => sum + v, 0) /
+                  validModuleAverages.length) *
+                  100,
+              ) / 100
+            : null;
 
       return {
         id: student.id,
@@ -807,7 +852,9 @@ export class GradesService {
 
     this.ensureCanManageDepartment(departmentId, currentUser);
 
-    return this.prisma.studentGrade.delete({ where: { id } });
+    const deleted = await this.prisma.studentGrade.delete({ where: { id } });
+    this.invalidateGradeCaches(existing.studentId);
+    return deleted;
   }
 
   private async resolveContext(params: {
@@ -1064,8 +1111,7 @@ export class GradesService {
   ) {
     if (
       !currentUser ||
-      (!isDeptScoped(currentUser.role as UserRole) &&
-        currentUser.role !== UserRole.VIEWER)
+      (!isDeptScoped(currentUser.role) && currentUser.role !== UserRole.VIEWER)
     ) {
       return;
     }
@@ -1085,6 +1131,15 @@ export class GradesService {
 
     if (!teacher) {
       throw new NotFoundException(`Teacher ${id} not found`);
+    }
+  }
+
+  private invalidateGradeCaches(studentId?: number) {
+    this.listCache.invalidate();
+    if (studentId !== undefined) {
+      this.studentCache.invalidate(String(studentId));
+    } else {
+      this.studentCache.invalidate();
     }
   }
 }

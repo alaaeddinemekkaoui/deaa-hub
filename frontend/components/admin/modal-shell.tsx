@@ -10,6 +10,7 @@ type ModalShellProps = {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  size?: 'sm' | 'md' | 'lg';
 };
 
 export function ModalShell({
@@ -19,6 +20,7 @@ export function ModalShell({
   onClose,
   children,
   footer,
+  size = 'md',
 }: ModalShellProps) {
   useEffect(() => {
     if (!open) {
@@ -46,6 +48,12 @@ export function ModalShell({
     return null;
   }
 
+  const widthClass = {
+    sm: 'max-w-xl',
+    md: 'max-w-2xl',
+    lg: 'max-w-4xl',
+  }[size];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
       <div
@@ -56,9 +64,9 @@ export function ModalShell({
       <div
         role="dialog"
         aria-modal="true"
-        className="relative z-10 w-full max-w-2xl rounded-[2rem] border bg-white p-6 shadow-[0_32px_90px_-48px_rgba(15,36,26,0.65)]"
+        className={`relative z-10 flex max-h-[calc(100vh-3rem)] w-full ${widthClass} flex-col overflow-hidden rounded-2xl border bg-white shadow-[0_32px_90px_-48px_rgba(15,36,26,0.65)]`}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
           <div className="space-y-2">
             <h2 className="text-xl font-semibold tracking-tight text-slate-950">
               {title}
@@ -77,9 +85,9 @@ export function ModalShell({
           </button>
         </div>
 
-        <div className="mt-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
 
-        {footer ? <div className="mt-5 flex flex-wrap gap-2">{footer}</div> : null}
+        {footer ? <div className="flex flex-wrap gap-2 border-t border-slate-100 px-5 py-4">{footer}</div> : null}
       </div>
     </div>
   );

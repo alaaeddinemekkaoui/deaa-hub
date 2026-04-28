@@ -11,15 +11,73 @@ import { ProgressStudentsDto } from './dto/progress-students.dto';
 import { GroupType, PrepaYear, Prisma, StudentCycle } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { KeyedTtlCache } from '../../common/utils/keyed-ttl-cache';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 import { UserRole, isDeptScoped } from '../../common/types/role.type';
+import { UsersService } from '../users/users.service';
+
+const STUDENT_LIST_SELECT = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  fullName: true,
+  sex: true,
+  cin: true,
+  codeMassar: true,
+  codeEtudiant: true,
+  dateNaissance: true,
+  email: true,
+  telephone: true,
+  bacType: true,
+  firstYearEntry: true,
+  anneeAcademique: true,
+  dateInscription: true,
+  filiereId: true,
+  classId: true,
+  userId: true,
+  filiere: {
+    select: {
+      id: true,
+      name: true,
+      department: { select: { id: true, name: true } },
+    },
+  },
+  academicClass: {
+    select: {
+      id: true,
+      name: true,
+      year: true,
+      filiere: { select: { id: true, name: true } },
+    },
+  },
+  classHistory: {
+    select: {
+      id: true,
+      academicYear: true,
+      studyYear: true,
+      academicClass: { select: { id: true, name: true, year: true } },
+    },
+  },
+  laureate: {
+    select: { id: true, graduationYear: true, diplomaStatus: true },
+  },
+} satisfies Prisma.StudentSelect;
 
 @Injectable()
 export class StudentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly listCache = new KeyedTtlCache<unknown>({
+    prefix: 'students:list',
+    ttlMs: 30 * 1000,
+    staleTtlMs: 2 * 60 * 1000,
+  });
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly usersService: UsersService,
+  ) {}
 
   async findAll(
     pagination: PaginationDto,
@@ -47,48 +105,36 @@ export class StudentsService {
     const where: Prisma.StudentWhereInput =
       filters.length > 1 ? { AND: filters } : (filters[0] ?? {});
 
-    const [data, total] = await Promise.all([
-      this.prisma.student.findMany({
-        where,
-        include: {
-          filiere: { include: { department: true } },
-          academicClass: {
-            select: {
-              id: true,
-              name: true,
-              year: true,
-              filiere: { select: { id: true, name: true } },
-            },
-          },
-          classHistory: {
-            select: {
-              id: true,
-              academicYear: true,
-              studyYear: true,
-              academicClass: { select: { id: true, name: true, year: true } },
-            },
-            orderBy: { academicYear: 'desc' },
-          },
-          laureate: {
-            select: { id: true, graduationYear: true, diplomaStatus: true },
-          },
-        },
-        skip: (pagination.page - 1) * pagination.limit,
-        take: pagination.limit,
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.student.count({ where }),
-    ]);
+    const cacheKey = JSON.stringify({
+      page: pagination.page,
+      limit: pagination.limit,
+      search: search ?? null,
+      filiereId: filiereId ?? null,
+      departmentIds: departmentIds ?? null,
+    });
 
-    return {
-      data,
-      meta: {
-        page: pagination.page,
-        limit: pagination.limit,
-        total,
-        totalPages: Math.ceil(total / pagination.limit),
-      },
-    };
+    return this.listCache.getOrLoad(cacheKey, async () => {
+      const [data, total] = await Promise.all([
+        this.prisma.student.findMany({
+          where,
+          select: STUDENT_LIST_SELECT,
+          skip: (pagination.page - 1) * pagination.limit,
+          take: pagination.limit,
+          orderBy: { id: 'desc' },
+        }),
+        this.prisma.student.count({ where }),
+      ]);
+
+      return {
+        data,
+        meta: {
+          page: pagination.page,
+          limit: pagination.limit,
+          total,
+          totalPages: Math.ceil(total / pagination.limit),
+        },
+      };
+    });
   }
 
   findOne(id: number) {
@@ -127,6 +173,7 @@ export class StudentsService {
     const student = await this.prisma.student.create({
       data: payload,
     });
+    this.listCache.invalidate();
 
     await this.upsertClassHistory(
       student.id,
@@ -136,7 +183,9 @@ export class StudentsService {
     );
 
     // Auto-provision account (fire-and-forget; errors are suppressed)
-    this.autoProvisionAccount(student.id, dto.codeMassar).catch(() => {/* non-blocking */});
+    this.autoProvisionAccount(student.id, dto.codeMassar).catch(() => {
+      /* non-blocking */
+    });
 
     return this.findOne(student.id);
   }
@@ -185,6 +234,7 @@ export class StudentsService {
       where: { id },
       data: payload,
     });
+    this.listCache.invalidate();
 
     await this.upsertClassHistory(
       updated.id,
@@ -199,7 +249,9 @@ export class StudentsService {
 
     // Sync group membership when class/filière changes
     if (dto.classId !== undefined || dto.filiereId !== undefined) {
-      this.syncStudentGroupMembership(updated.id).catch(() => {/* non-blocking */});
+      this.syncStudentGroupMembership(updated.id).catch(() => {
+        /* non-blocking */
+      });
     }
 
     return this.findOne(updated.id);
@@ -210,6 +262,7 @@ export class StudentsService {
       where: { id },
       select: {
         id: true,
+        userId: true,
         filiere: { select: { departmentId: true } },
         academicClass: {
           select: { filiere: { select: { departmentId: true } } },
@@ -227,7 +280,19 @@ export class StudentsService {
       null;
     this.ensureCanManageDepartment(departmentId, currentUser);
 
-    return this.prisma.student.delete({ where: { id } });
+    const deleted = await this.prisma.$transaction(async (tx) => {
+      const removedStudent = await tx.student.delete({ where: { id } });
+
+      if (existing.userId) {
+        await tx.user.delete({ where: { id: existing.userId } });
+      }
+
+      return removedStudent;
+    });
+
+    this.listCache.invalidate();
+    if (existing.userId) this.usersService.invalidateListCache();
+    return deleted;
   }
 
   private async resolveStudentDepartmentId(
@@ -265,8 +330,7 @@ export class StudentsService {
   ) {
     if (
       !currentUser ||
-      (!isDeptScoped(currentUser.role as UserRole) &&
-        currentUser.role !== UserRole.VIEWER)
+      (!isDeptScoped(currentUser.role) && currentUser.role !== UserRole.VIEWER)
     ) {
       return;
     }
@@ -327,7 +391,9 @@ export class StudentsService {
       ...(dto.sex !== undefined ? { sex: dto.sex } : {}),
       ...(dto.cin !== undefined ? { cin: dto.cin } : {}),
       ...(dto.codeMassar !== undefined ? { codeMassar: dto.codeMassar } : {}),
-      ...(dto.codeEtudiant !== undefined ? { codeEtudiant: dto.codeEtudiant ?? null } : {}),
+      ...(dto.codeEtudiant !== undefined
+        ? { codeEtudiant: dto.codeEtudiant ?? null }
+        : {}),
       ...(dto.dateNaissance
         ? { dateNaissance: new Date(dto.dateNaissance) }
         : {}),
@@ -634,11 +700,14 @@ export class StudentsService {
           );
         }
       });
+      this.listCache.invalidate();
     }
 
     // Sync group membership for transferred students (non-blocking)
     for (const s of validStudents) {
-      this.syncStudentGroupMembership(s.id).catch(() => {/* non-blocking */});
+      this.syncStudentGroupMembership(s.id).catch(() => {
+        /* non-blocking */
+      });
     }
 
     if (userId) {
@@ -748,11 +817,14 @@ export class StudentsService {
           );
         }
       });
+      this.listCache.invalidate();
     }
 
     // Sync group membership for promoted students (non-blocking)
     for (const s of admisGroup) {
-      this.syncStudentGroupMembership(s.id).catch(() => {/* non-blocking */});
+      this.syncStudentGroupMembership(s.id).catch(() => {
+        /* non-blocking */
+      });
     }
 
     if (userId) {
@@ -791,19 +863,23 @@ export class StudentsService {
 
     if (existing) {
       // Update graduation year if already laureate
-      return this.prisma.laureate.update({
+      const updated = await this.prisma.laureate.update({
         where: { studentId },
         data: { graduationYear },
       });
+      this.listCache.invalidate();
+      return updated;
     }
 
     // Create new laureate record
-    return this.prisma.laureate.create({
+    const created = await this.prisma.laureate.create({
       data: {
         studentId,
         graduationYear,
       },
     });
+    this.listCache.invalidate();
+    return created;
   }
 
   async removeLaureate(studentId: number) {
@@ -816,9 +892,11 @@ export class StudentsService {
       return null;
     }
 
-    return this.prisma.laureate.delete({
+    const deleted = await this.prisma.laureate.delete({
       where: { studentId },
     });
+    this.listCache.invalidate();
+    return deleted;
   }
 
   async importFromBuffer(
@@ -853,7 +931,8 @@ export class StudentsService {
           fullName: cellString(row['fullName']) || undefined,
           cin: cellString(row['cin'], row['CIN']),
           codeMassar: cellString(row['codeMassar'], row['Code Massar']),
-          codeEtudiant: cellString(row['codeEtudiant'], row['Code Étudiant']) || undefined,
+          codeEtudiant:
+            cellString(row['codeEtudiant'], row['Code Étudiant']) || undefined,
           sex: (['male', 'female'].includes(
             cellString(row['sex']).toLowerCase(),
           )
@@ -883,6 +962,10 @@ export class StudentsService {
       }
     }
 
+    if (imported > 0) {
+      this.listCache.invalidate();
+    }
+
     return { imported, errors };
   }
 
@@ -900,12 +983,13 @@ export class StudentsService {
   ) {
     const student = await this.prisma.student.findUnique({
       where: { id: studentId },
-      include: { filiere: { select: { department: { select: { id: true } } } } },
+      include: {
+        filiere: { select: { department: { select: { id: true } } } },
+      },
     });
     if (!student) throw new NotFoundException(`Student ${studentId} not found`);
 
-    const departmentId =
-      student.filiere?.department?.id ?? null;
+    const departmentId = student.filiere?.department?.id ?? null;
     this.ensureCanManageDepartment(departmentId, currentUser);
 
     if (student.userId) {
@@ -944,6 +1028,7 @@ export class StudentsService {
       where: { id: studentId },
       data: { userId: user.id },
     });
+    this.listCache.invalidate();
 
     // Add new user to message groups (non-blocking)
     this.addUserToGroups(
@@ -951,7 +1036,9 @@ export class StudentsService {
       student.classId,
       student.filiereId,
       departmentId,
-    ).catch(() => {/* non-blocking */});
+    ).catch(() => {
+      /* non-blocking */
+    });
 
     return { user, studentId };
   }
@@ -1046,7 +1133,9 @@ export class StudentsService {
         classId: true,
         filiereId: true,
         filiere: { select: { departmentId: true } },
-        academicClass: { select: { filiere: { select: { departmentId: true } } } },
+        academicClass: {
+          select: { filiere: { select: { departmentId: true } } },
+        },
       },
     });
     if (!student?.userId) return;
@@ -1054,7 +1143,12 @@ export class StudentsService {
       student.academicClass?.filiere?.departmentId ??
       student.filiere?.departmentId ??
       null;
-    await this.addUserToGroups(student.userId, student.classId, student.filiereId, departmentId);
+    await this.addUserToGroups(
+      student.userId,
+      student.classId,
+      student.filiereId,
+      departmentId,
+    );
   }
 
   /** Ensure a CLASS message group exists for the given classId, creating it if needed. */
@@ -1100,7 +1194,8 @@ export class StudentsService {
       } catch (err: unknown) {
         if (
           err instanceof ConflictException &&
-          (err.message.includes('already has') || err.message.includes('already in use'))
+          (err.message.includes('already has') ||
+            err.message.includes('already in use'))
         ) {
           skipped++;
         } else {
@@ -1111,5 +1206,21 @@ export class StudentsService {
     }
 
     return { created, skipped, errors };
+  }
+
+  async updatePhoto(id: number, path: string) {
+    await this.prisma.student.update({
+      where: { id },
+      data: { photoPath: path },
+    });
+    return { success: true };
+  }
+
+  async getPhotoPath(id: number): Promise<string | null> {
+    const student = await this.prisma.student.findUnique({
+      where: { id },
+      select: { photoPath: true },
+    });
+    return student?.photoPath ?? null;
   }
 }

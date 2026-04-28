@@ -6,12 +6,19 @@ import {
 } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { KeyedTtlCache } from '../../common/utils/keyed-ttl-cache';
 import { CreateFiliereDto } from './dto/create-filiere.dto';
 import { UpdateFiliereDto } from './dto/update-filiere.dto';
 import { FiliereQueryDto } from './dto/filiere-query.dto';
 
 @Injectable()
 export class FilieresService {
+  private readonly listCache = new KeyedTtlCache<unknown>({
+    prefix: 'filieres:list',
+    ttlMs: 60 * 1000,
+    staleTtlMs: 5 * 60 * 1000,
+  });
+
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: FiliereQueryDto, departmentIds?: number[]) {
@@ -42,42 +49,54 @@ export class FilieresService {
         : {}),
     };
 
-    const [data, total] = await Promise.all([
-      this.prisma.filiere.findMany({
-        where,
-        include: {
-          department: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          _count: {
-            select: {
-              students: true,
-              teachers: true,
-              classes: true,
-            },
-          },
-        },
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { [sortBy]: sortOrder },
-      }),
-      this.prisma.filiere.count({ where }),
-    ]);
+    const cacheKey = JSON.stringify({
+      page,
+      limit,
+      search: search ?? null,
+      departmentId: departmentId ?? null,
+      departmentIds: departmentIds ?? null,
+      sortBy,
+      sortOrder,
+    });
 
-    return {
-      data,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit) || 1,
-        hasNextPage: page * limit < total,
-        hasPreviousPage: page > 1,
-      },
-    };
+    return this.listCache.getOrLoad(cacheKey, async () => {
+      const [data, total] = await Promise.all([
+        this.prisma.filiere.findMany({
+          where,
+          include: {
+            department: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            _count: {
+              select: {
+                students: true,
+                teachers: true,
+                classes: true,
+              },
+            },
+          },
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: { [sortBy]: sortOrder },
+        }),
+        this.prisma.filiere.count({ where }),
+      ]);
+
+      return {
+        data,
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit) || 1,
+          hasNextPage: page * limit < total,
+          hasPreviousPage: page > 1,
+        },
+      };
+    });
   }
 
   async findOne(id: number) {
@@ -127,7 +146,9 @@ export class FilieresService {
     await this.ensureNameAvailable(dto.name);
     await this.ensureCodeAvailable(dto.code);
 
-    return this.prisma.filiere.create({ data: dto });
+    const created = await this.prisma.filiere.create({ data: dto });
+    this.listCache.invalidate();
+    return created;
   }
 
   async update(id: number, dto: UpdateFiliereDto) {
@@ -143,7 +164,12 @@ export class FilieresService {
       await this.ensureCodeAvailable(dto.code, id);
     }
 
-    return this.prisma.filiere.update({ where: { id }, data: dto });
+    const updated = await this.prisma.filiere.update({
+      where: { id },
+      data: dto,
+    });
+    this.listCache.invalidate();
+    return updated;
   }
 
   async remove(id: number) {
@@ -175,7 +201,9 @@ export class FilieresService {
       );
     }
 
-    return this.prisma.filiere.delete({ where: { id } });
+    const deleted = await this.prisma.filiere.delete({ where: { id } });
+    this.listCache.invalidate();
+    return deleted;
   }
 
   private async ensureDepartmentExists(id: number) {

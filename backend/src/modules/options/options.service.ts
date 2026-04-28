@@ -5,12 +5,19 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { KeyedTtlCache } from '../../common/utils/keyed-ttl-cache';
 import { CreateOptionDto } from './dto/create-option.dto';
 import { UpdateOptionDto } from './dto/update-option.dto';
 import { OptionQueryDto } from './dto/option-query.dto';
 
 @Injectable()
 export class OptionsService {
+  private readonly listCache = new KeyedTtlCache<unknown>({
+    prefix: 'options:list',
+    ttlMs: 60 * 1000,
+    staleTtlMs: 5 * 60 * 1000,
+  });
+
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: OptionQueryDto) {
@@ -32,33 +39,45 @@ export class OptionsService {
       ? { AND: filters }
       : {};
 
-    const [data, total] = await Promise.all([
-      this.prisma.option.findMany({
-        where,
-        include: {
-          filiere: {
-            include: { department: { select: { id: true, name: true } } },
-          },
-          _count: { select: { classes: true, modules: true } },
-        },
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { [sortBy]: sortOrder },
-      }),
-      this.prisma.option.count({ where }),
-    ]);
+    const cacheKey = JSON.stringify({
+      page,
+      limit,
+      search: search ?? null,
+      filiereId: filiereId ?? null,
+      departmentId: departmentId ?? null,
+      sortBy,
+      sortOrder,
+    });
 
-    return {
-      data,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit) || 1,
-        hasNextPage: page * limit < total,
-        hasPreviousPage: page > 1,
-      },
-    };
+    return this.listCache.getOrLoad(cacheKey, async () => {
+      const [data, total] = await Promise.all([
+        this.prisma.option.findMany({
+          where,
+          include: {
+            filiere: {
+              include: { department: { select: { id: true, name: true } } },
+            },
+            _count: { select: { classes: true, modules: true } },
+          },
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: { [sortBy]: sortOrder },
+        }),
+        this.prisma.option.count({ where }),
+      ]);
+
+      return {
+        data,
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit) || 1,
+          hasNextPage: page * limit < total,
+          hasPreviousPage: page > 1,
+        },
+      };
+    });
   }
 
   async findOne(id: number) {
@@ -77,13 +96,15 @@ export class OptionsService {
   async create(dto: CreateOptionDto) {
     await this.ensureFiliereExists(dto.filiereId);
     await this.ensureNameAvailable(dto.name, dto.filiereId);
-    return this.prisma.option.create({
+    const created = await this.prisma.option.create({
       data: {
         name: dto.name,
         code: dto.code ?? null,
         filiereId: dto.filiereId,
       },
     });
+    this.listCache.invalidate();
+    return created;
   }
 
   async update(id: number, dto: UpdateOptionDto) {
@@ -95,7 +116,7 @@ export class OptionsService {
     const nextFiliereId = dto.filiereId ?? existing.filiereId;
     if (dto.filiereId) await this.ensureFiliereExists(dto.filiereId);
     if (dto.name) await this.ensureNameAvailable(dto.name, nextFiliereId, id);
-    return this.prisma.option.update({
+    const updated = await this.prisma.option.update({
       where: { id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
@@ -103,6 +124,8 @@ export class OptionsService {
         ...(dto.filiereId !== undefined ? { filiereId: dto.filiereId } : {}),
       },
     });
+    this.listCache.invalidate();
+    return updated;
   }
 
   async remove(id: number) {
@@ -114,7 +137,9 @@ export class OptionsService {
       },
     });
     if (!opt) throw new NotFoundException(`Option ${id} not found`);
-    return this.prisma.option.delete({ where: { id } });
+    const deleted = await this.prisma.option.delete({ where: { id } });
+    this.listCache.invalidate();
+    return deleted;
   }
 
   private async ensureFiliereExists(id: number) {

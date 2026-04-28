@@ -1,14 +1,17 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { GraduationCap, Medal, Search, X } from 'lucide-react';
+import { Eye, GraduationCap, Medal, Pencil, Search, Trash2, X } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
 import { ExportDataButton } from '@/components/admin/export-data-button';
 import { ImportDataButton } from '@/components/admin/import-data-button';
 import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
+import { TableActionButton, TableActionGrid, TableActionLink } from '@/components/admin/table-actions';
 import { api } from '@/services/api';
+import { confirmDelete } from '@/lib/confirm';
 import { toast } from 'sonner';
 
 type Laureate = {
@@ -19,6 +22,8 @@ type Laureate = {
   proofDocumentId?: number | null;
   student: {
     fullName: string;
+    codeEtudiant?: string | null;
+    codeMassar?: string | null;
     filiere?: { name: string } | null;
   };
 };
@@ -186,6 +191,17 @@ export default function LaureatesPage() {
   const openCreate = () => { resetForm(); setIsModalOpen(true); };
   const closeModal = () => { setIsModalOpen(false); resetForm(); };
 
+  const getStudentCode = (item: Laureate) =>
+    item.student.codeEtudiant ?? item.student.codeMassar ?? '—';
+
+  const openEditModal = (item: Laureate) => {
+    setEditingId(item.id);
+    setGraduationYear(String(item.graduationYear));
+    setDiplomaStatus(item.diplomaStatus);
+    setProofDocumentId(item.proofDocumentId ? String(item.proofDocumentId) : '');
+    setIsModalOpen(true);
+  };
+
   const onSubmit = async () => {
     if (!editingId && !selectedStudent) return;
     setSaving(true);
@@ -215,7 +231,7 @@ export default function LaureatesPage() {
   };
 
   const onDelete = async (id: number, name: string) => {
-    if (!window.confirm(`Supprimer ${name} des lauréats?`)) return;
+    if (!confirmDelete(name, 'des lauréats')) return;
     try {
       await api.delete(`/laureates/${id}`);
       toast.success('Lauréat supprimé');
@@ -265,6 +281,7 @@ export default function LaureatesPage() {
             <table className="table-base">
               <thead>
                 <tr>
+                  <th>Code Étudiant</th>
                   <th>Étudiant</th>
                   <th>Filière</th>
                   <th>Année de graduation</th>
@@ -275,7 +292,17 @@ export default function LaureatesPage() {
               <tbody>
                 {rows.map((item) => (
                   <tr key={item.id}>
-                    <td className="font-medium text-slate-900">{item.student.fullName}</td>
+                    <td className="font-mono text-xs text-slate-600">
+                      {getStudentCode(item)}
+                    </td>
+                    <td>
+                      <Link
+                        className="font-medium text-slate-900 transition hover:text-emerald-700 hover:underline"
+                        href={`/students/${item.studentId}`}
+                      >
+                        {item.student.fullName}
+                      </Link>
+                    </td>
                     <td className="text-slate-500">{item.student.filiere?.name ?? '—'}</td>
                     <td>{item.graduationYear}</td>
                     <td>
@@ -290,28 +317,26 @@ export default function LaureatesPage() {
                       </span>
                     </td>
                     <td>
-                      <div className="flex gap-2">
-                        <button
-                          className="btn-outline"
-                          type="button"
-                          onClick={() => {
-                            setEditingId(item.id);
-                            setGraduationYear(String(item.graduationYear));
-                            setDiplomaStatus(item.diplomaStatus);
-                            setProofDocumentId(item.proofDocumentId ? String(item.proofDocumentId) : '');
-                            setIsModalOpen(true);
-                          }}
-                        >
-                          Modifier
-                        </button>
-                        <button
-                          className="btn-outline"
-                          type="button"
+                      <TableActionGrid>
+                        <TableActionLink
+                          href={`/students/${item.studentId}`}
+                          icon={Eye}
+                          tone="profile"
+                          label={`Voir le profil de ${item.student.fullName}`}
+                        />
+                        <TableActionButton
+                          icon={Pencil}
+                          tone="edit"
+                          label={`Modifier ${item.student.fullName}`}
+                          onClick={() => openEditModal(item)}
+                        />
+                        <TableActionButton
+                          icon={Trash2}
+                          tone="delete"
+                          label={`Supprimer ${item.student.fullName}`}
                           onClick={() => onDelete(item.id, item.student.fullName)}
-                        >
-                          Supprimer
-                        </button>
-                      </div>
+                        />
+                      </TableActionGrid>
                     </td>
                   </tr>
                 ))}

@@ -7,15 +7,17 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { mkdirSync } from 'fs';
+import { createReadStream, existsSync, mkdirSync } from 'fs';
 import { diskStorage } from 'multer';
 import { tmpdir } from 'os';
 import { extname, join } from 'path';
+import type { Response } from 'express';
 import { DocumentsService } from './documents.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -49,7 +51,14 @@ export class DocumentsController {
   }
 
   @Post('upload')
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.TEACHER,
+    UserRole.STUDENT,
+    UserRole.USER,
+    UserRole.INSPECTOR,
+  )
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
@@ -113,5 +122,25 @@ export class DocumentsController {
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.documentsService.remove(id);
+  }
+
+  @Get(':id/file')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.TEACHER,
+    UserRole.STUDENT,
+    UserRole.INSPECTOR,
+  )
+  async serveFile(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+    const doc = await this.documentsService.getFilePath(id);
+    if (!existsSync(doc.path)) {
+      return res.status(404).json({ message: 'File not found on disk' });
+    }
+    res.setHeader('Content-Type', doc.mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${doc.name}"`);
+    createReadStream(doc.path).pipe(res);
   }
 }

@@ -7,6 +7,6 @@ import { isDeptScoped, UserRole } from '../types/role.type';
  * Returns the array for dept-scoped roles (user/teacher/student/inspector).
  */
 export function deptScope(user: JwtPayload): number[] | undefined {
-  if (!isDeptScoped(user.role as UserRole)) return undefined;
+  if (!isDeptScoped(user.role)) return undefined;
   return user.departmentIds.length > 0 ? user.departmentIds : [];
 }

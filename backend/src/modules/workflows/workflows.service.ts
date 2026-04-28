@@ -89,9 +89,13 @@ export class WorkflowsService {
         ...(dto.title !== undefined && { title: dto.title }),
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.status !== undefined && { status: dto.status }),
-        ...(dto.assignedToId !== undefined && { assignedToId: dto.assignedToId }),
+        ...(dto.assignedToId !== undefined && {
+          assignedToId: dto.assignedToId,
+        }),
         ...(dto.studentId !== undefined && { studentId: dto.studentId }),
-        ...(dto.documentTypeId !== undefined && { documentTypeId: dto.documentTypeId }),
+        ...(dto.documentTypeId !== undefined && {
+          documentTypeId: dto.documentTypeId,
+        }),
       },
     });
 
@@ -106,7 +110,9 @@ export class WorkflowsService {
         data: {
           taskId: id,
           status: dto.status,
-          note: dto.timelineNote ?? `Statut changé : ${labels[dto.status] ?? dto.status}`,
+          note:
+            dto.timelineNote ??
+            `Statut changé : ${labels[dto.status] ?? dto.status}`,
         },
       });
     }

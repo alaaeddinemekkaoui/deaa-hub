@@ -42,7 +42,10 @@ export class DocumentTypesController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN)
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateDocumentTypeDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDocumentTypeDto,
+  ) {
     return this.service.update(id, dto);
   }
 

@@ -19,8 +19,15 @@ const isInspectorOrAdmin = (role: UserRole) =>
 const canManageClassDelegation = (role: UserRole) =>
   role === UserRole.TEACHER || role === UserRole.INSPECTOR || isAdmin(role);
 
-function canSendDirectMessage(senderRole: UserRole, recipientRole: UserRole): boolean {
-  if (isAdmin(senderRole) || senderRole === UserRole.INSPECTOR || senderRole === UserRole.VIEWER) {
+function canSendDirectMessage(
+  senderRole: UserRole,
+  recipientRole: UserRole,
+): boolean {
+  if (
+    isAdmin(senderRole) ||
+    senderRole === UserRole.INSPECTOR ||
+    senderRole === UserRole.VIEWER
+  ) {
     return true;
   }
 
@@ -98,7 +105,9 @@ export class MessagingService {
   async getGroupMembers(groupId: number) {
     return this.prisma.messageGroupMember.findMany({
       where: { groupId },
-      include: { user: { select: { id: true, fullName: true, email: true, role: true } } },
+      include: {
+        user: { select: { id: true, fullName: true, email: true, role: true } },
+      },
     });
   }
 
@@ -117,13 +126,15 @@ export class MessagingService {
       throw new NotFoundException('Group not found');
     }
 
-    const actorRole = currentUser.role as UserRole;
+    const actorRole = currentUser.role;
     const canManage =
       isInspectorOrAdmin(actorRole) ||
       (group.type === GroupType.CLASS && canManageClassDelegation(actorRole));
 
     if (!canManage) {
-      throw new ForbiddenException('You are not allowed to change send permissions for this group');
+      throw new ForbiddenException(
+        'You are not allowed to change send permissions for this group',
+      );
     }
 
     return this.prisma.messageGroupMember.upsert({
@@ -133,9 +144,15 @@ export class MessagingService {
     });
   }
 
-  async addGroupMember(groupId: number, userId: number, currentUser: JwtPayload) {
-    if (!isInspectorOrAdmin(currentUser.role as UserRole)) {
-      throw new ForbiddenException('Only admins/staff/inspectors can add group members');
+  async addGroupMember(
+    groupId: number,
+    userId: number,
+    currentUser: JwtPayload,
+  ) {
+    if (!isInspectorOrAdmin(currentUser.role)) {
+      throw new ForbiddenException(
+        'Only admins/staff/inspectors can add group members',
+      );
     }
     return this.prisma.messageGroupMember.upsert({
       where: { groupId_userId: { groupId, userId } },
@@ -144,9 +161,15 @@ export class MessagingService {
     });
   }
 
-  async removeGroupMember(groupId: number, userId: number, currentUser: JwtPayload) {
-    if (!isInspectorOrAdmin(currentUser.role as UserRole)) {
-      throw new ForbiddenException('Only admins/staff/inspectors can remove group members');
+  async removeGroupMember(
+    groupId: number,
+    userId: number,
+    currentUser: JwtPayload,
+  ) {
+    if (!isInspectorOrAdmin(currentUser.role)) {
+      throw new ForbiddenException(
+        'Only admins/staff/inspectors can remove group members',
+      );
     }
     return this.prisma.messageGroupMember.delete({
       where: { groupId_userId: { groupId, userId } },
@@ -154,10 +177,13 @@ export class MessagingService {
   }
 
   async updateGroup(id: number, name: string, currentUser: JwtPayload) {
-    if (!isAdmin(currentUser.role as UserRole)) {
+    if (!isAdmin(currentUser.role)) {
       throw new ForbiddenException('Only admins can update groups');
     }
-    const group = await this.prisma.messageGroup.findUnique({ where: { id }, select: { id: true } });
+    const group = await this.prisma.messageGroup.findUnique({
+      where: { id },
+      select: { id: true },
+    });
     if (!group) throw new NotFoundException('Group not found');
     return this.prisma.messageGroup.update({
       where: { id },
@@ -167,10 +193,13 @@ export class MessagingService {
   }
 
   async deleteGroup(id: number, currentUser: JwtPayload) {
-    if (!isAdmin(currentUser.role as UserRole)) {
+    if (!isAdmin(currentUser.role)) {
       throw new ForbiddenException('Only admins can delete groups');
     }
-    const group = await this.prisma.messageGroup.findUnique({ where: { id }, select: { id: true, type: true } });
+    const group = await this.prisma.messageGroup.findUnique({
+      where: { id },
+      select: { id: true, type: true },
+    });
     if (!group) throw new NotFoundException('Group not found');
     if (group.type !== 'CUSTOM') {
       throw new ForbiddenException('Only custom groups can be deleted');
@@ -186,13 +215,14 @@ export class MessagingService {
    * - viewer/user: can send 1:1 only to admin/staff, and to groups where canSend=true
    */
   async sendMessage(dto: SendMessageDto, currentUser: JwtPayload) {
-    const actorRole = currentUser.role as UserRole;
+    const actorRole = currentUser.role;
     const adminSender = isAdmin(actorRole);
     const sender = await this.prisma.user.findUnique({
       where: { id: currentUser.sub },
       select: { fullName: true, email: true },
     });
-    const senderName = sender?.fullName?.trim() || sender?.email || currentUser.email;
+    const senderName =
+      sender?.fullName?.trim() || sender?.email || currentUser.email;
 
     if (dto.recipientId !== undefined) {
       // 1:1 message
@@ -203,7 +233,9 @@ export class MessagingService {
       if (!recipient) throw new NotFoundException('Recipient not found');
 
       if (!canSendDirectMessage(actorRole, recipient.role as UserRole)) {
-        throw new ForbiddenException('You are not allowed to send direct message to this user role');
+        throw new ForbiddenException(
+          'You are not allowed to send direct message to this user role',
+        );
       }
 
       const message = await this.prisma.message.create({
@@ -240,18 +272,23 @@ export class MessagingService {
           throw new NotFoundException('Group not found');
         }
 
-        if (group.type === GroupType.CLASS && canManageClassDelegation(actorRole)) {
+        if (
+          group.type === GroupType.CLASS &&
+          canManageClassDelegation(actorRole)
+        ) {
           // class teacher/inspector/admin can broadcast to class group
         } else {
-        const membership = await this.prisma.messageGroupMember.findUnique({
-          where: { groupId_userId: { groupId: dto.groupId, userId: currentUser.sub } },
-          select: { canSend: true },
-        });
-        if (!membership?.canSend) {
-          throw new ForbiddenException(
-            "You don't have permission to send messages to this group",
-          );
-        }
+          const membership = await this.prisma.messageGroupMember.findUnique({
+            where: {
+              groupId_userId: { groupId: dto.groupId, userId: currentUser.sub },
+            },
+            select: { canSend: true },
+          });
+          if (!membership?.canSend) {
+            throw new ForbiddenException(
+              "You don't have permission to send messages to this group",
+            );
+          }
         }
       }
 
@@ -289,11 +326,17 @@ export class MessagingService {
       return message;
     }
 
-    throw new ForbiddenException('Either recipientId or groupId must be provided');
+    throw new ForbiddenException(
+      'Either recipientId or groupId must be provided',
+    );
   }
 
   /** Conversation between current user and another user */
-  async getConversation(otherUserId: number, currentUser: JwtPayload, limit = 50) {
+  async getConversation(
+    otherUserId: number,
+    currentUser: JwtPayload,
+    limit = 50,
+  ) {
     return this.prisma.message.findMany({
       where: {
         OR: [
@@ -316,7 +359,8 @@ export class MessagingService {
       const membership = await this.prisma.messageGroupMember.findUnique({
         where: { groupId_userId: { groupId, userId: currentUser.sub } },
       });
-      if (!membership) throw new ForbiddenException('Not a member of this group');
+      if (!membership)
+        throw new ForbiddenException('Not a member of this group');
     }
 
     return this.prisma.message.findMany({
@@ -356,7 +400,10 @@ export class MessagingService {
     const sentMap = new Map<number, DirectThreadSummary>();
 
     for (const msg of directMessages) {
-      if (msg.recipientId === currentUser.sub && msg.senderId !== currentUser.sub) {
+      if (
+        msg.recipientId === currentUser.sub &&
+        msg.senderId !== currentUser.sub
+      ) {
         if (!receivedMap.has(msg.senderId)) {
           receivedMap.set(msg.senderId, {
             peer: {
@@ -432,11 +479,17 @@ export class MessagingService {
     await this.prisma.messageGroup.upsert({
       where: { id: 2 },
       update: {},
-      create: { id: 2, name: 'Administrateurs uniquement', type: GroupType.ADMINS_ONLY },
+      create: {
+        id: 2,
+        name: 'Administrateurs uniquement',
+        type: GroupType.ADMINS_ONLY,
+      },
     });
 
     // Sync EVERYONE members with all users
-    const allUsers = await this.prisma.user.findMany({ select: { id: true, role: true } });
+    const allUsers = await this.prisma.user.findMany({
+      select: { id: true, role: true },
+    });
     for (const u of allUsers) {
       await this.prisma.messageGroupMember.upsert({
         where: { groupId_userId: { groupId: 1, userId: u.id } },

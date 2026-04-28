@@ -102,7 +102,11 @@ export class MessagingController {
     @Query('limit') limit: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.messagingService.getConversation(userId, user, Number(limit) || 50);
+    return this.messagingService.getConversation(
+      userId,
+      user,
+      Number(limit) || 50,
+    );
   }
 
   @Get('groups/:id/messages')
@@ -111,6 +115,10 @@ export class MessagingController {
     @Query('limit') limit: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.messagingService.getGroupMessages(id, user, Number(limit) || 50);
+    return this.messagingService.getGroupMessages(
+      id,
+      user,
+      Number(limit) || 50,
+    );
   }
 }

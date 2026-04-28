@@ -2,15 +2,18 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { BookOpen, CalendarRange, GraduationCap, KeyRound, Search, UserPlus, Users } from 'lucide-react';
+import { BookOpen, CalendarRange, Eye, FolderOpen, GraduationCap, KeyRound, Pencil, Search, Trash2, UserPlus, Users } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
 import { ExportDataButton } from '@/components/admin/export-data-button';
 import { ImportDataButton } from '@/components/admin/import-data-button';
 import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
+import { ProfileDocsModal } from '@/components/profile/profile-docs-modal';
 import { PageHeader } from '@/components/admin/page-header';
+import { TableActionButton, TableActionGrid, TableActionLink } from '@/components/admin/table-actions';
 import { api, fetchRef, getApiErrorMessage, PaginatedResponse } from '@/services/api';
 import { useAuth } from '@/features/auth/auth-context';
+import { confirmDelete } from '@/lib/confirm';
 import { toast } from 'sonner';
 
 type StudentClassHistory = {
@@ -84,6 +87,9 @@ export default function StudentsPage() {
   const [dateInscription, setDateInscription] = useState(new Date().toISOString().split('T')[0]);
   const [isLaureate, setIsLaureate] = useState(false);
   const [graduationYear, setGraduationYear] = useState(String(new Date().getFullYear()));
+
+  // Docs modal
+  const [docsStudent, setDocsStudent] = useState<{ id: number; name: string } | null>(null);
 
   // Account-creation modal (single student)
   const [accountStudentId, setAccountStudentId] = useState<number | null>(null);
@@ -160,7 +166,6 @@ export default function StudentsPage() {
       }
     };
     void loadRef();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load students when search query or refresh changes
@@ -212,6 +217,43 @@ export default function StudentsPage() {
   const closeModal = () => {
     setIsModalOpen(false);
     resetForm();
+  };
+
+  const openEditModal = (student: Student) => {
+    const inferredFirstName =
+      student.firstName?.trim() ||
+      student.fullName?.split(' ')[0] ||
+      '';
+    const inferredLastName =
+      student.lastName?.trim() ||
+      student.fullName?.split(' ').slice(1).join(' ') ||
+      '';
+
+    setEditingId(student.id);
+    setFirstName(inferredFirstName);
+    setLastName(inferredLastName);
+    setSex(student.sex);
+    setFirstYearEntry(String(student.firstYearEntry));
+    setCin(student.cin);
+    setCodeMassar(student.codeMassar);
+    setCodeEtudiant(student.codeEtudiant ?? '');
+    setDateNaissance(student.dateNaissance ? student.dateNaissance.split('T')[0] : '2000-01-01');
+    setEmail(student.email ?? '');
+    setTelephone(student.telephone ?? '');
+    setFiliereId(String(student.filiereId ?? ''));
+    setClassId(String(student.classId ?? student.academicClass?.id ?? ''));
+    setBacType(student.bacType ?? '');
+    setAnneeAcademique(student.anneeAcademique);
+    setDateInscription(student.dateInscription ? student.dateInscription.split('T')[0] : new Date().toISOString().split('T')[0]);
+    setIsLaureate(!!student.laureate);
+    setGraduationYear(String(student.laureate?.graduationYear ?? new Date().getFullYear()));
+    setIsModalOpen(true);
+  };
+
+  const openAccountModal = (student: Student) => {
+    setAccountStudentId(student.id);
+    setAccountStudentName(student.fullName);
+    setAccountPassword('');
   };
 
   const onSubmit = async () => {
@@ -279,7 +321,9 @@ export default function StudentsPage() {
   };
 
   const onDelete = async (id: number) => {
-    if (!window.confirm('Supprimer cet étudiant ?')) return;
+    const student = students.find((item) => item.id === id);
+    const name = student?.fullName ?? 'cet étudiant';
+    if (!confirmDelete(name)) return;
     try {
       await api.delete(`/students/${id}`);
       toast.success('Étudiant supprimé avec succès');
@@ -421,12 +465,11 @@ export default function StudentsPage() {
           <table className="table-base">
             <thead>
               <tr>
-                <th>ID</th>
+                <th>Code Étudiant</th>
                 <th>Nom complet</th>
                 <th>Sexe</th>
                 <th>Année d&apos;entrée</th>
                 <th>Code Massar</th>
-                <th>Code Étudiant</th>
                 <th>CIN</th>
                 <th>Filière</th>
                 <th>Classe actuelle</th>
@@ -442,10 +485,15 @@ export default function StudentsPage() {
             <tbody>
               {students.map((student) => (
                 <tr key={student.id}>
-                  <td>{student.id}</td>
+                  <td className="font-mono text-xs text-slate-600">{student.codeEtudiant ?? '-'}</td>
                   <td>
                     <div className="flex items-center gap-2">
-                      <span>{student.fullName}</span>
+                      <Link
+                        className="font-medium text-slate-900 transition hover:text-emerald-700 hover:underline"
+                        href={`/students/${student.id}`}
+                      >
+                        {student.fullName}
+                      </Link>
                       {isCurrentClassRedoublant(student) && (
                         <span className="status-chip status-chip--warn text-xs">
                           Redoublant
@@ -456,7 +504,6 @@ export default function StudentsPage() {
                   <td>{student.sex}</td>
                   <td>{student.firstYearEntry}</td>
                   <td>{student.codeMassar}</td>
-                  <td>{student.codeEtudiant ?? '-'}</td>
                   <td>{student.cin}</td>
                   <td>{student.filiere?.name ?? '-'}</td>
                   <td>{student.academicClass ? `${student.academicClass.name} (Année ${student.academicClass.year})` : '-'}</td>
@@ -501,66 +548,42 @@ export default function StudentsPage() {
                     )}
                   </td>
                   <td>
-                    <div className="flex flex-wrap gap-2">
-                      <Link className="btn-outline" href={`/students/${student.id}`}>
-                        Profil
-                      </Link>
-                      <button
-                        type="button"
-                        className="btn-outline"
-                        onClick={() => {
-                          setEditingId(student.id);
-                          const inferredFirstName =
-                            student.firstName?.trim() ||
-                            student.fullName?.split(' ')[0] ||
-                            '';
-                          const inferredLastName =
-                            student.lastName?.trim() ||
-                            student.fullName?.split(' ').slice(1).join(' ') ||
-                            '';
-                          setFirstName(inferredFirstName);
-                          setLastName(inferredLastName);
-                          setSex(student.sex);
-                          setFirstYearEntry(String(student.firstYearEntry));
-                          setCin(student.cin);
-                          setCodeMassar(student.codeMassar);
-                          setCodeEtudiant(student.codeEtudiant ?? '');
-                          setDateNaissance(student.dateNaissance ? student.dateNaissance.split('T')[0] : '2000-01-01');
-                          setEmail(student.email ?? '');
-                          setTelephone(student.telephone ?? '');
-                          setFiliereId(String(student.filiereId ?? ''));
-                          setClassId(String(student.classId ?? student.academicClass?.id ?? ''));
-                          setBacType(student.bacType ?? '');
-                          setAnneeAcademique(student.anneeAcademique);
-                          setDateInscription(student.dateInscription ? student.dateInscription.split('T')[0] : new Date().toISOString().split('T')[0]);
-                          setIsLaureate(!!student.laureate);
-                          setGraduationYear(String(student.laureate?.graduationYear ?? new Date().getFullYear()));
-                          setIsModalOpen(true);
-                        }}
-                      >
-                        Modifier
-                      </button>
+                    <TableActionGrid>
+                      <TableActionLink
+                        href={`/students/${student.id}`}
+                        icon={Eye}
+                        tone="profile"
+                        label={`Voir le profil de ${student.fullName}`}
+                      />
+                      <TableActionButton
+                        icon={FolderOpen}
+                        tone="docs"
+                        label={`Ouvrir le dossier de ${student.fullName}`}
+                        onClick={() => setDocsStudent({ id: student.id, name: student.fullName })}
+                      />
+                      <TableActionButton
+                        icon={Pencil}
+                        tone="edit"
+                        label={`Modifier ${student.fullName}`}
+                        onClick={() => openEditModal(student)}
+                      />
                       {!student.userId && (
-                        <button
-                          type="button"
-                          className="btn-outline flex items-center gap-1"
-                          title="Créer un compte pour cet étudiant"
-                          onClick={() => {
-                            setAccountStudentId(student.id);
-                            setAccountStudentName(student.fullName);
-                            setAccountPassword('');
-                          }}
-                        >
-                          <UserPlus size={13} />
-                          Compte
-                        </button>
+                        <TableActionButton
+                          icon={UserPlus}
+                          tone="account"
+                          label={`Créer un compte pour ${student.fullName}`}
+                          onClick={() => openAccountModal(student)}
+                        />
                       )}
                       {canDelete && (
-                        <button type="button" className="btn-outline" onClick={() => onDelete(student.id)}>
-                          Supprimer
-                        </button>
+                        <TableActionButton
+                          icon={Trash2}
+                          tone="delete"
+                          label={`Supprimer ${student.fullName}`}
+                          onClick={() => onDelete(student.id)}
+                        />
                       )}
-                    </div>
+                    </TableActionGrid>
                   </td>
                 </tr>
               ))}
@@ -576,6 +599,7 @@ export default function StudentsPage() {
         title={editingId ? 'Modifier l\'étudiant' : 'Ajouter un étudiant'}
         description="Créez ou mettez à jour les détails du profil d'étudiant, le placement en classe et les informations de type bac."
         onClose={closeModal}
+        size="sm"
         footer={
           <>
             <button
@@ -809,6 +833,18 @@ export default function StudentsPage() {
           </p>
         </div>
       </ModalShell>
+
+      {/* Dossier (docs + photo) modal */}
+      {docsStudent && (
+        <ProfileDocsModal
+          open={true}
+          onClose={() => setDocsStudent(null)}
+          entityType="student"
+          entityId={docsStudent.id}
+          entityName={docsStudent.name}
+          canEdit={['admin', 'staff', 'teacher'].includes(user?.role ?? '')}
+        />
+      )}
     </div>
   );
 }

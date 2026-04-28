@@ -149,9 +149,10 @@ const navigation: NavGroup[] = [
       { href: '/settings/academic-years',   label: 'Années académiques',  caption: 'Gérer les années académiques',    icon: Settings },
       { href: '/settings/restauration',     label: 'Repas restauration',  caption: 'Prix et repas actifs',             icon: Utensils },
       { href: '/settings/document-types',   label: 'Types de documents',  caption: 'Catégories de documents admin',   icon: FileStack },
-      { href: '/settings/teacher-roles',    label: 'Rôles enseignants',   caption: 'Fonctions : permanent, vacataire', icon: Users },
-      { href: '/settings/teacher-grades',   label: 'Grades enseignants',  caption: 'PH, PA, assistant, doctorant',     icon: GraduationCap },
-      { href: '/activity-logs',             label: 'Journaux',            caption: "Historique d'activité",           icon: Activity },
+      { href: '/settings/teacher-roles',          label: 'Rôles enseignants',      caption: 'Fonctions : permanent, vacataire',    icon: Users },
+      { href: '/settings/teacher-grades',         label: 'Grades enseignants',     caption: 'PH, PA, assistant, doctorant',        icon: GraduationCap },
+      { href: '/settings/profile-document-types', label: 'Types de docs profil',   caption: 'CIN, photo, acte de naissance…',      icon: FileStack },
+      { href: '/activity-logs',                   label: 'Journaux',               caption: "Historique d'activité",               icon: Activity },
     ],
   },
 ];
@@ -170,7 +171,11 @@ function getActiveGroup(pathname: string): string | undefined {
   return navigation.find((g) => g.items.some((i) => i.href === best))?.heading;
 }
 
-export function Sidebar() {
+type SidebarProps = {
+  open?: boolean;
+};
+
+export function Sidebar({ open = true }: SidebarProps) {
   const pathname = usePathname();
   const { user } = useAuth();
   const role = user?.role ?? 'viewer';
@@ -203,10 +208,16 @@ export function Sidebar() {
 
   return (
     <aside
-      className="w-full shrink-0 border-b border-black/10 p-3 text-white md:sticky md:top-0 md:h-screen md:w-[260px] md:self-start md:overflow-y-auto md:border-r md:border-b-0 md:p-4"
+      className={cn(
+        'w-full shrink-0 overflow-hidden text-white transition-all duration-300 ease-in-out md:sticky md:top-0 md:h-screen md:self-start',
+        open
+          ? 'max-h-[80vh] translate-y-0 border-b border-black/10 p-3 opacity-100 md:w-[260px] md:max-h-screen md:overflow-y-auto md:border-r md:border-b-0 md:p-4'
+          : 'pointer-events-none max-h-0 -translate-y-2 border-b-0 p-0 opacity-0 md:w-0 md:max-h-screen md:translate-y-0 md:border-r-0',
+      )}
       style={{ background: 'linear-gradient(180deg, #0e2016 0%, #163320 100%)' }}
+      aria-hidden={!open}
     >
-      <div className="space-y-4 md:min-h-full">
+      <div className="space-y-4 md:min-h-full md:w-[228px]">
         {/* Logo */}
         <div className="flex items-center gap-3 px-2 py-1">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10">

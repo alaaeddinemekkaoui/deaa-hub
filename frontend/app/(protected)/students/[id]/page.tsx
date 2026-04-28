@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { Camera } from 'lucide-react';
 import { api, getApiErrorMessage } from '@/services/api';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
@@ -53,6 +54,7 @@ type StudentProfile = {
   sex: 'male' | 'female';
   firstYearEntry: number;
   codeMassar: string;
+  codeEtudiant?: string | null;
   cin: string;
   dateNaissance?: string;
   email?: string;
@@ -80,6 +82,27 @@ export default function StudentProfilePage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [expandedGradeYear, setExpandedGradeYear] = useState<string | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const photoObjectUrlRef = useRef<string | null>(null);
+
+  const setPhotoObjectUrl = useCallback((url: string | null) => {
+    if (photoObjectUrlRef.current) {
+      URL.revokeObjectURL(photoObjectUrlRef.current);
+    }
+    photoObjectUrlRef.current = url;
+    setPhotoUrl(url);
+  }, []);
+
+  const loadPhoto = useCallback(async (id: number) => {
+    try {
+      const photoRes = await api.get(`/students/${id}/photo`, { responseType: 'blob' });
+      setPhotoObjectUrl(URL.createObjectURL(photoRes.data as Blob));
+    } catch {
+      setPhotoObjectUrl(null);
+    }
+  }, [setPhotoObjectUrl]);
 
   const gradesByYear = useMemo(() => {
     const map: Record<string, GradeItem[]> = {};
@@ -139,6 +162,8 @@ export default function StudentProfilePage() {
   };
 
   useEffect(() => {
+    let isCancelled = false;
+
     const load = async () => {
       const id = Number(params.id);
       if (!Number.isInteger(id) || id < 1) {
@@ -155,18 +180,52 @@ export default function StudentProfilePage() {
           api.get<DocumentItem[]>(`/documents/student/${id}`),
           api.get<GradeItem[]>(`/grades/student/${id}`),
         ]);
+        if (isCancelled) return;
         setStudent(profileRes.data);
         setObservations(Array.isArray(obsRes.data) ? obsRes.data : []);
         setDocuments(Array.isArray(docsRes.data) ? docsRes.data : []);
         setGrades(Array.isArray(gradesRes.data) ? gradesRes.data : []);
+        if (!isCancelled) await loadPhoto(id);
       } catch (loadError) {
-        setError(getApiErrorMessage(loadError, 'Échec du chargement du profil étudiant'));
+        if (!isCancelled) {
+          setError(getApiErrorMessage(loadError, 'Échec du chargement du profil étudiant'));
+        }
       } finally {
-        setLoading(false);
+        if (!isCancelled) setLoading(false);
       }
     };
     void load();
-  }, [params.id]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [loadPhoto, params.id]);
+
+  useEffect(() => {
+    return () => {
+      if (photoObjectUrlRef.current) URL.revokeObjectURL(photoObjectUrlRef.current);
+    };
+  }, []);
+
+  const handleUploadPhoto = async (file: File) => {
+    if (!student) return;
+
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      await api.post(`/students/${student.id}/photo`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      await loadPhoto(student.id);
+      toast.success('Photo de profil mise à jour');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Échec de la mise à jour de la photo'));
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
 
   const handleAddObs = async () => {
     if (!obsText.trim() || !student) return;
@@ -248,6 +307,50 @@ export default function StudentProfilePage() {
       {!loading && !error && student ? (
         <>
         <section className="surface-card space-y-4">
+          <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-white text-xl font-semibold text-slate-400 shadow-sm">
+              {photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={photoUrl} alt={`Photo de ${student.fullName}`} className="h-full w-full object-cover" />
+              ) : (
+                student.fullName
+                  .split(' ')
+                  .map((part) => part[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()
+              )}
+            </div>
+            <div className="min-w-0">
+              <label className="field-label">Nom complet</label>
+              <h2 className="truncate text-2xl font-semibold text-slate-950">
+                {student.fullName}
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Code Étudiant : {student.codeEtudiant ?? '-'} · Code Massar : {student.codeMassar}
+              </p>
+              <button
+                type="button"
+                className="btn-outline mt-3 flex items-center gap-1.5"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={uploadingPhoto}
+              >
+                <Camera size={14} />
+                {uploadingPhoto ? 'Upload...' : photoUrl ? 'Changer photo' : 'Ajouter photo'}
+              </button>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void handleUploadPhoto(file);
+                }}
+              />
+            </div>
+          </div>
+
           <div className="grid gap-3 md:grid-cols-2">
             <div className="field-stack">
               <label className="field-label">Prénom</label>
@@ -272,6 +375,10 @@ export default function StudentProfilePage() {
             <div className="field-stack">
               <label className="field-label">Code Massar</label>
               <p className="input bg-slate-50">{student.codeMassar}</p>
+            </div>
+            <div className="field-stack">
+              <label className="field-label">Code Étudiant</label>
+              <p className="input bg-slate-50">{student.codeEtudiant ?? '-'}</p>
             </div>
             <div className="field-stack">
               <label className="field-label">Date de naissance</label>

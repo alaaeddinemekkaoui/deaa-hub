@@ -139,7 +139,10 @@ export class CoursResourcesController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.TEACHER)
-  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: JwtPayload) {
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
     return this.coursResourcesService.remove(id, user);
   }
 }

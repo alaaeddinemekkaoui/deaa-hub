@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
@@ -15,7 +15,7 @@ const USER_ROLE_BLOCKED = [
   '/statistics',
 ];
 
-const RESTAURATION_ALLOWED = ['/dashboard', '/restauration'];
+const RESTAURATION_ALLOWED = ['/dashboard', '/restauration', '/restauration/verification'];
 
 export default function ProtectedLayout({
   children,
@@ -25,6 +25,7 @@ export default function ProtectedLayout({
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -73,10 +74,13 @@ export default function ProtectedLayout({
 
   return (
     <div className="min-h-screen md:flex md:items-start">
-      <Sidebar />
+      <Sidebar open={sidebarOpen} />
       <main className="w-full min-w-0">
         <div className="container-page">
-          <Topbar />
+          <Topbar
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={() => setSidebarOpen((open) => !open)}
+          />
           {children}
         </div>
       </main>

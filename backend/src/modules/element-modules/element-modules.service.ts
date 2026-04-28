@@ -174,8 +174,12 @@ export class ElementModulesService {
           ? { volumeHoraire: dto.volumeHoraire ?? null }
           : {}),
         ...(dto.type !== undefined ? { type: dto.type } : {}),
-        ...(dto.ponderation !== undefined ? { ponderation: dto.ponderation } : {}),
-        ...(dto.coefficient !== undefined ? { coefficient: dto.coefficient } : {}),
+        ...(dto.ponderation !== undefined
+          ? { ponderation: dto.ponderation }
+          : {}),
+        ...(dto.coefficient !== undefined
+          ? { coefficient: dto.coefficient }
+          : {}),
       },
     });
   }
@@ -219,8 +223,7 @@ export class ElementModulesService {
   ) {
     if (
       !currentUser ||
-      (!isDeptScoped(currentUser.role as UserRole) &&
-        currentUser.role !== UserRole.VIEWER)
+      (!isDeptScoped(currentUser.role) && currentUser.role !== UserRole.VIEWER)
     ) {
       return;
     }

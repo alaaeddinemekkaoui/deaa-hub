@@ -1,0 +1,11 @@
+ALTER TABLE "Student" DROP CONSTRAINT IF EXISTS "Student_userId_fkey";
+ALTER TABLE "Student"
+  ADD CONSTRAINT "Student_userId_fkey"
+  FOREIGN KEY ("userId") REFERENCES "User"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
+ALTER TABLE "Teacher" DROP CONSTRAINT IF EXISTS "Teacher_userId_fkey";
+ALTER TABLE "Teacher"
+  ADD CONSTRAINT "Teacher_userId_fkey"
+  FOREIGN KEY ("userId") REFERENCES "User"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;

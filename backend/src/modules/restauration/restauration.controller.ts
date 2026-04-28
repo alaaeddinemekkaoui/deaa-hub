@@ -20,7 +20,12 @@ import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 import { RestaurationService } from './restauration.service';
 import { CreateMealDto } from './dto/create-meal.dto';
 import { UpdateMealDto } from './dto/update-meal.dto';
-import { ConsumeTicketDto, IssueTicketDto, ReserveMealDto, ReserveMealsDto } from './dto/reserve-meal.dto';
+import {
+  ConsumeTicketDto,
+  IssueTicketDto,
+  ReserveMealDto,
+  ReserveMealsDto,
+} from './dto/reserve-meal.dto';
 import { AdjustWalletDto, CreditWalletDto } from './dto/update-wallet.dto';
 
 @Controller('restauration')
@@ -29,12 +34,28 @@ export class RestaurationController {
   constructor(private readonly restaurationService: RestaurationService) {}
 
   @Get('meals')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION, UserRole.STUDENT)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.RESTAURATION,
+    UserRole.STUDENT,
+  )
   findMeals(
     @Query('includeInactive', new ParseBoolPipe({ optional: true }))
     includeInactive = false,
   ) {
     return this.restaurationService.findMeals(includeInactive);
+  }
+
+  @Get('students/search')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION)
+  searchStudents(
+    @CurrentUser() user: JwtPayload,
+    @Query('q') query = '',
+    @Query('limit') limit?: string,
+  ) {
+    const parsedLimit = limit ? Number(limit) : undefined;
+    return this.restaurationService.searchStudents(user, query, parsedLimit);
   }
 
   @Post('meals')
@@ -45,7 +66,10 @@ export class RestaurationController {
 
   @Patch('meals/:id')
   @Roles(UserRole.ADMIN)
-  updateMeal(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateMealDto) {
+  updateMeal(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateMealDto,
+  ) {
     return this.restaurationService.updateMeal(id, dto);
   }
 
@@ -62,7 +86,12 @@ export class RestaurationController {
   }
 
   @Get('wallets/:studentId')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION, UserRole.STUDENT)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.RESTAURATION,
+    UserRole.STUDENT,
+  )
   wallet(
     @Param('studentId', ParseIntPipe) studentId: number,
     @CurrentUser() user: JwtPayload,
@@ -83,19 +112,34 @@ export class RestaurationController {
   }
 
   @Post('reservations')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION, UserRole.STUDENT)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.RESTAURATION,
+    UserRole.STUDENT,
+  )
   reserve(@Body() dto: ReserveMealDto, @CurrentUser() user: JwtPayload) {
     return this.restaurationService.reserve(dto, user);
   }
 
   @Post('reservations/bulk')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION, UserRole.STUDENT)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.RESTAURATION,
+    UserRole.STUDENT,
+  )
   reserveMany(@Body() dto: ReserveMealsDto, @CurrentUser() user: JwtPayload) {
     return this.restaurationService.reserveMany(dto, user);
   }
 
   @Get('reservations')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION, UserRole.STUDENT)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.RESTAURATION,
+    UserRole.STUDENT,
+  )
   reservations(
     @CurrentUser() user: JwtPayload,
     @Query('studentId') studentId?: string,
@@ -105,14 +149,30 @@ export class RestaurationController {
   }
 
   @Patch('reservations/:id/cancel')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION, UserRole.STUDENT)
-  cancelReservation(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: JwtPayload) {
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.RESTAURATION,
+    UserRole.STUDENT,
+  )
+  cancelReservation(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
     return this.restaurationService.cancelReservation(id, user);
   }
 
   @Get('reservations/:id/receipt')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION, UserRole.STUDENT)
-  receipt(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: JwtPayload) {
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.RESTAURATION,
+    UserRole.STUDENT,
+  )
+  receipt(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
     return this.restaurationService.getReceipt(id, user);
   }
 
@@ -130,12 +190,20 @@ export class RestaurationController {
 
   @Post('tickets/consume')
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION)
-  consumeTicket(@Body() dto: ConsumeTicketDto, @CurrentUser() user: JwtPayload) {
+  consumeTicket(
+    @Body() dto: ConsumeTicketDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
     return this.restaurationService.consumeTicket(dto, user);
   }
 
   @Get('transactions')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION, UserRole.STUDENT)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.RESTAURATION,
+    UserRole.STUDENT,
+  )
   transactions(
     @CurrentUser() user: JwtPayload,
     @Query('studentId') studentId?: string,

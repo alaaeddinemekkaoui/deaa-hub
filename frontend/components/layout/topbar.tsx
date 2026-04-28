@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, LogOut, MessageSquare, Pencil, X, Check, Eye, EyeOff } from 'lucide-react';
+import { Bell, Check, Eye, EyeOff, LogOut, Menu, MessageSquare, Pencil, X } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/features/auth/auth-context';
 import { useRouter } from 'next/navigation';
@@ -379,7 +379,12 @@ function NotificationBell() {
 }
 
 /* ── Topbar ─────────────────────────────────────────────────── */
-export function Topbar() {
+type TopbarProps = {
+  sidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
+};
+
+export function Topbar({ sidebarOpen = true, onToggleSidebar }: TopbarProps) {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [profileOpen, setProfileOpen] = useState(false);
@@ -389,9 +394,32 @@ export function Topbar() {
   return (
     <>
       <header className="mb-6 flex items-center justify-between gap-4 rounded-2xl border bg-white px-5 py-3 shadow-sm">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          {onToggleSidebar && (
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className={cn(
+                'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-[background-color,border-color,color,box-shadow,transform] duration-300 hover:-translate-y-0.5 active:scale-95',
+                sidebarOpen
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm'
+                  : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-emerald-700',
+              )}
+              title={sidebarOpen ? 'Masquer le menu' : 'Afficher le menu'}
+              aria-label={sidebarOpen ? 'Masquer le menu' : 'Afficher le menu'}
+              aria-pressed={sidebarOpen}
+            >
+              <Menu
+                size={16}
+                className={cn(
+                  'transition-transform duration-300',
+                  sidebarOpen ? 'rotate-90 scale-95' : 'rotate-0 scale-100',
+                )}
+              />
+            </button>
+          )}
           <div className="h-2 w-2 rounded-full bg-emerald-500" />
-          <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+          <span className="truncate text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
             IAV Hassan II — DEAA Hub
           </span>
         </div>

@@ -38,7 +38,7 @@ export class AuthService {
     }
 
     const user = await this.validateUser(identifier, dto.password);
-    const departments = await this.usersService.getUserDepartments(user.id);
+    const departments = user.departments ?? [];
     const departmentIds = departments.map((d) => d.id);
 
     const payload = {

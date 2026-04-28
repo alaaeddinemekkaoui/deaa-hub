@@ -34,7 +34,24 @@ type MappedUser = Omit<UserWithDepts, 'departments'> & {
   departments: { id: number; name: string }[];
 };
 
+type LoginUser = {
+  id: number;
+  fullName: string;
+  email: string;
+  role: string;
+  passwordHash: string;
+  departments: { department: { id: number; name: string } }[];
+};
+
 function mapDepartments(user: UserWithDepts): MappedUser {
+  const { departments, ...rest } = user;
+  return {
+    ...rest,
+    departments: departments.map((ud) => ud.department),
+  };
+}
+
+function mapLoginDepartments(user: LoginUser) {
   const { departments, ...rest } = user;
   return {
     ...rest,
@@ -51,6 +68,10 @@ export class UsersService {
   });
 
   constructor(private readonly prisma: PrismaService) {}
+
+  invalidateListCache() {
+    this.listCache.invalidate();
+  }
 
   async findAll() {
     return this.listCache.getOrLoad(async () => {
@@ -83,14 +104,35 @@ export class UsersService {
   }
 
   findByLoginIdentifier(identifier: string) {
-    return this.prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: { equals: identifier, mode: 'insensitive' } },
-          { fullName: { equals: identifier, mode: 'insensitive' } },
-        ],
-      },
-    });
+    return this.prisma.user
+      .findFirst({
+        where: {
+          OR: [
+            { email: { equals: identifier, mode: 'insensitive' } },
+            { fullName: { equals: identifier, mode: 'insensitive' } },
+            {
+              studentProfile: {
+                codeEtudiant: { equals: identifier, mode: 'insensitive' },
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          role: true,
+          passwordHash: true,
+          departments: {
+            select: {
+              department: {
+                select: { id: true, name: true },
+              },
+            },
+          },
+        },
+      })
+      .then((user) => (user ? mapLoginDepartments(user) : null));
   }
 
   async getUserDepartments(userId: number) {
@@ -169,9 +211,22 @@ export class UsersService {
     return mapDepartments(user);
   }
 
-  remove(id: number) {
+  async remove(id: number) {
+    const deleted = await this.prisma.$transaction(async (tx) => {
+      await tx.student.updateMany({
+        where: { userId: id },
+        data: { userId: null },
+      });
+      await tx.teacher.updateMany({
+        where: { userId: id },
+        data: { userId: null },
+      });
+
+      return tx.user.delete({ where: { id } });
+    });
+
     this.listCache.invalidate();
-    return this.prisma.user.delete({ where: { id } });
+    return deleted;
   }
 
   // ─── Account reconciliation ──────────────────────────────────────────────
@@ -180,12 +235,23 @@ export class UsersService {
     const [students, teachers] = await Promise.all([
       this.prisma.student.findMany({
         where: { userId: null },
-        select: { id: true, fullName: true, codeMassar: true, codeEtudiant: true },
+        select: {
+          id: true,
+          fullName: true,
+          codeMassar: true,
+          codeEtudiant: true,
+        },
         orderBy: { fullName: 'asc' },
       }),
       this.prisma.teacher.findMany({
         where: { userId: null },
-        select: { id: true, firstName: true, lastName: true, email: true, cin: true },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          cin: true,
+        },
         orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
       }),
     ]);
@@ -208,9 +274,11 @@ export class UsersService {
    * Bulk-create User accounts for all unlinked students and teachers.
    * Uses codeMassar as default password for students, cin / last.first as identifier.
    */
-  async bulkImportAccounts(
-    defaultPassword: string,
-  ): Promise<{ students: { created: number; skipped: number }; teachers: { created: number; skipped: number }; errors: string[] }> {
+  async bulkImportAccounts(defaultPassword: string): Promise<{
+    students: { created: number; skipped: number };
+    teachers: { created: number; skipped: number };
+    errors: string[];
+  }> {
     const passwordHash = await bcrypt.hash(defaultPassword, 10);
     const errors: string[] = [];
 
@@ -226,7 +294,9 @@ export class UsersService {
           classId: true,
           filiereId: true,
           filiere: { select: { departmentId: true } },
-          academicClass: { select: { filiere: { select: { departmentId: true } } } },
+          academicClass: {
+            select: { filiere: { select: { departmentId: true } } },
+          },
         },
       }),
       this.prisma.teacher.findMany({
@@ -253,20 +323,33 @@ export class UsersService {
       try {
         const identifier = s.codeEtudiant ?? s.codeMassar;
         const email = s.email ?? `${identifier}@iav.ac.ma`;
-        const existing = await this.prisma.user.findUnique({ where: { email } });
-        if (existing) { studentsSkipped++; continue; }
-        const departmentId = s.academicClass?.filiere?.departmentId ?? s.filiere?.departmentId ?? null;
+        const existing = await this.prisma.user.findUnique({
+          where: { email },
+        });
+        if (existing) {
+          studentsSkipped++;
+          continue;
+        }
+        const departmentId =
+          s.academicClass?.filiere?.departmentId ??
+          s.filiere?.departmentId ??
+          null;
         const user = await this.prisma.user.create({
           data: {
             fullName: s.fullName,
             email,
             role: 'student',
             passwordHash,
-            ...(departmentId ? { departments: { create: [{ departmentId }] } } : {}),
+            ...(departmentId
+              ? { departments: { create: [{ departmentId }] } }
+              : {}),
           },
           select: { id: true },
         });
-        await this.prisma.student.update({ where: { id: s.id }, data: { userId: user.id } });
+        await this.prisma.student.update({
+          where: { id: s.id },
+          data: { userId: user.id },
+        });
         await this.syncUserMessagingGroups({
           userId: user.id,
           role: 'student',
@@ -282,10 +365,16 @@ export class UsersService {
     // Teachers
     for (const t of unlinkedTeachers) {
       try {
-        const identifier = t.cin ?? `${t.lastName.toLowerCase()}.${t.firstName.toLowerCase()}`;
+        const identifier =
+          t.cin ?? `${t.lastName.toLowerCase()}.${t.firstName.toLowerCase()}`;
         const email = t.email ?? `${identifier}@iav.ac.ma`;
-        const existing = await this.prisma.user.findUnique({ where: { email } });
-        if (existing) { teachersSkipped++; continue; }
+        const existing = await this.prisma.user.findUnique({
+          where: { email },
+        });
+        if (existing) {
+          teachersSkipped++;
+          continue;
+        }
         const user = await this.prisma.user.create({
           data: {
             fullName: `${t.firstName} ${t.lastName}`.trim(),
@@ -296,7 +385,10 @@ export class UsersService {
           },
           select: { id: true },
         });
-        await this.prisma.teacher.update({ where: { id: t.id }, data: { userId: user.id } });
+        await this.prisma.teacher.update({
+          where: { id: t.id },
+          data: { userId: user.id },
+        });
         await this.syncUserMessagingGroups({
           userId: user.id,
           role: 'teacher',
@@ -403,19 +495,22 @@ export class UsersService {
       }
     }
 
-    const currentDepartmentGroupMemberships = await this.prisma.messageGroupMember.findMany({
-      where: {
-        userId,
-        group: { type: GroupType.DEPARTMENT },
-      },
-      select: { groupId: true },
-    });
+    const currentDepartmentGroupMemberships =
+      await this.prisma.messageGroupMember.findMany({
+        where: {
+          userId,
+          group: { type: GroupType.DEPARTMENT },
+        },
+        select: { groupId: true },
+      });
 
     if (currentDepartmentGroupMemberships.length > 0) {
       await this.prisma.messageGroupMember.deleteMany({
         where: {
           userId,
-          groupId: { in: currentDepartmentGroupMemberships.map((m) => m.groupId) },
+          groupId: {
+            in: currentDepartmentGroupMemberships.map((m) => m.groupId),
+          },
         },
       });
     }

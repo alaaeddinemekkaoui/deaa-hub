@@ -103,7 +103,7 @@ model Student {
   laureate         Laureate?
   academicClass    AcademicClass?        @relation(fields: [classId], references: [id])
   filiere          Filiere?              @relation(fields: [filiereId], references: [id])
-  user             User?                 @relation(fields: [userId], references: [id])
+  user             User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
   classHistory     StudentClassHistory[]
   grades           StudentGrade[]
   mealReservations MealReservation[]
@@ -111,6 +111,8 @@ model Student {
   mealWallet       MealWallet?
   observations     StudentObservation[]
   workflows        WorkflowTask[]
+
+  photoPath        String?
 
   @@index([codeMassar])
   @@index([filiereId])
@@ -173,9 +175,11 @@ model Teacher {
   filiere         Filiere?           @relation(fields: [filiereId], references: [id])
   grade           TeacherGrade       @relation(fields: [gradeId], references: [id])
   role            TeacherRole        @relation(fields: [roleId], references: [id])
-  user            User?              @relation(fields: [userId], references: [id])
+  user            User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
   taughtClasses   TeacherClass[]
   sessions        TimetableSession[]
+
+  photoPath       String?
 
   @@index([departmentId])
   @@index([filiereId])
@@ -284,6 +288,7 @@ model Document {
   path          String
   studentId     Int?
   teacherId     Int?
+  category      String?
   createdAt     DateTime   @default(now())
   student       Student?   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   teacher       Teacher?   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
@@ -335,6 +340,14 @@ model DocumentType {
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
   workflows   WorkflowTask[]
+}
+
+model ProfileDocumentType {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model WorkflowTask {

@@ -37,8 +37,21 @@ export class ElementQueryDto extends PaginationDto {
   type?: ElementType;
 
   @IsOptional()
-  @IsIn(['name', 'type', 'volumeHoraire', 'ponderation', 'coefficient', 'createdAt'])
-  sortBy: 'name' | 'type' | 'volumeHoraire' | 'ponderation' | 'coefficient' | 'createdAt' = 'name';
+  @IsIn([
+    'name',
+    'type',
+    'volumeHoraire',
+    'ponderation',
+    'coefficient',
+    'createdAt',
+  ])
+  sortBy:
+    | 'name'
+    | 'type'
+    | 'volumeHoraire'
+    | 'ponderation'
+    | 'coefficient'
+    | 'createdAt' = 'name';
 
   @IsOptional()
   @IsIn(['asc', 'desc'])

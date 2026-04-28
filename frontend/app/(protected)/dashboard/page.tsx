@@ -22,10 +22,12 @@ import {
   NotebookPen,
   RefreshCw,
   Scale,
+  Settings,
   UserCog,
   Users,
   CopyPlus,
   MoveRight,
+  Utensils,
 } from 'lucide-react';
 import { MetricCard } from '@/components/admin/metric-card';
 import { PageHeader } from '@/components/admin/page-header';
@@ -104,6 +106,7 @@ const ACTION_SECTIONS: ActionSection[] = [
     actions: [
       { href: '/filieres',         label: 'Filières',           description: 'Programmes et voies',       icon: BookOpen },
       { href: '/academic',         label: 'Modules & Éléments', description: 'CM · TD · TP',              icon: BookOpenCheck },
+      { href: '/cours-resources',  label: 'Ressources cours',   description: 'Supports et fichiers',      icon: FileText },
       { href: '/classes',          label: 'Classes',            description: 'Cohortes et groupes',       icon: CalendarRange },
       { href: '/classes/cours',    label: 'Cours par classe',   description: 'Affectation des cours',     icon: NotebookPen },
       { href: '/classes/transfer', label: 'Transfert de classe',description: 'Clonage inter-années',      icon: CopyPlus },
@@ -152,10 +155,24 @@ const ACTION_SECTIONS: ActionSection[] = [
       { href: '/workflows', label: 'Demandes',         description: 'Toutes les demandes en cours',    icon: FileText },
       { href: '/settings/document-types', label: 'Types de documents', description: 'Catégories configurées', icon: FileStack },
     ],
-    roles: ['admin', 'staff'],
+    roles: ['admin', 'staff', 'viewer'],
   },
 
-  /* ── 7. Messagerie ──────────────────────────────────────────── */
+  /* ── 7. Restauration ────────────────────────────────────────── */
+  {
+    id: 'restauration',
+    heading: 'Restauration',
+    description: 'Réservation des repas, solde et reçus étudiants',
+    icon: Utensils,
+    accent: 'bg-lime-50 text-lime-800 border-b border-lime-200',
+    cardColor: 'hover:border-lime-300 hover:bg-lime-50/70 hover:shadow-lime-100',
+    roles: ['admin', 'staff', 'restauration', 'student'],
+    actions: [
+      { href: '/restauration', label: 'Restauration', description: 'Repas, solde et reçus', icon: Utensils },
+    ],
+  },
+
+  /* ── 8. Messagerie ──────────────────────────────────────────── */
   {
     id: 'messaging',
     heading: 'Messagerie',
@@ -180,9 +197,28 @@ const ACTION_SECTIONS: ActionSection[] = [
     cardColor: 'hover:border-purple-300 hover:bg-purple-50/70 hover:shadow-purple-100',
     roles: ['admin', 'staff'],
     actions: [
-      { href: '/users',       label: 'Utilisateurs', description: 'Comptes et rôles',       icon: UserCog },
-      { href: '/statistics',  label: 'Statistiques', description: 'Données et exports CSV', icon: BarChart2 },
-      { href: '/activity-logs', label: 'Journaux',   description: "Historique d'activité",  icon: Activity },
+      { href: '/users',         label: 'Utilisateurs', description: 'Comptes et rôles',       icon: UserCog },
+      { href: '/statistics',    label: 'Statistiques', description: 'Données et exports CSV', icon: BarChart2 },
+      { href: '/activity-logs', label: 'Journaux',     description: "Historique d'activité",  icon: Activity },
+    ],
+  },
+
+  /* ── 9. Paramètres ──────────────────────────────────────────── */
+  {
+    id: 'settings',
+    heading: 'Paramètres',
+    description: 'Années académiques, types de documents et catalogues enseignants',
+    icon: Settings,
+    accent: 'bg-gray-50 text-gray-800 border-b border-gray-200',
+    cardColor: 'hover:border-gray-300 hover:bg-gray-50/70 hover:shadow-gray-100',
+    roles: ['admin', 'staff'],
+    actions: [
+      { href: '/settings/academic-years', label: 'Années académiques', description: 'Gérer les années',          icon: CalendarDays },
+      { href: '/settings/restauration',   label: 'Repas restauration', description: 'Prix et repas actifs',      icon: Utensils },
+      { href: '/settings/document-types', label: 'Types de documents', description: 'Catégories de documents',  icon: FileStack },
+      { href: '/settings/teacher-roles',          label: 'Rôles enseignants',    description: 'Permanent, vacataire…',      icon: Users },
+      { href: '/settings/teacher-grades',         label: 'Grades enseignants',   description: 'PH, PA, assistant…',         icon: GraduationCap },
+      { href: '/settings/profile-document-types', label: 'Types de docs profil', description: 'CIN, photo, acte de naiss.', icon: FileStack },
     ],
   },
 ];
@@ -259,8 +295,8 @@ export default function DashboardPage() {
                   <section.icon size={20} strokeWidth={1.8} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[15px] font-bold leading-tight">{section.heading}</p>
-                  <p className="text-[12px] opacity-60 mt-0.5 leading-snug">{section.description}</p>
+                  <p className="text-[16px] font-bold leading-tight">{section.heading}</p>
+                  <p className="text-[12px] opacity-70 mt-0.5 leading-snug">{section.description}</p>
                 </div>
               </div>
 
@@ -273,18 +309,18 @@ export default function DashboardPage() {
                     className={`group flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50/50 p-3.5 transition hover:-translate-y-0.5 hover:shadow-md ${section.cardColor}`}
                   >
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-sm">
-                      <action.icon size={16} strokeWidth={1.8} className="text-slate-600" />
+                      <action.icon size={17} strokeWidth={1.8} className="text-slate-600" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[12px] font-semibold text-slate-800 leading-snug">
+                      <p className="text-[13px] font-semibold text-slate-900 leading-snug">
                         {action.label}
                       </p>
-                      <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                      <p className="text-[12px] text-slate-500 mt-0.5 leading-snug">
                         {action.description}
                       </p>
                     </div>
                     <ChevronRight
-                      size={12}
+                      size={13}
                       className="self-end text-slate-300 transition group-hover:text-slate-500 group-hover:translate-x-0.5"
                     />
                   </Link>

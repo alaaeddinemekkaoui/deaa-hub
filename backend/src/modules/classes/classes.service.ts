@@ -8,6 +8,7 @@ import {
 import { Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { KeyedTtlCache } from '../../common/utils/keyed-ttl-cache';
 import { CreateClassDto } from './dto/create-class.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
 import { ClassQueryDto } from './dto/class-query.dto';
@@ -17,6 +18,12 @@ import { UserRole, isDeptScoped } from '../../common/types/role.type';
 
 @Injectable()
 export class ClassesService {
+  private readonly listCache = new KeyedTtlCache<unknown>({
+    prefix: 'classes:list',
+    ttlMs: 45 * 1000,
+    staleTtlMs: 3 * 60 * 1000,
+  });
+
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: ClassQueryDto, departmentIds?: number[]) {
@@ -59,38 +66,54 @@ export class ClassesService {
     const where: Prisma.AcademicClassWhereInput =
       filters.length > 0 ? { AND: filters } : {};
 
-    const [data, total] = await Promise.all([
-      this.prisma.academicClass.findMany({
-        where,
-        include: {
-          filiere: {
-            include: { department: { select: { id: true, name: true } } },
-          },
-          academicOption: { select: { id: true, name: true, code: true } },
-          cycle: { select: { id: true, name: true, code: true } },
-          _count: { select: { students: true, teachers: true, cours: true } },
-        },
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy:
-          sortBy === 'year'
-            ? [{ year: sortOrder }, { name: 'asc' }]
-            : [{ [sortBy]: sortOrder }, { year: 'asc' }, { name: 'asc' }],
-      }),
-      this.prisma.academicClass.count({ where }),
-    ]);
+    const cacheKey = JSON.stringify({
+      page,
+      limit,
+      search: search ?? null,
+      filiereId: filiereId ?? null,
+      departmentId: departmentId ?? null,
+      year: year ?? null,
+      cycleId: cycleId ?? null,
+      optionId: optionId ?? null,
+      sortBy,
+      sortOrder,
+      departmentIds: departmentIds ?? null,
+    });
 
-    return {
-      data,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit) || 1,
-        hasNextPage: page * limit < total,
-        hasPreviousPage: page > 1,
-      },
-    };
+    return this.listCache.getOrLoad(cacheKey, async () => {
+      const [data, total] = await Promise.all([
+        this.prisma.academicClass.findMany({
+          where,
+          include: {
+            filiere: {
+              include: { department: { select: { id: true, name: true } } },
+            },
+            academicOption: { select: { id: true, name: true, code: true } },
+            cycle: { select: { id: true, name: true, code: true } },
+            _count: { select: { students: true, teachers: true, cours: true } },
+          },
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy:
+            sortBy === 'year'
+              ? [{ year: sortOrder }, { name: 'asc' }]
+              : [{ [sortBy]: sortOrder }, { year: 'asc' }, { name: 'asc' }],
+        }),
+        this.prisma.academicClass.count({ where }),
+      ]);
+
+      return {
+        data,
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit) || 1,
+          hasNextPage: page * limit < total,
+          hasPreviousPage: page > 1,
+        },
+      };
+    });
   }
 
   async findOne(id: number) {
@@ -152,7 +175,7 @@ export class ClassesService {
 
     await this.ensureClassIdentityAvailable(dto.name, dto.year);
 
-    return this.prisma.academicClass.create({
+    const created = await this.prisma.academicClass.create({
       data: {
         name: dto.name,
         year: dto.year,
@@ -162,6 +185,8 @@ export class ClassesService {
         filiereId: dto.filiereId ?? null,
       },
     });
+    this.listCache.invalidate();
+    return created;
   }
 
   async update(id: number, dto: UpdateClassDto, currentUser?: JwtPayload) {
@@ -190,7 +215,7 @@ export class ClassesService {
     const nextYear = dto.year ?? existing.year;
     await this.ensureClassIdentityAvailable(nextName, nextYear, id);
 
-    return this.prisma.academicClass.update({
+    const updated = await this.prisma.academicClass.update({
       where: { id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
@@ -207,6 +232,8 @@ export class ClassesService {
           : {}),
       },
     });
+    this.listCache.invalidate();
+    return updated;
   }
 
   async remove(id: number, currentUser?: JwtPayload) {
@@ -235,7 +262,9 @@ export class ClassesService {
       );
     }
 
-    return this.prisma.academicClass.delete({ where: { id } });
+    const deleted = await this.prisma.academicClass.delete({ where: { id } });
+    this.listCache.invalidate();
+    return deleted;
   }
 
   /**
@@ -434,8 +463,7 @@ export class ClassesService {
   ) {
     if (
       !currentUser ||
-      (!isDeptScoped(currentUser.role as UserRole) &&
-        currentUser.role !== UserRole.VIEWER)
+      (!isDeptScoped(currentUser.role) && currentUser.role !== UserRole.VIEWER)
     ) {
       return;
     }

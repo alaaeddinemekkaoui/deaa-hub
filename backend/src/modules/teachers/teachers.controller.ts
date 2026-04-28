@@ -10,12 +10,17 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
+import { diskStorage, memoryStorage } from 'multer';
+import { createReadStream, existsSync, mkdirSync } from 'fs';
+import { tmpdir } from 'os';
+import { extname, join } from 'path';
+import type { Response } from 'express';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TeachersService } from './teachers.service';
@@ -35,6 +40,13 @@ import { UpdateTeacherGradeDto } from './dto/update-teacher-grade.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class TeachersController {
   constructor(private readonly teachersService: TeachersService) {}
+
+  private static getPhotoUploadDir() {
+    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+      return join(tmpdir(), 'deaa-hub', 'uploads', 'photos');
+    }
+    return join(process.cwd(), 'uploads', 'photos');
+  }
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
@@ -182,5 +194,65 @@ export class TeachersController {
       throw new BadRequestException('Password must be at least 6 characters');
     }
     return this.teachersService.createAccount(id, password, user);
+  }
+
+  @Post(':id/photo')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.TEACHER,
+    UserRole.STUDENT,
+    UserRole.INSPECTOR,
+  )
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (_, __, cb) => {
+          const dir = TeachersController.getPhotoUploadDir();
+          mkdirSync(dir, { recursive: true });
+          cb(null, dir);
+        },
+        filename: (_, file, cb) => {
+          cb(null, `teacher-${Date.now()}${extname(file.originalname)}`);
+        },
+      }),
+      fileFilter: (_, file, cb) => cb(null, file.mimetype.startsWith('image/')),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async uploadPhoto(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    if (!file) throw new BadRequestException('No image uploaded');
+    return this.teachersService.updatePhoto(id, file.path);
+  }
+
+  @Get(':id/photo')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.TEACHER,
+    UserRole.STUDENT,
+    UserRole.INSPECTOR,
+  )
+  async getPhoto(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+    const photoPath = await this.teachersService.getPhotoPath(id);
+    if (!photoPath || !existsSync(photoPath)) {
+      return res.status(404).json({ message: 'No photo' });
+    }
+    const ext = photoPath.split('.').pop()?.toLowerCase() ?? 'jpg';
+    const mime =
+      ext === 'png'
+        ? 'image/png'
+        : ext === 'webp'
+          ? 'image/webp'
+          : 'image/jpeg';
+    res.setHeader('Content-Type', mime);
+    createReadStream(photoPath).pipe(res);
   }
 }

@@ -43,7 +43,9 @@ export class RolesGuard implements CanActivate {
 
     // If the required roles include any dept-scoped role (e.g. USER) and the
     // user's role is also dept-scoped (TEACHER / STUDENT / INSPECTOR), allow it.
-    const requiresDeptScoped = requiredRoles.some((r) => DEPT_SCOPED_ROLES.has(r));
+    const requiresDeptScoped = requiredRoles.some((r) =>
+      DEPT_SCOPED_ROLES.has(r),
+    );
     if (requiresDeptScoped && DEPT_SCOPED_ROLES.has(user.role)) {
       return true;
     }
