@@ -1,11 +1,12 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import QRCode from 'qrcode';
-import { Camera, CheckCircle2, Clock3, QrCode, RefreshCw, ShieldCheck, Timer, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock3, QrCode, RefreshCw, ShieldCheck, Timer, XCircle } from 'lucide-react';
 import { PageHeader } from '@/components/admin/page-header';
 import { EmptyState } from '@/components/admin/empty-state';
+import { CameraCodeScanner } from '@/components/scanner/camera-code-scanner';
 import { api, getApiErrorMessage } from '@/services/api';
 import { useAuth } from '@/features/auth/auth-context';
 import { toast } from 'sonner';
@@ -80,53 +81,7 @@ function statusClass(status: AttendanceStatus) {
 }
 
 function Scanner({ onToken }: { onToken: (token: string) => void }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [active, setActive] = useState(false);
   const [manual, setManual] = useState('');
-  const [supported, setSupported] = useState(true);
-
-  useEffect(() => {
-    if (!active) return;
-    let stream: MediaStream | null = null;
-    let stopped = false;
-    let detector: { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> } | null = null;
-
-    const start = async () => {
-      try {
-        const BarcodeDetectorCtor = (window as unknown as { BarcodeDetector?: new (opts: { formats: string[] }) => typeof detector }).BarcodeDetector;
-        if (!BarcodeDetectorCtor) {
-          setSupported(false);
-          return;
-        }
-        detector = new BarcodeDetectorCtor({ formats: ['qr_code'] });
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        if (!videoRef.current) return;
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-
-        const tick = async () => {
-          if (stopped || !videoRef.current || !detector) return;
-          const codes = await detector.detect(videoRef.current).catch(() => []);
-          const raw = codes[0]?.rawValue;
-          if (raw) {
-            onToken(raw);
-            setActive(false);
-            return;
-          }
-          window.setTimeout(tick, 450);
-        };
-        void tick();
-      } catch {
-        setSupported(false);
-      }
-    };
-
-    void start();
-    return () => {
-      stopped = true;
-      stream?.getTracks().forEach((track) => track.stop());
-    };
-  }, [active, onToken]);
 
   return (
     <div className="surface-card space-y-4">
@@ -136,19 +91,11 @@ function Scanner({ onToken }: { onToken: (token: string) => void }) {
           <p className="panel-copy">La validation finale reste faite côté serveur: session, délai, classe et inscription.</p>
         </div>
       </div>
-      {active && supported ? (
-        <video ref={videoRef} className="aspect-video w-full rounded-2xl bg-black object-cover" muted playsInline />
-      ) : (
-        <button type="button" className="btn-primary" onClick={() => setActive(true)}>
-          <Camera size={16} />
-          Ouvrir la caméra
-        </button>
-      )}
-      {!supported && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Scanner QR non disponible sur ce navigateur. Utilisez le champ manuel si nécessaire.
-        </div>
-      )}
+      <CameraCodeScanner
+        onCode={onToken}
+        label="Ouvrir la caméra"
+        hint="Fonctionne avec webcam PC, caméra USB ou caméra mobile. Un lecteur code-barres matériel peut aussi remplir le champ manuel."
+      />
       <div className="flex flex-col gap-2 sm:flex-row">
         <input className="input" placeholder="Coller le token QR (secours)" value={manual} onChange={(event) => setManual(event.target.value)} />
         <button type="button" className="btn-outline" onClick={() => manual.trim() && onToken(manual.trim())}>
@@ -279,7 +226,14 @@ export default function AttendancePage() {
   const enable = async () => {
     if (!session) return;
     try {
-      const res = await api.post<Session>(`/attendance/sessions/${session.id}/enable`, { minutes: 90 });
+      const shouldReopenAbsent =
+        !session.attendanceEnabled &&
+        records.some((record) => record.status === 'absent') &&
+        window.confirm('Réouvrir le QR pour les étudiants absents ? Les présents restent présents.');
+      const res = await api.post<Session>(`/attendance/sessions/${session.id}/enable`, {
+        minutes: 90,
+        reopenAbsent: shouldReopenAbsent,
+      });
       setSession(res.data);
       if (res.data.qrToken) setQrImage(await QRCode.toDataURL(res.data.qrToken, { margin: 1, width: 320 }));
       await loadRecords(session.id);
@@ -453,7 +407,7 @@ export default function AttendancePage() {
                 <div className="flex flex-wrap gap-2">
                   <button type="button" className="btn-primary" onClick={enable}>
                     <QrCode size={16} />
-                    Activer la présence
+                    {session.attendanceEnabled ? 'Nouveau QR' : session.attendanceClosedAt ? 'Réouvrir QR' : 'Activer la présence'}
                   </button>
                   <button type="button" className="btn-outline" onClick={extend} disabled={!session.attendanceEnabled}>
                     <Timer size={16} />

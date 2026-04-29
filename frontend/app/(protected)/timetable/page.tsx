@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertTriangle, CalendarRange, CalendarX, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
 import { useAuth } from '@/features/auth/auth-context';
@@ -44,8 +44,10 @@ type Session = {
 };
 
 type Conflict = { sessionIds: number[]; reason: string };
+type TimetableHoliday = { id: number; date: string; name: string; description?: string | null };
 
-const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'];
+const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+const DAY_NUMBERS = [1, 2, 3, 4, 5, 6, 7];
 const HOURS = Array.from({ length: 11 }, (_, i) => i + 8); // 8h to 18h
 const TIME_OPTIONS = Array.from({ length: 22 }, (_, index) => {
   const totalMinutes = 8 * 60 + index * 30;
@@ -166,7 +168,7 @@ export default function TimetablePage() {
   const touchStartX = useRef<number | null>(null);
 
   const weekStart = useMemo(() => getWeekStart(toLocalDate(selectedDate)), [selectedDate]);
-  const weekEnd = useMemo(() => addDays(weekStart, 4), [weekStart]);
+  const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
   const todayStr = useMemo(() => formatDateInput(new Date()), []);
   const currentWeekStart = useMemo(() => getWeekStart(new Date()), []);
   const isCurrentWeek = weekStart === currentWeekStart;
@@ -178,6 +180,19 @@ export default function TimetablePage() {
     [elements, scheduledElementIds],
   );
   const conflictSessionIds = useMemo(() => new Set(conflicts.flatMap((c) => c.sessionIds)), [conflicts]);
+  const [holidays, setHolidays] = useState<TimetableHoliday[]>([]);
+  const [holidayName, setHolidayName] = useState('');
+  const [holidayDate, setHolidayDate] = useState(todayStr);
+  const [holidayDescription, setHolidayDescription] = useState('');
+  const [savingHoliday, setSavingHoliday] = useState(false);
+  const holidaysByDate = useMemo(
+    () => new Map(holidays.map((holiday) => [holiday.date, holiday])),
+    [holidays],
+  );
+  const holidaysThisWeek = useMemo(
+    () => holidays.filter((holiday) => holiday.date >= weekStart && holiday.date <= weekEnd),
+    [holidays, weekEnd, weekStart],
+  );
 
   // ── Class cascading filters (pure client-side, no extra requests) ────────────
   const departments = useMemo(() => {
@@ -330,14 +345,16 @@ export default function TimetablePage() {
     const load = async () => {
       try {
         setLoadingMeta(true);
-        const [cRes, rRes, tRes] = await Promise.all([
+        const [cRes, rRes, tRes, hRes] = await Promise.all([
           api.get<PaginatedResponse<AcademicClass>>('/classes', { params: { page: 1, limit: 500, sortBy: 'name', sortOrder: 'asc' } }),
           api.get<Room[]>('/rooms'),
           api.get<PaginatedResponse<Teacher>>('/teachers', { params: { page: 1, limit: 200, sortBy: 'lastName', sortOrder: 'asc' } }),
+          api.get<TimetableHoliday[]>('/timetable/holidays'),
         ]);
         setClasses(cRes.data.data ?? []);
         setRooms(Array.isArray(rRes.data) ? rRes.data : []);
         setTeachers(tRes.data.data ?? []);
+        setHolidays(hRes.data);
       } catch (err) {
         toast.error(getApiErrorMessage(err, 'Impossible de charger les données de référence'));
       } finally {
@@ -391,7 +408,7 @@ export default function TimetablePage() {
 
   const grid = useMemo(() => {
     const g: Record<number, Record<number, Session>> = {};
-    for (let d = 1; d <= 5; d++) g[d] = {};
+    for (let d = 1; d <= 7; d++) g[d] = {};
     for (const s of sessions) {
       const row = timeToRow(s.startTime);
       if (row >= 0 && row < 11) g[s.dayOfWeek][row] = s;
@@ -469,8 +486,8 @@ export default function TimetablePage() {
   const saveMoveSession = async () => {
     if (!movingSession || !moveDate) return;
     const dayOfWeek = getDayOfWeekFromDate(moveDate);
-    if (dayOfWeek < 1 || dayOfWeek > 5) {
-      toast.error('Choisissez une date entre lundi et vendredi');
+    if (dayOfWeek < 1 || dayOfWeek > 7) {
+      toast.error('Choisissez une date valide');
       return;
     }
     setSavingMove(true);
@@ -493,6 +510,44 @@ export default function TimetablePage() {
       toast.error(getApiErrorMessage(err, 'Erreur lors du déplacement'));
     } finally {
       setSavingMove(false);
+    }
+  };
+
+  const saveHoliday = async () => {
+    if (!holidayDate || !holidayName.trim()) {
+      toast.error('Date et nom requis');
+      return;
+    }
+    setSavingHoliday(true);
+    try {
+      const response = await api.post<TimetableHoliday>('/timetable/holidays', {
+        date: holidayDate,
+        name: holidayName.trim(),
+        description: holidayDescription.trim() || null,
+      });
+      setHolidays((current) =>
+        [...current.filter((item) => item.date !== response.data.date), response.data].sort((a, b) =>
+          a.date.localeCompare(b.date),
+        ),
+      );
+      setHolidayName('');
+      setHolidayDescription('');
+      toast.success('Jour férié ajouté');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Impossible d’ajouter le jour férié'));
+    } finally {
+      setSavingHoliday(false);
+    }
+  };
+
+  const deleteHoliday = async (holiday: TimetableHoliday) => {
+    if (!window.confirm(`Supprimer ${holiday.name} ?`)) return;
+    try {
+      await api.delete(`/timetable/holidays/${holiday.id}`);
+      setHolidays((current) => current.filter((item) => item.id !== holiday.id));
+      toast.success('Jour férié supprimé');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Suppression impossible'));
     }
   };
 
@@ -704,6 +759,48 @@ export default function TimetablePage() {
           </div>
         </section>
 
+        {!isStudent && (
+          <section className="surface-card space-y-4 p-4">
+            <div className="panel-header">
+              <div>
+                <h2 className="panel-title">Jours fériés</h2>
+                <p className="panel-copy">Ajoutez les dates bloquées pour les voir directement dans la semaine.</p>
+              </div>
+              <CalendarX size={20} className="text-amber-600" />
+            </div>
+            <div className="grid gap-3 lg:grid-cols-[160px_1fr_1fr_auto]">
+              <div className="field-stack">
+                <label className="field-label">Date</label>
+                <input className="input" type="date" value={holidayDate} onChange={(event) => setHolidayDate(event.target.value)} />
+              </div>
+              <div className="field-stack">
+                <label className="field-label">Nom</label>
+                <input className="input" value={holidayName} onChange={(event) => setHolidayName(event.target.value)} placeholder="Ex. Aïd, fête nationale..." />
+              </div>
+              <div className="field-stack">
+                <label className="field-label">Description</label>
+                <input className="input" value={holidayDescription} onChange={(event) => setHolidayDescription(event.target.value)} placeholder="Optionnel" />
+              </div>
+              <button className="btn-primary self-end" type="button" onClick={saveHoliday} disabled={savingHoliday}>
+                <Plus size={14} />
+                Ajouter
+              </button>
+            </div>
+            {holidaysThisWeek.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {holidaysThisWeek.map((holiday) => (
+                  <span key={holiday.id} className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                    {holiday.date} · {holiday.name}
+                    <button type="button" className="text-amber-500 hover:text-red-600" onClick={() => deleteHoliday(holiday)}>
+                      <Trash2 size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {/* ── Stats bar ── */}
         {sessions.length > 0 && (
           <section className="surface-card flex items-center gap-4 p-4">
@@ -748,7 +845,7 @@ export default function TimetablePage() {
 
               {!loading && (
                 <div className={animClass}>
-                  <table className="w-full border-collapse text-sm" style={{ minWidth: 700 }}>
+                  <table className="w-full border-collapse text-sm" style={{ minWidth: 980 }}>
                     <thead>
                       <tr>
                         <th className="w-14 border-b border-r border-slate-100 bg-slate-50 py-3 text-center text-xs font-medium text-slate-400">
@@ -758,6 +855,7 @@ export default function TimetablePage() {
                           const date = toLocalDate(addDays(weekStart, i));
                           const dateStr = formatDateInput(date);
                           const isToday = dateStr === todayStr;
+                          const holiday = holidaysByDate.get(dateStr);
                           return (
                             <th
                               key={day}
@@ -774,6 +872,11 @@ export default function TimetablePage() {
                               {isToday && (
                                 <span className="mt-0.5 inline-block h-1.5 w-1.5 rounded-full bg-blue-500" />
                               )}
+                              {holiday && (
+                                <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                  {holiday.name}
+                                </span>
+                              )}
                             </th>
                           );
                         })}
@@ -785,9 +888,11 @@ export default function TimetablePage() {
                           <td className="border-b border-r border-slate-100 bg-slate-50 py-2 text-center text-xs text-slate-400 align-top">
                             {String(hour).padStart(2, '0')}h
                           </td>
-                          {[1, 2, 3, 4, 5].map((day) => {
+                          {DAY_NUMBERS.map((day) => {
                             const session = grid[day]?.[hour - 8];
                             const isConflict = session && conflictSessionIds.has(session.id);
+                            const dayDateStr = formatDateInput(toLocalDate(addDays(weekStart, day - 1)));
+                            const holiday = holidaysByDate.get(dayDateStr);
 
                             const coveredByAbove = !session && HOURS.slice(0, hour - 8).some((h) => {
                               const s = grid[day]?.[h - 8];
@@ -797,7 +902,6 @@ export default function TimetablePage() {
                             if (coveredByAbove) return null;
 
                             const span = session ? rowSpan(session.startTime, session.endTime) : 1;
-                            const dayDateStr = formatDateInput(toLocalDate(addDays(weekStart, day - 1)));
                             const isTodayCol = dayDateStr === todayStr;
 
                             return (
@@ -806,9 +910,9 @@ export default function TimetablePage() {
                                 rowSpan={span > 1 ? span : undefined}
                                 className={`border-b border-r border-slate-100 p-1 align-top transition-colors ${
                                   !session
-                                    ? `cursor-pointer ${isTodayCol ? 'hover:bg-blue-50' : 'hover:bg-slate-50'}`
+                                    ? `cursor-pointer ${holiday ? 'bg-amber-50/40 hover:bg-amber-50' : isTodayCol ? 'hover:bg-blue-50' : 'hover:bg-slate-50'}`
                                     : ''
-                                } ${isTodayCol && !session ? 'bg-blue-50/30' : ''}`}
+                                } ${isTodayCol && !session && !holiday ? 'bg-blue-50/30' : ''}`}
                                 onClick={!session && !isStudent ? () => openAddModal(day, hour) : undefined}
                                 onDragOver={!session && !isStudent ? (event) => event.preventDefault() : undefined}
                                 onDrop={!session && !isStudent ? (event) => {

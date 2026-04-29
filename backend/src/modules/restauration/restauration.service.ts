@@ -13,6 +13,7 @@ import { CreateMealDto } from './dto/create-meal.dto';
 import { UpdateMealDto } from './dto/update-meal.dto';
 import {
   ConsumeTicketDto,
+  AutoConsumeTicketDto,
   IssueTicketDto,
   ReserveMealDto,
   ReserveMealsDto,
@@ -62,6 +63,8 @@ export class RestaurationService {
         name: dto.name.trim(),
         price: roundMoney(dto.price),
         active: dto.active ?? true,
+        serviceStartTime: dto.serviceStartTime?.trim() || null,
+        serviceEndTime: dto.serviceEndTime?.trim() || null,
       },
     });
   }
@@ -74,6 +77,12 @@ export class RestaurationService {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
         ...(dto.price !== undefined ? { price: roundMoney(dto.price) } : {}),
         ...(dto.active !== undefined ? { active: dto.active } : {}),
+        ...(dto.serviceStartTime !== undefined
+          ? { serviceStartTime: dto.serviceStartTime?.trim() || null }
+          : {}),
+        ...(dto.serviceEndTime !== undefined
+          ? { serviceEndTime: dto.serviceEndTime?.trim() || null }
+          : {}),
       },
     });
   }
@@ -497,13 +506,13 @@ export class RestaurationService {
   }
 
   async issueTicket(dto: IssueTicketDto, user: JwtPayload) {
-    this.ensureCanManageRestauration(user);
-
     const reservation = await this.prisma.mealReservation.findUnique({
       where: { id: dto.reservationId },
       include: this.reservationInclude(),
     });
     if (!reservation) throw new NotFoundException('Réservation introuvable');
+    await this.ensureCanAccessStudent(reservation.studentId, user);
+
     if (reservation.reservationDate !== todayIso()) {
       throw new BadRequestException(
         'Ticket disponible seulement le jour du repas',
@@ -568,6 +577,45 @@ export class RestaurationService {
 
     this.invalidateStudentViews(validation.reservation.studentId);
     return updated;
+  }
+
+  async autoConsumeTicket(dto: AutoConsumeTicketDto, user: JwtPayload) {
+    this.ensureCanManageRestauration(user);
+    const query = dto.query.trim();
+    if (!query) throw new BadRequestException('Code ou nom requis');
+
+    const directValidation = await this.validateTicket(query);
+    if (directValidation.reservation && directValidation.valid) {
+      return this.consumeTicket({ code: query }, user);
+    }
+    if (directValidation.reservation && !directValidation.valid) {
+      throw new BadRequestException(directValidation.reason);
+    }
+
+    const student = await this.findStudentForTicketLookup(query);
+    const mealId = dto.mealId ?? (await this.resolveCurrentMealId());
+    if (!mealId) {
+      throw new BadRequestException(
+        'Aucun repas ne correspond à l’heure actuelle',
+      );
+    }
+
+    const reservation = await this.prisma.mealReservation.findFirst({
+      where: {
+        studentId: student.id,
+        mealId,
+        reservationDate: todayIso(),
+        status: 'confirmed',
+      },
+      include: this.reservationInclude(),
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!reservation) {
+      throw new NotFoundException('Aucune réservation valide pour ce repas');
+    }
+
+    const ticket = await this.issueTicket({ reservationId: reservation.id }, user);
+    return this.consumeTicket({ code: ticket.ticketCode ?? '' }, user);
   }
 
   async getReceipt(id: number, user: JwtPayload) {
@@ -664,6 +712,66 @@ export class RestaurationService {
     return user.role === UserRole.STUDENT;
   }
 
+  private async findStudentForTicketLookup(query: string) {
+    const normalized = query.trim();
+    const exact = await this.prisma.student.findFirst({
+      where: {
+        OR: [
+          { codeEtudiant: { equals: normalized, mode: 'insensitive' } },
+          { codeMassar: { equals: normalized, mode: 'insensitive' } },
+          { fullName: { equals: normalized, mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, fullName: true },
+    });
+    if (exact) return exact;
+
+    const matches = await this.prisma.student.findMany({
+      where: {
+        OR: [
+          { codeEtudiant: { contains: normalized, mode: 'insensitive' } },
+          { codeMassar: { contains: normalized, mode: 'insensitive' } },
+          { fullName: { contains: normalized, mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, fullName: true },
+      take: 2,
+    });
+
+    if (matches.length === 0) {
+      throw new NotFoundException('Étudiant introuvable');
+    }
+    if (matches.length > 1) {
+      throw new BadRequestException(
+        'Plusieurs étudiants trouvés, utilisez le code étudiant',
+      );
+    }
+    return matches[0];
+  }
+
+  private async resolveCurrentMealId() {
+    const now = new Date();
+    const current = `${String(now.getHours()).padStart(2, '0')}:${String(
+      now.getMinutes(),
+    ).padStart(2, '0')}`;
+
+    const meals = await this.prisma.meal.findMany({
+      where: { active: true },
+      orderBy: { name: 'asc' },
+    });
+
+    const matching = meals.find(
+      (meal) =>
+        meal.serviceStartTime &&
+        meal.serviceEndTime &&
+        meal.serviceStartTime <= current &&
+        current <= meal.serviceEndTime,
+    );
+
+    if (matching) return matching.id;
+    return null;
+  }
+
   private ensureCanManageRestauration(user: JwtPayload) {
     if (
       user.role === UserRole.ADMIN ||
@@ -706,8 +814,35 @@ export class RestaurationService {
       where: { userId: user.sub },
       select: { id: true },
     });
-    if (!student) throw new NotFoundException('Profil étudiant introuvable');
-    return student.id;
+    if (student) return student.id;
+
+    const account = await this.prisma.user.findUnique({
+      where: { id: user.sub },
+      select: { id: true, email: true, fullName: true },
+    });
+    if (!account) throw new NotFoundException('Profil étudiant introuvable');
+
+    const matchedStudent = await this.prisma.student.findFirst({
+      where: {
+        userId: null,
+        OR: [
+          { email: { equals: account.email, mode: 'insensitive' } },
+          { fullName: { equals: account.fullName, mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (!matchedStudent) {
+      throw new NotFoundException('Profil étudiant introuvable');
+    }
+
+    await this.prisma.student.update({
+      where: { id: matchedStudent.id },
+      data: { userId: account.id },
+    });
+
+    return matchedStudent.id;
   }
 
   private async ensureStudentExists(studentId: number) {

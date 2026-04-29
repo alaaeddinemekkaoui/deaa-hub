@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, Check, Eye, EyeOff, LogOut, Menu, MessageSquare, Pencil, Search, X } from 'lucide-react';
+import { Bell, Check, Eye, EyeOff, Grid3X3, LogOut, Menu, MessageSquare, Pencil, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/features/auth/auth-context';
@@ -497,6 +497,14 @@ export function Topbar({ sidebarOpen = true, onToggleSidebar }: TopbarProps) {
           </div>
 
           <div className="flex min-w-0 items-center justify-end gap-3 text-slate-950">
+            <Link
+              href="/modules"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-[#1b5e3b]"
+              title="Tous les modules"
+              aria-label="Tous les modules"
+            >
+              <Grid3X3 size={15} />
+            </Link>
             <NotificationBell />
 
           {/* Clickable user info → opens profile drawer */}

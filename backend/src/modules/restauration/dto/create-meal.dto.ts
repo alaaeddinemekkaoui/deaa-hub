@@ -17,4 +17,12 @@ export class CreateMealDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @IsString()
+  serviceStartTime?: string | null;
+
+  @IsOptional()
+  @IsString()
+  serviceEndTime?: string | null;
 }

@@ -14,9 +14,18 @@ type Meal = {
   name: string;
   price: number;
   active: boolean;
+  serviceStartTime?: string | null;
+  serviceEndTime?: string | null;
 };
 
-const emptyForm = { id: undefined as number | undefined, name: '', price: '', active: true };
+const emptyForm = {
+  id: undefined as number | undefined,
+  name: '',
+  price: '',
+  active: true,
+  serviceStartTime: '',
+  serviceEndTime: '',
+};
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat('fr-MA', { style: 'currency', currency: 'MAD' }).format(value || 0);
@@ -47,7 +56,14 @@ export default function RestaurationSettingsPage() {
   }, [loadMeals]);
 
   const editMeal = (meal: Meal) => {
-    setForm({ id: meal.id, name: meal.name, price: String(meal.price), active: meal.active });
+    setForm({
+      id: meal.id,
+      name: meal.name,
+      price: String(meal.price),
+      active: meal.active,
+      serviceStartTime: meal.serviceStartTime ?? '',
+      serviceEndTime: meal.serviceEndTime ?? '',
+    });
     setOpen(true);
   };
 
@@ -69,6 +85,8 @@ export default function RestaurationSettingsPage() {
         name: form.name.trim(),
         price: Number(form.price),
         active: form.active,
+        serviceStartTime: form.serviceStartTime || null,
+        serviceEndTime: form.serviceEndTime || null,
       };
       if (form.id) await api.patch(`/restauration/meals/${form.id}`, payload);
       else await api.post('/restauration/meals', payload);
@@ -122,7 +140,7 @@ export default function RestaurationSettingsPage() {
             </button>
 
             <div className={cn('overflow-hidden transition-all duration-300 ease-in-out', open ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0')}>
-              <div className="grid gap-3 pt-1 md:grid-cols-[1fr_180px_140px_auto]">
+              <div className="grid gap-3 pt-1 md:grid-cols-[1fr_150px_130px_130px_120px_auto]">
                 <div className="field-stack">
                   <label className="field-label">Nom</label>
                   <input className="input" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Petit dej, Dejeuner, Dinner..." />
@@ -130,6 +148,14 @@ export default function RestaurationSettingsPage() {
                 <div className="field-stack">
                   <label className="field-label">Prix</label>
                   <input className="input" type="number" min="0" step="0.5" value={form.price} onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))} />
+                </div>
+                <div className="field-stack">
+                  <label className="field-label">Début service</label>
+                  <input className="input" type="time" value={form.serviceStartTime} onChange={(event) => setForm((current) => ({ ...current, serviceStartTime: event.target.value }))} />
+                </div>
+                <div className="field-stack">
+                  <label className="field-label">Fin service</label>
+                  <input className="input" type="time" value={form.serviceEndTime} onChange={(event) => setForm((current) => ({ ...current, serviceEndTime: event.target.value }))} />
                 </div>
                 <label className="mt-7 flex items-center gap-2 text-sm font-medium text-slate-700">
                   <input type="checkbox" checked={form.active} onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))} />
@@ -163,6 +189,7 @@ export default function RestaurationSettingsPage() {
                     <tr>
                       <th>Repas</th>
                       <th>Prix</th>
+                      <th>Intervalle</th>
                       <th>Statut</th>
                       <th>Actions</th>
                     </tr>
@@ -177,6 +204,11 @@ export default function RestaurationSettingsPage() {
                           </span>
                         </td>
                         <td>{formatMoney(meal.price)}</td>
+                        <td>
+                          {meal.serviceStartTime && meal.serviceEndTime
+                            ? `${meal.serviceStartTime} - ${meal.serviceEndTime}`
+                            : 'Non défini'}
+                        </td>
                         <td>
                           <span className={cn('rounded-full px-2 py-1 text-xs font-semibold', meal.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500')}>
                             {meal.active ? 'Actif' : 'Inactif'}

@@ -71,9 +71,21 @@ export default function RestaurationPage() {
 
   const total = selectedItems.reduce((sum, item) => sum + item.price, 0);
   const hasEnoughSolde = (wallet?.balance ?? 0) >= total;
+  const reservedKeys = useMemo(
+    () =>
+      new Set(
+        reservations
+          .filter((item) => ['confirmed', 'consumed'].includes(item.status))
+          .map((item) => `${item.reservationDate}:${item.meal.id}`),
+      ),
+    [reservations],
+  );
   const allKeys = useMemo(
-    () => dates.flatMap((date) => activeMeals.map((meal) => `${date}:${meal.id}`)),
-    [activeMeals, dates],
+    () =>
+      dates
+        .flatMap((date) => activeMeals.map((meal) => `${date}:${meal.id}`))
+        .filter((key) => !reservedKeys.has(key)),
+    [activeMeals, dates, reservedKeys],
   );
   const allSelected = allKeys.length > 0 && allKeys.every((key) => selectedKeys.has(key));
   const today = todayIso();
@@ -126,7 +138,11 @@ export default function RestaurationPage() {
       try {
         await loadMeals();
         if (!canManage) {
-          await loadStudentData();
+          if (user?.studentProfile) {
+            await loadStudentData();
+          } else {
+            resetStudentData();
+          }
         }
       } catch (err) {
         toast.error(getApiErrorMessage(err, 'Impossible de charger la restauration'));
@@ -136,7 +152,7 @@ export default function RestaurationPage() {
     };
 
     void loadInitial();
-  }, [canManage, loadMeals, loadStudentData]);
+  }, [canManage, loadMeals, loadStudentData, resetStudentData, user?.studentProfile]);
 
   const handleStudentSelect = async (student: StudentLookupResult) => {
     setSelectedStudent(student);
@@ -153,6 +169,7 @@ export default function RestaurationPage() {
   };
 
   const toggleCell = (key: string) => {
+    if (reservedKeys.has(key)) return;
     setSelectedKeys((current) => {
       const next = new Set(current);
       if (next.has(key)) next.delete(key);
@@ -273,12 +290,24 @@ export default function RestaurationPage() {
               <QrCode size={14} />
               Verification tickets
             </Link>
-          ) : undefined
+          ) : (
+            <Link className="btn-outline flex items-center gap-2" href="/restauration/tickets">
+              <ReceiptText size={14} />
+              Mes tickets
+            </Link>
+          )
         }
       />
 
       {loading ? (
         <div className="surface-card empty-note">Chargement...</div>
+      ) : !canManage && !user?.studentProfile ? (
+        <section className="surface-card">
+          <EmptyState
+            title="Profil étudiant non lié"
+            description="Votre compte étudiant n'est pas encore lié à une fiche étudiant. Connectez-vous avec le code étudiant ou demandez à l'administration de créer le compte depuis la fiche étudiant."
+          />
+        </section>
       ) : (
         <>
           {canManage && (
@@ -405,15 +434,27 @@ export default function RestaurationPage() {
                             </td>
                             {activeMeals.map((meal) => {
                               const key = `${date}:${meal.id}`;
+                              const alreadyReserved = reservedKeys.has(key);
                               return (
                                 <td key={key}>
-                                  <label className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white transition hover:border-emerald-300">
-                                    <input
-                                      className="h-4 w-4"
-                                      type="checkbox"
-                                      checked={selectedKeys.has(key)}
-                                      onChange={() => toggleCell(key)}
-                                    />
+                                  <label
+                                    className={cn(
+                                      'inline-flex h-10 min-w-[6.5rem] items-center justify-center rounded-lg border px-3 text-xs font-semibold transition',
+                                      alreadyReserved
+                                        ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                                        : 'cursor-pointer border-slate-200 bg-white text-slate-700 hover:border-emerald-300',
+                                    )}
+                                  >
+                                    {alreadyReserved ? (
+                                      'Réservé'
+                                    ) : (
+                                      <input
+                                        className="h-4 w-4"
+                                        type="checkbox"
+                                        checked={selectedKeys.has(key)}
+                                        onChange={() => toggleCell(key)}
+                                      />
+                                    )}
                                   </label>
                                 </td>
                               );

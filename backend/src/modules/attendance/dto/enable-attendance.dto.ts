@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class EnableAttendanceDto {
   @IsOptional()
@@ -6,4 +6,8 @@ export class EnableAttendanceDto {
   @Min(1)
   @Max(240)
   minutes?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  reopenAbsent?: boolean;
 }

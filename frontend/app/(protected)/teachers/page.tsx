@@ -9,6 +9,7 @@ import {
   Eye,
   FolderOpen,
   GraduationCap,
+  MoreHorizontal,
   Pencil,
   Search,
   Trash2,
@@ -22,7 +23,6 @@ import { ModalShell } from '@/components/admin/modal-shell';
 import { ProfileDocsModal } from '@/components/profile/profile-docs-modal';
 import { PageHeader } from '@/components/admin/page-header';
 import { PaginationControls } from '@/components/admin/pagination-controls';
-import { TableActionButton, TableActionGrid, TableActionLink } from '@/components/admin/table-actions';
 import { api, fetchRef, getApiErrorMessage, PaginatedResponse } from '@/services/api';
 import { useAuth } from '@/features/auth/auth-context';
 import { confirmDelete } from '@/lib/confirm';
@@ -101,6 +101,7 @@ export default function TeachersPage() {
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [photoErrors, setPhotoErrors] = useState<Record<number, boolean>>({});
+  const [openActionsId, setOpenActionsId] = useState<number | null>(null);
   const [meta, setMeta] = useState({
     page: 1,
     limit: PAGE_SIZE,
@@ -592,7 +593,7 @@ export default function TeachersPage() {
                 const showPhoto = !photoErrors[item.id];
                 const permanent = !/vacataire/i.test(item.role.name);
                 return (
-                  <article key={item.id} className="flex min-h-[23rem] flex-col rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+                  <article key={item.id} className="flex min-h-[18rem] flex-col rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
                     <div className="flex items-start gap-4">
                       <div className="relative h-18 w-18 shrink-0 overflow-hidden rounded-[1.4rem] border border-slate-200 bg-slate-100">
                         {showPhoto ? (
@@ -632,51 +633,73 @@ export default function TeachersPage() {
                         <p className="mt-1 font-medium text-slate-900">{item.department.name}</p>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <div>
+                        <div className="rounded-2xl bg-slate-50 px-3 py-3">
                           <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Type</p>
                           <p className="mt-1 font-medium text-slate-900">{permanent ? 'Permanent' : 'Vacataire'}</p>
                         </div>
-                        <div>
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Grade</p>
-                          <p className="mt-1 font-medium text-slate-900">{item.grade.name}</p>
+                        <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Contact</p>
+                          <p className="mt-1 truncate font-medium text-slate-900">{item.email ?? 'Sans email'}</p>
+                          <p className="mt-0.5 truncate font-medium text-slate-700">{item.phoneNumber ?? 'Sans téléphone'}</p>
                         </div>
-                      </div>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Contact</p>
-                        <p className="mt-1 truncate font-medium text-slate-900">{item.email ?? 'Sans email'}</p>
-                        <p className="mt-0.5 font-medium text-slate-700">{item.phoneNumber ?? 'Sans téléphone'}</p>
                       </div>
                     </div>
 
                     <div className="mt-auto pt-5">
-                      <TableActionGrid>
-                        <TableActionLink
-                          href={`/teachers/${item.id}`}
-                          icon={Eye}
-                          tone="profile"
-                          label={`Voir le profil de ${getTeacherName(item)}`}
-                        />
-                        <TableActionButton
-                          icon={FolderOpen}
-                          tone="docs"
-                          label={`Ouvrir le dossier de ${getTeacherName(item)}`}
-                          onClick={() => setDocsTeacher({ id: item.id, name: getTeacherName(item) })}
-                        />
-                        <TableActionButton
-                          icon={Pencil}
-                          tone="edit"
-                          label={`Modifier ${getTeacherName(item)}`}
-                          onClick={() => openEditModal(item)}
-                        />
-                        {canDelete ? (
-                          <TableActionButton
-                            icon={Trash2}
-                            tone="delete"
-                            label={`Supprimer ${getTeacherName(item)}`}
-                            onClick={() => onDelete(item.id)}
-                          />
+                      <div className="relative flex justify-end">
+                        <button
+                          type="button"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+                          title={`Actions pour ${getTeacherName(item)}`}
+                          aria-label={`Actions pour ${getTeacherName(item)}`}
+                          onClick={() => setOpenActionsId((current) => current === item.id ? null : item.id)}
+                        >
+                          <MoreHorizontal size={17} />
+                        </button>
+                        {openActionsId === item.id ? (
+                          <div className="absolute bottom-12 right-0 z-20 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-sm shadow-lg">
+                            <Link className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50" href={`/teachers/${item.id}`}>
+                              <Eye size={14} />
+                              Voir le profil
+                            </Link>
+                            <button
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+                              type="button"
+                              onClick={() => {
+                                setOpenActionsId(null);
+                                setDocsTeacher({ id: item.id, name: getTeacherName(item) });
+                              }}
+                            >
+                              <FolderOpen size={14} />
+                              Dossier
+                            </button>
+                            <button
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+                              type="button"
+                              onClick={() => {
+                                setOpenActionsId(null);
+                                openEditModal(item);
+                              }}
+                            >
+                              <Pencil size={14} />
+                              Modifier
+                            </button>
+                            {canDelete ? (
+                              <button
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-600 hover:bg-red-50"
+                                type="button"
+                                onClick={() => {
+                                  setOpenActionsId(null);
+                                  void onDelete(item.id);
+                                }}
+                              >
+                                <Trash2 size={14} />
+                                Supprimer
+                              </button>
+                            ) : null}
+                          </div>
                         ) : null}
-                      </TableActionGrid>
+                      </div>
                     </div>
                   </article>
                 );

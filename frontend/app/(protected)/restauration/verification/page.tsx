@@ -4,14 +4,16 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Barcode, CheckCircle2, QrCode, ScanLine, Ticket, XCircle } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
+import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
+import { CameraCodeScanner } from '@/components/scanner/camera-code-scanner';
 import { useAuth } from '@/features/auth/auth-context';
 import { cn } from '@/lib/utils';
 import { api, getApiErrorMessage } from '@/services/api';
 import { toast } from 'sonner';
 import { StudentLookup } from '../_components/student-lookup';
 import { TicketPreview } from '../_components/ticket-preview';
-import type { Reservation, StudentLookupResult, TicketValidation } from '../_components/types';
+import type { Meal, Reservation, StudentLookupResult, TicketValidation } from '../_components/types';
 import { statusClass, statusLabel, todayIso } from '../utils';
 
 export default function RestaurationVerificationPage() {
@@ -22,8 +24,11 @@ export default function RestaurationVerificationPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(false);
   const [scanCode, setScanCode] = useState('');
+  const [autoMealId, setAutoMealId] = useState('');
+  const [meals, setMeals] = useState<Meal[]>([]);
   const [validation, setValidation] = useState<TicketValidation | null>(null);
   const [ticket, setTicket] = useState<Reservation | null>(null);
+  const [ticketModalOpen, setTicketModalOpen] = useState(false);
 
   const selectedStudentId = selectedStudent ? String(selectedStudent.id) : '';
   const today = todayIso();
@@ -54,9 +59,22 @@ export default function RestaurationVerificationPage() {
   };
 
   useEffect(() => {
+    const loadMeals = async () => {
+      try {
+        const response = await api.get<Meal[]>('/restauration/meals');
+        setMeals(response.data);
+      } catch {
+        setMeals([]);
+      }
+    };
+    void loadMeals();
+  }, []);
+
+  useEffect(() => {
     setReservations([]);
     setTicket(null);
     setValidation(null);
+    setTicketModalOpen(false);
   }, [selectedStudentId]);
 
   const handleStudentSelect = async (student: StudentLookupResult) => {
@@ -74,6 +92,7 @@ export default function RestaurationVerificationPage() {
         reservationId: reservation.id,
       });
       setTicket(response.data);
+      setTicketModalOpen(true);
       toast.success('Ticket genere');
       await loadReservations(String(reservation.student.id));
     } catch (error) {
@@ -108,6 +127,43 @@ export default function RestaurationVerificationPage() {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Consommation impossible'));
     }
+  };
+
+  const autoConsume = async () => {
+    if (!scanCode.trim()) return;
+    try {
+      const response = await api.post<Reservation>('/restauration/tickets/auto-consume', {
+        query: scanCode.trim(),
+        mealId: autoMealId ? Number(autoMealId) : undefined,
+      });
+      setTicket(response.data);
+      setValidation({ valid: false, reason: 'Ticket sorti et repas consommé', reservation: response.data });
+      toast.success('Ticket trouvé et repas consommé');
+      if (selectedStudentId) {
+        await loadReservations(selectedStudentId);
+      }
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Recherche/validation impossible'));
+    }
+  };
+
+  const handleCameraCode = (code: string) => {
+    setScanCode(code);
+    void api
+      .post<Reservation>('/restauration/tickets/auto-consume', {
+        query: code,
+        mealId: autoMealId ? Number(autoMealId) : undefined,
+      })
+      .then((response) => {
+        setTicket(response.data);
+        setTicketModalOpen(true);
+        setValidation({ valid: false, reason: 'Ticket scanné et repas consommé', reservation: response.data });
+        toast.success('Ticket scanné et repas consommé');
+        if (selectedStudentId) void loadReservations(selectedStudentId);
+      })
+      .catch((error) => {
+        toast.error(getApiErrorMessage(error, 'Scan impossible'));
+      });
   };
 
   if (!canManage) {
@@ -145,10 +201,82 @@ export default function RestaurationVerificationPage() {
       />
 
       {!selectedStudentId ? (
-        <EmptyState
-          title="Cherchez un etudiant"
-          description="La page reste vide tant qu&apos;aucun etudiant n&apos;est selectionne."
-        />
+        <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+          <section className="surface-card">
+            <div className="panel-header">
+              <div>
+                <h2 className="panel-title">Validation rapide</h2>
+                <p className="panel-copy">Scannez un QR ticket ou saisissez code étudiant / nom. Le repas est détecté par intervalle horaire si aucun repas n’est choisi.</p>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-[1fr_180px]">
+              <div className="field-stack">
+                <label className="field-label">Code ou nom</label>
+                <input
+                  className="input"
+                  value={scanCode}
+                  onChange={(event) => setScanCode(event.target.value)}
+                  placeholder="TCK-..., L003003, Soufiane..."
+                />
+              </div>
+              <div className="field-stack">
+                <label className="field-label">Repas</label>
+                <select className="input" value={autoMealId} onChange={(event) => setAutoMealId(event.target.value)}>
+                  <option value="">Selon l’heure</option>
+                  {meals.map((meal) => (
+                    <option key={meal.id} value={meal.id}>
+                      {meal.name}
+                      {meal.serviceStartTime && meal.serviceEndTime
+                        ? ` (${meal.serviceStartTime}-${meal.serviceEndTime})`
+                        : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="mt-3">
+              <CameraCodeScanner
+                onCode={handleCameraCode}
+                label="Scanner caméra"
+                hint="Utilisez webcam PC, caméra USB ou mobile. Le scan valide automatiquement le repas du moment."
+              />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button className="btn-primary" type="button" onClick={autoConsume}>
+                <CheckCircle2 size={14} />
+                Auto valider
+              </button>
+              <button className="btn-outline" type="button" onClick={validateTicket}>
+                <ScanLine size={14} />
+                Vérifier code ticket
+              </button>
+            </div>
+            {validation && (
+              <div className={cn('mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold', validation.valid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>
+                {validation.valid ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+                {validation.reason}
+              </div>
+            )}
+          </section>
+          {ticket ? (
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left transition hover:border-emerald-300 hover:bg-emerald-100"
+              onClick={() => setTicketModalOpen(true)}
+            >
+              <span>
+                <span className="block text-sm font-semibold text-emerald-800">Ticket prêt</span>
+                <span className="text-xs text-emerald-700">Appuyez pour ouvrir le popup du ticket.</span>
+              </span>
+              <Barcode className="text-emerald-700" size={18} />
+            </button>
+          ) : (
+            <EmptyState
+              title="Scan direct disponible"
+              description="Vous pouvez aussi chercher un étudiant à gauche pour voir ses tickets du jour."
+            />
+          )}
+        </div>
       ) : loading ? (
         <div className="surface-card empty-note">Chargement des tickets...</div>
       ) : (
@@ -232,28 +360,55 @@ export default function RestaurationVerificationPage() {
               <div className="panel-header">
                 <div>
                   <h2 className="panel-title">Scanner ticket</h2>
-                  <p className="panel-copy">Verifier le QR code ou le code barre avant de servir le repas.</p>
+                  <p className="panel-copy">Scannez le QR/code ticket, ou saisissez code étudiant / nom pour valider automatiquement le repas du moment.</p>
                 </div>
               </div>
 
-              <div className="mt-3 field-stack">
-                <label className="field-label">QR / barcode</label>
+              <div className="mt-3 grid gap-3 md:grid-cols-[1fr_180px]">
+                <div className="field-stack">
+                <label className="field-label">QR / barcode / code étudiant / nom</label>
                 <input
                   className="input"
                   value={scanCode}
                   onChange={(event) => setScanCode(event.target.value)}
-                  placeholder="TCK-..."
+                  placeholder="TCK-..., L003003, Soufiane..."
+                />
+                </div>
+                <div className="field-stack">
+                  <label className="field-label">Repas</label>
+                  <select className="input" value={autoMealId} onChange={(event) => setAutoMealId(event.target.value)}>
+                    <option value="">Selon l’heure</option>
+                    {meals.map((meal) => (
+                      <option key={meal.id} value={meal.id}>
+                        {meal.name}
+                        {meal.serviceStartTime && meal.serviceEndTime
+                          ? ` (${meal.serviceStartTime}-${meal.serviceEndTime})`
+                          : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="mt-3">
+                <CameraCodeScanner
+                  onCode={handleCameraCode}
+                  label="Scanner caméra"
+                  hint="Utilisez webcam PC, caméra USB ou mobile. Le scan valide automatiquement le ticket."
                 />
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2">
+                <button className="btn-primary" type="button" onClick={autoConsume}>
+                  <CheckCircle2 size={14} />
+                  Auto valider
+                </button>
                 <button className="btn-outline" type="button" onClick={validateTicket}>
                   <ScanLine size={14} />
-                  Verifier
+                  Vérifier code ticket
                 </button>
-                <button className="btn-primary" type="button" onClick={consumeTicket}>
+                <button className="btn-outline" type="button" onClick={consumeTicket}>
                   <CheckCircle2 size={14} />
-                  Valider repas
+                  Consommer code ticket
                 </button>
               </div>
 
@@ -280,7 +435,17 @@ export default function RestaurationVerificationPage() {
             </section>
 
             {ticket ? (
-              <TicketPreview reservation={ticket} />
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left transition hover:border-emerald-300 hover:bg-emerald-100"
+                onClick={() => setTicketModalOpen(true)}
+              >
+                <span>
+                  <span className="block text-sm font-semibold text-emerald-800">Ticket prêt</span>
+                  <span className="text-xs text-emerald-700">Appuyez pour ouvrir le popup du ticket.</span>
+                </span>
+                <Barcode className="text-emerald-700" size={18} />
+              </button>
             ) : (
               <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-slate-400">
                 <Barcode className="mx-auto mb-2" />
@@ -290,6 +455,21 @@ export default function RestaurationVerificationPage() {
           </div>
         </div>
       )}
+
+      <ModalShell
+        open={ticketModalOpen && Boolean(ticket)}
+        title="Ticket restauration"
+        description="Le ticket est affiché en popup pour une meilleure lecture sur mobile et ordinateur."
+        onClose={() => setTicketModalOpen(false)}
+        size="lg"
+        footer={
+          <button className="btn-outline ml-auto" type="button" onClick={() => setTicketModalOpen(false)}>
+            Fermer
+          </button>
+        }
+      >
+        {ticket ? <TicketPreview reservation={ticket} /> : null}
+      </ModalShell>
     </div>
   );
 }

@@ -2,6 +2,8 @@ type CorsOrigin = boolean | Array<string | RegExp>;
 
 const LOCALHOST_ORIGINS = ['http://localhost:3000', 'http://localhost:3001'];
 const VERCEL_ORIGIN_REGEX = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i;
+const LAN_DEV_ORIGIN_REGEX =
+  /^https?:\/\/(?:(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3})|(?:192\.168\.\d{1,3}\.\d{1,3})|(?:172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}))(?::\d+)?$/;
 
 function parseCorsOrigins(value: string): string[] {
   return value
@@ -30,7 +32,7 @@ export function resolveCorsOrigins(): CorsOrigin {
     return mergedOrigins;
   }
 
-  return [...mergedOrigins, VERCEL_ORIGIN_REGEX];
+  return [...mergedOrigins, VERCEL_ORIGIN_REGEX, LAN_DEV_ORIGIN_REGEX];
 }
 
 export function getCorsOptions() {

@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Activity, AlertTriangle, GraduationCap, Users } from 'lucide-react';
+import { Activity, AlertTriangle, Download, GraduationCap, Users } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
 import { MetricCard } from '@/components/admin/metric-card';
 import { PageHeader } from '@/components/admin/page-header';
@@ -49,6 +49,22 @@ type Analytics = {
 type RefItem = { id: number; name: string; departmentId?: number | null; filiereId?: number | null };
 
 const COLORS = ['#1b5e3b', '#256f9f', '#c97b2f', '#b71c1c', '#64748b'];
+
+function csvEscape(value: unknown) {
+  const text = String(value ?? '');
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function downloadCsv(filename: string, rows: Array<Array<unknown>>) {
+  const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n');
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function StatisticsPage() {
   const [data, setData] = useState<Analytics | null>(null);
@@ -114,6 +130,78 @@ export default function StatisticsPage() {
   const filteredFilieres = filieres.filter((item) => !filters.departmentId || String(item.departmentId) === filters.departmentId);
   const filteredClasses = classes.filter((item) => !filters.filiereId || String(item.filiereId) === filters.filiereId);
 
+  const getFilterLabel = (key: keyof typeof filters, value: string) => {
+    if (!value) return 'Tous';
+    if (key === 'departmentId') return departments.find((item) => String(item.id) === value)?.name ?? value;
+    if (key === 'filiereId') return filieres.find((item) => String(item.id) === value)?.name ?? value;
+    if (key === 'classId') return classes.find((item) => String(item.id) === value)?.name ?? value;
+    if (key === 'courseId') return courses.find((item) => String(item.id) === value)?.name ?? value;
+    if (key === 'gender') return value === 'male' ? 'Homme' : 'Femme';
+    if (key === 'status') {
+      const labels: Record<string, string> = { present: 'Présent', absent: 'Absent', pending: 'Pending' };
+      return labels[value] ?? value;
+    }
+    return value;
+  };
+
+  const exportFilteredStatistics = () => {
+    if (!data) return;
+    const generatedAt = new Date().toLocaleString('fr-FR');
+    const activeFilters = Object.entries(filters).map(([key, value]) => [
+      key,
+      getFilterLabel(key as keyof typeof filters, value),
+    ]);
+
+    downloadCsv(`statistiques-filtrees-${new Date().toISOString().slice(0, 10)}.csv`, [
+      ['Export statistiques filtrées'],
+      ['Généré le', generatedAt],
+      [],
+      ['Filtres'],
+      ...activeFilters,
+      [],
+      ['Indicateurs'],
+      ['Étudiants', data.metrics.totalStudents],
+      ['Enseignants', data.metrics.teachersCount],
+      ['Classes', data.metrics.classesCount],
+      ['Taux présence', `${data.metrics.attendanceRate}%`],
+      ['Présents', data.metrics.present],
+      ['Absents', data.metrics.absent],
+      ['Pending', data.metrics.pending],
+      [],
+      ['Présence par classe'],
+      ['Classe', 'Présents', 'Absents', 'Pending', 'Taux'],
+      ...data.attendanceByClass.map((item) => [item.name, item.present, item.absent, item.pending, `${item.rate}%`]),
+      [],
+      ['Tendances de présence'],
+      ['Date', 'Présents', 'Absents', 'Pending'],
+      ...data.attendanceTrends.map((item) => [item.date, item.present, item.absent, item.pending]),
+      [],
+      ['Étudiants les plus absents'],
+      ['Étudiant', 'Total'],
+      ...data.mostAbsentStudents.map((item) => [item.name, item.total]),
+      [],
+      ['Étudiants les plus actifs'],
+      ['Étudiant', 'Total'],
+      ...data.mostActiveStudents.map((item) => [item.name, item.total]),
+      [],
+      ['Conformité enseignants'],
+      ['Enseignant', 'Pointages'],
+      ...data.teacherCompliance.map((item) => [item.name, item.records]),
+      [],
+      ['Distribution genre'],
+      ['Genre', 'Total'],
+      ...data.genderDistribution.map((item) => [item.gender, item.total]),
+      [],
+      ['Étudiants par filière'],
+      ['Filière', 'Total'],
+      ...data.studentsPerFiliere.map((item) => [item.filiere, item.total]),
+      [],
+      ['Étudiants par classe'],
+      ['Classe', 'Total'],
+      ...data.studentsPerClass.map((item) => [item.className, item.total]),
+    ]);
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -128,6 +216,15 @@ export default function StatisticsPage() {
             <h2 className="panel-title">Filtres progressifs</h2>
             <p className="panel-copy">Global par défaut, puis département, filière, classe et cours si nécessaire.</p>
           </div>
+          <button
+            className="btn-outline flex items-center gap-2"
+            type="button"
+            onClick={exportFilteredStatistics}
+            disabled={loading || !data}
+          >
+            <Download size={14} />
+            Export filtré
+          </button>
         </div>
         <div className="grid gap-3 md:grid-cols-4">
           <select className="input" value={filters.departmentId} onChange={(event) => setFilter('departmentId', event.target.value)}>

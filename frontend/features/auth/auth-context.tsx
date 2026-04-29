@@ -76,17 +76,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           access_token: string;
           user: { id: number; email: string; fullName?: string; role: AuthUser['role']; departments: Department[] };
         }>('/auth/login', { identifier, password });
-        const { access_token, user: payloadUser } = response.data;
+        const { access_token } = response.data;
         clearRefCache();
         localStorage.setItem('deaa_token', access_token);
+        const me = await api.get<{
+          sub: number;
+          email: string;
+          role: AuthUser['role'];
+          fullName?: string;
+          departments: Department[];
+          studentProfile?: AuthUser['studentProfile'];
+          teacherProfile?: AuthUser['teacherProfile'];
+        }>('/auth/me');
         setUser({
-          id: payloadUser.id,
-          email: payloadUser.email,
-          role: payloadUser.role,
-          fullName: payloadUser.fullName,
-          departments: payloadUser.departments ?? [],
-          studentProfile: null,
-          teacherProfile: null,
+          id: me.data.sub,
+          email: me.data.email,
+          role: me.data.role,
+          fullName: me.data.fullName,
+          departments: me.data.departments ?? [],
+          studentProfile: me.data.studentProfile ?? null,
+          teacherProfile: me.data.teacherProfile ?? null,
         });
       },
       logout: () => {

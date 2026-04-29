@@ -18,8 +18,30 @@ export type PaginatedResponse<T> = {
   };
 };
 
+function getApiBaseUrl() {
+  const configured = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000/api';
+
+  if (typeof window === 'undefined') return configured;
+
+  const pageHost = window.location.hostname;
+  const isLocalPage = ['localhost', '127.0.0.1', '::1'].includes(pageHost);
+
+  try {
+    const url = new URL(configured);
+    const pointsToLocalhost = ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+    if (!isLocalPage && pointsToLocalhost) {
+      url.hostname = pageHost;
+      return url.toString();
+    }
+  } catch {
+    // Keep configured value if it is not an absolute URL.
+  }
+
+  return configured;
+}
+
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  baseURL: getApiBaseUrl(),
 });
 
 let lastNetworkToastAt = 0;

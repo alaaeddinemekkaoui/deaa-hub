@@ -1,6 +1,13 @@
 'use client';
 
-export type Meal = { id: number; name: string; price: number; active: boolean };
+export type Meal = {
+  id: number;
+  name: string;
+  price: number;
+  active: boolean;
+  serviceStartTime?: string | null;
+  serviceEndTime?: string | null;
+};
 
 export type StudentLookupResult = {
   id: number;

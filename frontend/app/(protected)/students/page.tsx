@@ -120,46 +120,6 @@ export default function StudentsPage() {
       .map((part) => part[0]?.toUpperCase() ?? '')
       .join('') || 'ET';
 
-  const getSortedHistory = (history: StudentClassHistory[] = []) =>
-    [...history].sort(
-      (a, b) => a.academicYear.localeCompare(b.academicYear) || a.id - b.id,
-    );
-
-  const isHistoryEntryRedoublant = (
-    history: StudentClassHistory[],
-    entryId: number,
-  ): boolean => {
-    const seenClassIds = new Set<number>();
-
-    for (const entry of history) {
-      const classId = entry.academicClass.id;
-      const repeated = seenClassIds.has(classId);
-
-      if (entry.id === entryId) {
-        return repeated;
-      }
-
-      seenClassIds.add(classId);
-    }
-
-    return false;
-  };
-
-  const isCurrentClassRedoublant = (student: Student): boolean => {
-    if (!student.academicClass || !student.classHistory?.length) {
-      return false;
-    }
-
-    const sortedHistory = getSortedHistory(student.classHistory);
-    const latestEntry = sortedHistory[sortedHistory.length - 1];
-
-    if (!latestEntry || latestEntry.academicClass.id !== student.academicClass.id) {
-      return false;
-    }
-
-    return isHistoryEntryRedoublant(sortedHistory, latestEntry.id);
-  };
-
   // Load reference data once per session
   useEffect(() => {
     const loadRef = async () => {
@@ -475,9 +435,11 @@ export default function StudentsPage() {
           {students.map((student) => {
             const photoUrl = `${apiBaseUrl}/students/${student.id}/photo`;
             const showPhoto = !photoErrors[student.id];
-            const history = getSortedHistory(student.classHistory ?? []);
+            const classLabel = student.academicClass
+              ? `${student.academicClass.name} · Année ${student.academicClass.year}`
+              : 'Classe non affectée';
             return (
-              <article key={student.id} className="flex min-h-[24rem] flex-col rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <article key={student.id} className="flex min-h-[18rem] flex-col rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-start gap-4">
                   <div className="relative h-18 w-18 shrink-0 overflow-hidden rounded-[1.4rem] border border-slate-200 bg-slate-100">
                     {showPhoto ? (
@@ -496,66 +458,28 @@ export default function StudentsPage() {
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        className="text-lg font-semibold text-slate-950 transition hover:text-emerald-700"
-                        href={`/students/${student.id}`}
-                      >
-                        {student.fullName}
-                      </Link>
-                      {isCurrentClassRedoublant(student) ? <span className="status-chip status-chip--warn">Redoublant</span> : null}
-                    </div>
-                    <p className="mt-1 text-sm text-slate-500">{student.academicClass ? `${student.academicClass.name} · Année ${student.academicClass.year}` : 'Classe non affectée'}</p>
+                    <Link
+                      className="text-lg font-semibold text-slate-950 transition hover:text-emerald-700"
+                      href={`/students/${student.id}`}
+                    >
+                      {student.fullName}
+                    </Link>
+                    <p className="mt-1 text-sm text-slate-500">{classLabel}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span className="status-chip status-chip--muted">{student.sex === 'female' ? 'Femme' : 'Homme'}</span>
-                      {!student.userId ? <span className="status-chip status-chip--muted">Sans compte</span> : null}
                       {student.laureate ? <span className="status-chip status-chip--ok">Lauréat {student.laureate.graduationYear}</span> : null}
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-3 text-sm text-slate-600">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Classe</p>
-                      <p className="mt-1 font-medium text-slate-900">{student.academicClass?.name ?? '-'}</p>
-                    </div>
-                    <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Année</p>
-                      <p className="mt-1 font-medium text-slate-900">{student.anneeAcademique}</p>
-                    </div>
+                <div className="mt-5 grid grid-cols-2 gap-3 text-sm text-slate-600">
+                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Classe</p>
+                    <p className="mt-1 font-medium text-slate-900">{student.academicClass?.name ?? '-'}</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Code étudiant</p>
-                      <p className="mt-1 font-medium text-slate-900">{student.codeEtudiant ?? '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Code Massar</p>
-                      <p className="mt-1 font-medium text-slate-900">{student.codeMassar}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Contact</p>
-                    <p className="mt-1 truncate font-medium text-slate-900">{student.email ?? 'Sans email'}</p>
-                    <p className="mt-0.5 font-medium text-slate-700">{student.telephone ?? 'Sans téléphone'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Historique</p>
-                    {history.length > 0 ? (
-                      <div className="mt-1 space-y-1">
-                        {history.slice(0, 2).map((entry, _index, sortedHistory) => {
-                          const repeated = isHistoryEntryRedoublant(sortedHistory, entry.id);
-                          return (
-                            <p key={entry.id} className="text-sm text-slate-700">
-                              {entry.academicYear}: {entry.academicClass.name} (Y{entry.studyYear}){repeated ? ' · Redoublant' : ''}
-                            </p>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="mt-1 text-sm text-slate-500">Aucun historique</p>
-                    )}
+                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Code étudiant</p>
+                    <p className="mt-1 font-medium text-slate-900">{student.codeEtudiant ?? '-'}</p>
                   </div>
                 </div>
 

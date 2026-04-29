@@ -60,3 +60,13 @@ export class ConsumeTicketDto {
   @IsString()
   code: string;
 }
+
+export class AutoConsumeTicketDto {
+  @IsString()
+  query: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  mealId?: number;
+}

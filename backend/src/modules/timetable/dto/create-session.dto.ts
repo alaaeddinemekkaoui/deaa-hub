@@ -44,7 +44,7 @@ export class CreateSessionDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(5)
+  @Max(7)
   dayOfWeek: number;
 
   @IsString()

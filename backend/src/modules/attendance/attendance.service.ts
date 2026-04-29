@@ -230,7 +230,7 @@ export class AttendanceService {
       },
       include: SESSION_INCLUDE,
     });
-    await this.ensurePendingRecords(updated);
+    await this.ensurePendingRecords(updated, dto.reopenAbsent ?? false);
 
     return { ...this.presentSession(updated), qrToken: token };
   }
@@ -444,26 +444,35 @@ export class AttendanceService {
     }
   }
 
-  private async ensurePendingRecords(session: SessionWithAttendance) {
+  private async ensurePendingRecords(session: SessionWithAttendance, reopenAbsent = false) {
     const students = await this.prisma.student.findMany({
       where: { classId: session.classId },
       select: { id: true },
     });
-    await this.prisma.$transaction(
-      students.map((student) =>
-        this.prisma.attendanceRecord.upsert({
-          where: { studentId_sessionId: { studentId: student.id, sessionId: session.id } },
-          create: {
-            studentId: student.id,
-            sessionId: session.id,
-            courseId: session.element.cours?.id,
-            status: AttendanceStatus.pending,
-            method: AttendanceMethod.qr,
-          },
-          update: {},
-        }),
-      ),
-    );
+    await this.prisma.$transaction(async (tx) => {
+      await Promise.all(
+        students.map((student) =>
+          tx.attendanceRecord.upsert({
+            where: { studentId_sessionId: { studentId: student.id, sessionId: session.id } },
+            create: {
+              studentId: student.id,
+              sessionId: session.id,
+              courseId: session.element.cours?.id,
+              status: AttendanceStatus.pending,
+              method: AttendanceMethod.qr,
+            },
+            update: {},
+          }),
+        ),
+      );
+
+      if (reopenAbsent) {
+        await tx.attendanceRecord.updateMany({
+          where: { sessionId: session.id, status: AttendanceStatus.absent },
+          data: { status: AttendanceStatus.pending, method: AttendanceMethod.qr },
+        });
+      }
+    });
   }
 
   private async buildOverviewWhere(

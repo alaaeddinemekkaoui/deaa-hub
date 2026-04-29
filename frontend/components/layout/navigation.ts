@@ -55,6 +55,7 @@ export const STUDENT_ONLY_ROUTES = [
   '/restauration',
   '/cours-resources',
   '/workflows',
+  '/modules',
 ];
 
 export const navigation: NavGroup[] = [
@@ -132,6 +133,8 @@ export const navigation: NavGroup[] = [
     roles: RESTAURATION_ROLES,
     items: [
       { href: '/restauration', label: 'Restauration', caption: 'Repas, solde et reçus', icon: Utensils },
+      { href: '/restauration/tickets', label: 'Mes tickets', caption: 'Ticket quotidien', icon: FileText, roles: ['student'] },
+      { href: '/restauration/verification', label: 'Validation tickets', caption: 'Codes et tickets', icon: FileText, roles: ['admin', 'staff', 'restauration'] },
     ],
   },
   {

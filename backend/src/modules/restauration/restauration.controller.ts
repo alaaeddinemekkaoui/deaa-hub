@@ -21,6 +21,7 @@ import { RestaurationService } from './restauration.service';
 import { CreateMealDto } from './dto/create-meal.dto';
 import { UpdateMealDto } from './dto/update-meal.dto';
 import {
+  AutoConsumeTicketDto,
   ConsumeTicketDto,
   IssueTicketDto,
   ReserveMealDto,
@@ -177,7 +178,7 @@ export class RestaurationController {
   }
 
   @Post('tickets/issue')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION, UserRole.STUDENT)
   issueTicket(@Body() dto: IssueTicketDto, @CurrentUser() user: JwtPayload) {
     return this.restaurationService.issueTicket(dto, user);
   }
@@ -195,6 +196,15 @@ export class RestaurationController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.restaurationService.consumeTicket(dto, user);
+  }
+
+  @Post('tickets/auto-consume')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION)
+  autoConsumeTicket(
+    @Body() dto: AutoConsumeTicketDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.restaurationService.autoConsumeTicket(dto, user);
   }
 
   @Get('transactions')

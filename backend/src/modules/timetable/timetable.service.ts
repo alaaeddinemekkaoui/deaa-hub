@@ -7,6 +7,7 @@ import { Prisma, ReservationStatus, RoomReservationPurpose } from '@prisma/clien
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { SessionQueryDto } from './dto/session-query.dto';
+import { TimetableHolidayDto } from './dto/timetable-holiday.dto';
 
 const SESSION_INCLUDE = {
   element: {
@@ -33,7 +34,7 @@ export class TimetableService {
     if (teacherId) filters.push({ teacherId });
     if (roomId) filters.push({ roomId });
     if (dayOfWeek) filters.push({ dayOfWeek });
-    if (weekStart) filters.push({ weekStart: new Date(weekStart) });
+    if (weekStart) filters.push({ weekStart: this.parseOptionalDate(weekStart) });
     if (departmentIds !== undefined) {
       filters.push({
         class: { filiere: { is: { departmentId: { in: departmentIds } } } },
@@ -70,7 +71,7 @@ export class TimetableService {
 
   async findWeek(classId: number, weekStart: string) {
     const sessions = await this.prisma.timetableSession.findMany({
-      where: { classId, weekStart: new Date(weekStart) },
+      where: { classId, weekStart: this.parseRequiredDate(weekStart, 'weekStart') },
       include: SESSION_INCLUDE,
       orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
     });
@@ -118,7 +119,7 @@ export class TimetableService {
         dayOfWeek: dto.dayOfWeek,
         startTime: dto.startTime,
         endTime: dto.endTime,
-        weekStart: dto.weekStart ? new Date(dto.weekStart) : null,
+        weekStart: this.parseOptionalDate(dto.weekStart),
       },
       include: SESSION_INCLUDE,
     });
@@ -148,7 +149,7 @@ export class TimetableService {
         ...(dto.startTime !== undefined ? { startTime: dto.startTime } : {}),
         ...(dto.endTime !== undefined ? { endTime: dto.endTime } : {}),
         ...(dto.weekStart !== undefined
-          ? { weekStart: dto.weekStart ? new Date(dto.weekStart) : null }
+          ? { weekStart: this.parseOptionalDate(dto.weekStart) }
           : {}),
       },
       include: SESSION_INCLUDE,
@@ -167,12 +168,45 @@ export class TimetableService {
 
   async checkConflicts(classId: number, weekStart?: string) {
     const where: Prisma.TimetableSessionWhereInput = { classId };
-    if (weekStart) where.weekStart = new Date(weekStart);
+    if (weekStart) where.weekStart = this.parseOptionalDate(weekStart);
     const sessions = await this.prisma.timetableSession.findMany({
       where,
       include: SESSION_INCLUDE,
     });
     return this.detectConflicts(sessions);
+  }
+
+  findHolidays() {
+    return this.prisma.timetableHoliday.findMany({
+      orderBy: { date: 'asc' },
+    });
+  }
+
+  createHoliday(dto: TimetableHolidayDto) {
+    this.parseRequiredDate(dto.date, 'date');
+    return this.prisma.timetableHoliday.create({
+      data: {
+        date: dto.date,
+        name: dto.name.trim(),
+        description: dto.description?.trim() || null,
+      },
+    });
+  }
+
+  updateHoliday(id: number, dto: TimetableHolidayDto) {
+    this.parseRequiredDate(dto.date, 'date');
+    return this.prisma.timetableHoliday.update({
+      where: { id },
+      data: {
+        date: dto.date,
+        name: dto.name.trim(),
+        description: dto.description?.trim() || null,
+      },
+    });
+  }
+
+  removeHoliday(id: number) {
+    return this.prisma.timetableHoliday.delete({ where: { id } });
   }
 
   private detectConflicts(
@@ -218,6 +252,21 @@ export class TimetableService {
       return h * 60 + m;
     };
     return toMin(s1) < toMin(e2) && toMin(s2) < toMin(e1);
+  }
+
+  private parseRequiredDate(value: string | null | undefined, field: string) {
+    const parsed = this.parseOptionalDate(value);
+    if (!parsed) throw new BadRequestException(`${field} invalide`);
+    return parsed;
+  }
+
+  private parseOptionalDate(value: string | null | undefined) {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new BadRequestException('Date invalide');
+    }
+    return parsed;
   }
 
   private async ensureSessionExists(id: number) {

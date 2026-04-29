@@ -13,6 +13,8 @@
   --sidebar:             #0e2016;
   --sidebar-foreground:  #e8f0eb;
   --ring:                rgba(27, 94, 59, 0.22);
+  --font-sans-stack:     ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono-stack:     ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
 @theme inline {
@@ -23,8 +25,8 @@
   --color-accent: var(--accent);
   --color-muted: var(--muted);
   --color-border: var(--border);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-sans-stack);
+  --font-mono: var(--font-mono-stack);
 }
 
 * {
@@ -39,7 +41,7 @@ body {
   min-height: 100vh;
   background: transparent;
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
   text-rendering: optimizeLegibility;
 }
 

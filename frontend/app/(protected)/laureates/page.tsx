@@ -2,14 +2,13 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Eye, GraduationCap, Medal, Pencil, Search, Trash2, X } from 'lucide-react';
+import { Eye, GraduationCap, Medal, MoreHorizontal, Pencil, Search, Trash2, X } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
 import { ExportDataButton } from '@/components/admin/export-data-button';
 import { ImportDataButton } from '@/components/admin/import-data-button';
 import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
-import { TableActionButton, TableActionGrid, TableActionLink } from '@/components/admin/table-actions';
 import { api } from '@/services/api';
 import { confirmDelete } from '@/lib/confirm';
 import { toast } from 'sonner';
@@ -22,9 +21,11 @@ type Laureate = {
   proofDocumentId?: number | null;
   student: {
     fullName: string;
+    sex: 'male' | 'female';
     codeEtudiant?: string | null;
     codeMassar?: string | null;
     filiere?: { name: string } | null;
+    academicClass?: { name: string; year?: number } | null;
   };
 };
 
@@ -150,6 +151,7 @@ export default function LaureatesPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [openActionsId, setOpenActionsId] = useState<number | null>(null);
 
   // modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -191,8 +193,23 @@ export default function LaureatesPage() {
   const openCreate = () => { resetForm(); setIsModalOpen(true); };
   const closeModal = () => { setIsModalOpen(false); resetForm(); };
 
-  const getStudentCode = (item: Laureate) =>
-    item.student.codeEtudiant ?? item.student.codeMassar ?? '—';
+  const getStudentCode = (item: Laureate) => item.student.codeEtudiant ?? '—';
+
+  const getInitials = (fullName: string) =>
+    fullName
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('') || 'LA';
+
+  const getClassLabel = (item: Laureate) => {
+    if (!item.student.academicClass) return 'Classe non affectée';
+    const year = item.student.academicClass.year
+      ? ` · Année ${item.student.academicClass.year}`
+      : '';
+    return `${item.student.academicClass.name}${year}`;
+  };
 
   const openEditModal = (item: Laureate) => {
     setEditingId(item.id);
@@ -276,74 +293,90 @@ export default function LaureatesPage() {
       )}
 
       {!loading && rows.length > 0 && (
-        <div className="data-table-wrap">
-          <div className="table-scroll">
-            <table className="table-base">
-              <thead>
-                <tr>
-                  <th>Code Étudiant</th>
-                  <th>Étudiant</th>
-                  <th>Filière</th>
-                  <th>Année de graduation</th>
-                  <th>Statut du diplôme</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((item) => (
-                  <tr key={item.id}>
-                    <td className="font-mono text-xs text-slate-600">
-                      {getStudentCode(item)}
-                    </td>
-                    <td>
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {rows.map((item) => (
+            <article key={item.id} className="flex min-h-[18rem] flex-col rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-start gap-4">
+                <div className="flex h-18 w-18 shrink-0 items-center justify-center rounded-[1.4rem] border border-slate-200 bg-[#f3f5f4] text-lg font-semibold text-[#8f1d22]">
+                  {getInitials(item.student.fullName)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <Link
+                    className="text-lg font-semibold text-slate-950 transition hover:text-emerald-700"
+                    href={`/students/${item.studentId}`}
+                  >
+                    {item.student.fullName}
+                  </Link>
+                  <p className="mt-1 text-sm text-slate-500">{getClassLabel(item)}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className="status-chip status-chip--muted">
+                      {item.student.sex === 'female' ? 'Femme' : 'Homme'}
+                    </span>
+                    <span className="status-chip status-chip--ok">Lauréat {item.graduationYear}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 gap-3 text-sm text-slate-600">
+                <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Classe</p>
+                  <p className="mt-1 font-medium text-slate-900">{item.student.academicClass?.name ?? '-'}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Code étudiant</p>
+                  <p className="mt-1 font-medium text-slate-900">{getStudentCode(item)}</p>
+                </div>
+              </div>
+
+              <div className="mt-auto pt-5">
+                <div className="relative flex justify-end">
+                  <button
+                    type="button"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+                    title={`Actions pour ${item.student.fullName}`}
+                    aria-label={`Actions pour ${item.student.fullName}`}
+                    onClick={() => setOpenActionsId((current) => current === item.id ? null : item.id)}
+                  >
+                    <MoreHorizontal size={17} />
+                  </button>
+                  {openActionsId === item.id ? (
+                    <div className="absolute bottom-12 right-0 z-20 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-sm shadow-lg">
                       <Link
-                        className="font-medium text-slate-900 transition hover:text-emerald-700 hover:underline"
+                        className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"
                         href={`/students/${item.studentId}`}
                       >
-                        {item.student.fullName}
+                        <Eye size={14} />
+                        Voir le profil
                       </Link>
-                    </td>
-                    <td className="text-slate-500">{item.student.filiere?.name ?? '—'}</td>
-                    <td>{item.graduationYear}</td>
-                    <td>
-                      <span
-                        className={
-                          item.diplomaStatus === 'retrieved'
-                            ? 'status-chip status-chip--ok'
-                            : 'status-chip status-chip--warn'
-                        }
+                      <button
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+                        type="button"
+                        onClick={() => {
+                          setOpenActionsId(null);
+                          openEditModal(item);
+                        }}
                       >
-                        {item.diplomaStatus === 'retrieved' ? 'Récupéré' : 'En attente'}
-                      </span>
-                    </td>
-                    <td>
-                      <TableActionGrid>
-                        <TableActionLink
-                          href={`/students/${item.studentId}`}
-                          icon={Eye}
-                          tone="profile"
-                          label={`Voir le profil de ${item.student.fullName}`}
-                        />
-                        <TableActionButton
-                          icon={Pencil}
-                          tone="edit"
-                          label={`Modifier ${item.student.fullName}`}
-                          onClick={() => openEditModal(item)}
-                        />
-                        <TableActionButton
-                          icon={Trash2}
-                          tone="delete"
-                          label={`Supprimer ${item.student.fullName}`}
-                          onClick={() => onDelete(item.id, item.student.fullName)}
-                        />
-                      </TableActionGrid>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                        <Pencil size={14} />
+                        Modifier
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-600 hover:bg-red-50"
+                        type="button"
+                        onClick={() => {
+                          setOpenActionsId(null);
+                          void onDelete(item.id, item.student.fullName);
+                        }}
+                      >
+                        <Trash2 size={14} />
+                        Supprimer
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </article>
+          ))}
+        </section>
       )}
 
       {/* Add / Edit modal */}

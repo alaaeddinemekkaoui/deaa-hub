@@ -25,7 +25,7 @@ export class SessionQueryDto extends PaginationDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(5)
+  @Max(7)
   dayOfWeek?: number;
 
   @IsOptional()

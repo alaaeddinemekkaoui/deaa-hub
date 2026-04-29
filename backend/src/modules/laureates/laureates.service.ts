@@ -20,7 +20,7 @@ export class LaureatesService {
     return this.prisma.laureate.findMany({
       include: {
         student: {
-          include: { filiere: true },
+          include: { filiere: true, academicClass: true },
         },
         proofDocument: true,
       },
@@ -32,7 +32,7 @@ export class LaureatesService {
     return this.prisma.laureate.findUnique({
       where: { id },
       include: {
-        student: { include: { filiere: true } },
+        student: { include: { filiere: true, academicClass: true } },
         proofDocument: true,
       },
     });
