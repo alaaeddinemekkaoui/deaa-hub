@@ -3,13 +3,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, ReservationStatus, RoomReservationPurpose } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { SessionQueryDto } from './dto/session-query.dto';
 
 const SESSION_INCLUDE = {
-  element: { include: { module: { select: { id: true, name: true } } } },
+  element: {
+    include: {
+      module: { select: { id: true, name: true } },
+      cours: { select: { id: true, name: true } },
+    },
+  },
   class: { select: { id: true, name: true, year: true } },
   teacher: { select: { id: true, firstName: true, lastName: true } },
   room: { select: { id: true, name: true } },
@@ -74,6 +79,30 @@ export class TimetableService {
     return { sessions, conflicts };
   }
 
+  async findOneDetailed(id: number) {
+    const session = await this.prisma.timetableSession.findUnique({
+      where: { id },
+      include: {
+        ...SESSION_INCLUDE,
+        attendanceRecords: {
+          include: {
+            student: {
+              select: {
+                id: true,
+                fullName: true,
+                codeMassar: true,
+                codeEtudiant: true,
+              },
+            },
+          },
+          orderBy: { student: { fullName: 'asc' } },
+        },
+      },
+    });
+    if (!session) throw new NotFoundException(`Session ${id} not found`);
+    return session;
+  }
+
   async create(dto: CreateSessionDto) {
     await this.ensureElementExists(dto.elementId);
     await this.ensureClassExists(dto.classId);
@@ -94,6 +123,8 @@ export class TimetableService {
       include: SESSION_INCLUDE,
     });
 
+    await this.syncRoomReservationForSession(session);
+
     return session;
   }
 
@@ -104,7 +135,7 @@ export class TimetableService {
     if (dto.teacherId) await this.ensureTeacherExists(dto.teacherId);
     if (dto.roomId) await this.ensureRoomExists(dto.roomId);
 
-    return this.prisma.timetableSession.update({
+    const updated = await this.prisma.timetableSession.update({
       where: { id },
       data: {
         ...(dto.elementId !== undefined ? { elementId: dto.elementId } : {}),
@@ -122,11 +153,16 @@ export class TimetableService {
       },
       include: SESSION_INCLUDE,
     });
+
+    await this.syncRoomReservationForSession(updated);
+    return updated;
   }
 
   async remove(id: number) {
     await this.ensureSessionExists(id);
-    return this.prisma.timetableSession.delete({ where: { id } });
+    const deleted = await this.prisma.timetableSession.delete({ where: { id } });
+    await this.removeRoomReservationForSession(id);
+    return deleted;
   }
 
   async checkConflicts(classId: number, weekStart?: string) {
@@ -218,5 +254,70 @@ export class TimetableService {
       select: { id: true },
     });
     if (!r) throw new NotFoundException(`Room ${id} not found`);
+  }
+
+  private async syncRoomReservationForSession(
+    session: {
+      id: number;
+      roomId: number | null;
+      classId: number;
+      teacherId: number | null;
+      dayOfWeek: number;
+      startTime: string;
+      endTime: string;
+      weekStart: Date | null;
+      class?: { name: string; year: number } | null;
+      teacher?: { firstName: string; lastName: string } | null;
+      element?: { name: string; module?: { name: string } | null } | null;
+    },
+  ) {
+    await this.removeRoomReservationForSession(session.id);
+
+    if (!session.roomId || !session.weekStart) return;
+
+    const reservationDate = this.dateFromWeekStart(
+      session.weekStart,
+      session.dayOfWeek,
+    );
+
+    await this.prisma.roomReservation.create({
+      data: {
+        roomId: session.roomId,
+        classId: session.classId,
+        date: reservationDate,
+        dayOfWeek: session.dayOfWeek,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        reservedBy: session.teacher
+          ? `${session.teacher.firstName} ${session.teacher.lastName}`.trim()
+          : `Emploi du temps ${session.class?.name ?? ''}`.trim(),
+        purpose: RoomReservationPurpose.cours,
+        notes: this.buildTimetableReservationNote(session),
+        status: ReservationStatus.approved,
+      },
+    });
+  }
+
+  private async removeRoomReservationForSession(sessionId: number) {
+    await this.prisma.roomReservation.deleteMany({
+      where: {
+        purpose: RoomReservationPurpose.cours,
+        notes: { contains: `[TIMETABLE_SESSION:${sessionId}]` },
+      },
+    });
+  }
+
+  private buildTimetableReservationNote(session: {
+    id: number;
+    class?: { name: string; year: number } | null;
+    element?: { name: string; module?: { name: string } | null } | null;
+  }) {
+    return `[TIMETABLE_SESSION:${session.id}] Réservation automatique emploi du temps · ${session.class?.name ?? 'Classe'} · ${session.element?.module?.name ?? ''} ${session.element?.name ?? ''}`.trim();
+  }
+
+  private dateFromWeekStart(weekStart: Date, dayOfWeek: number) {
+    const date = new Date(weekStart);
+    date.setUTCDate(date.getUTCDate() + dayOfWeek - 1);
+    return date.toISOString().slice(0, 10);
   }
 }

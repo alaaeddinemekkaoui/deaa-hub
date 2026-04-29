@@ -57,6 +57,23 @@ type ElementGradeSummary = {
   assessmentType: string | null;
 };
 
+type StudentGradeView = Prisma.StudentGradeGetPayload<{
+  include: {
+    teacher: {
+      select: { id: true; firstName: true; lastName: true };
+    };
+    academicClass: {
+      select: { id: true; name: true; year: true };
+    };
+    module: {
+      select: { id: true; name: true; semestre: true };
+    };
+    elementModule: {
+      select: { id: true; name: true; type: true };
+    };
+  };
+}>;
+
 @Injectable()
 export class GradesService {
   private readonly listCache = new KeyedTtlCache<unknown>({
@@ -205,6 +222,59 @@ export class GradesService {
         orderBy: [{ academicYear: 'desc' }, { createdAt: 'desc' }],
       }),
     );
+  }
+
+  async findMine(currentUser: JwtPayload) {
+    const student = await this.prisma.student.findUnique({
+      where: { userId: currentUser.sub },
+      select: {
+        id: true,
+        fullName: true,
+        codeMassar: true,
+        codeEtudiant: true,
+        anneeAcademique: true,
+        academicClass: {
+          select: { id: true, name: true, year: true },
+        },
+      },
+    });
+
+    if (!student) {
+      return { student: null, currentAcademicYear: null, currentGrades: [], historyByYear: [] };
+    }
+
+    const currentAcademicYear =
+      (
+        await this.prisma.academicYear.findFirst({
+          where: { isCurrent: true },
+          select: { label: true },
+          orderBy: { updatedAt: 'desc' },
+        })
+      )?.label ??
+      student.anneeAcademique ??
+      null;
+
+    const grades = (await this.findByStudent(student.id)) as StudentGradeView[];
+    const currentGrades = currentAcademicYear
+      ? grades.filter((grade) => grade.academicYear === currentAcademicYear)
+      : [];
+    const historyMap = new Map<string, StudentGradeView[]>();
+
+    for (const grade of grades) {
+      if (!grade.academicYear || grade.academicYear === currentAcademicYear) continue;
+      const bucket = historyMap.get(grade.academicYear) ?? [];
+      bucket.push(grade);
+      historyMap.set(grade.academicYear, bucket);
+    }
+
+    return {
+      student,
+      currentAcademicYear,
+      currentGrades,
+      historyByYear: [...historyMap.entries()]
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([year, rows]) => ({ year, grades: rows })),
+    };
   }
 
   async findByTeacher(teacherId: number) {

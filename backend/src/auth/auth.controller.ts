@@ -29,11 +29,16 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   async me(@CurrentUser() payload: JwtPayload) {
-    const user = await this.usersService.findOne(payload.sub);
+    const [user, linkedProfiles] = await Promise.all([
+      this.usersService.findOne(payload.sub),
+      this.usersService.findLinkedProfiles(payload.sub),
+    ]);
     return {
       ...payload,
       fullName: user?.fullName,
       departments: user?.departments ?? [],
+      studentProfile: linkedProfiles.student,
+      teacherProfile: linkedProfiles.teacher,
     };
   }
 

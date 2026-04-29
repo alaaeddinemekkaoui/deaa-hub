@@ -99,6 +99,21 @@ export class UsersService {
     return mapDepartments(user);
   }
 
+  async findLinkedProfiles(userId: number) {
+    const [student, teacher] = await Promise.all([
+      this.prisma.student.findUnique({
+        where: { userId },
+        select: { id: true, classId: true, fullName: true },
+      }),
+      this.prisma.teacher.findUnique({
+        where: { userId },
+        select: { id: true, departmentId: true, firstName: true, lastName: true },
+      }),
+    ]);
+
+    return { student, teacher };
+  }
+
   findByEmail(email: string) {
     return this.prisma.user.findUnique({ where: { email } });
   }

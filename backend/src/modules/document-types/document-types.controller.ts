@@ -23,13 +23,29 @@ export class DocumentTypesController {
   constructor(private readonly service: DocumentTypesService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.TEACHER,
+    UserRole.STUDENT,
+    UserRole.INSPECTOR,
+  )
   findAll() {
     return this.service.findAll();
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.TEACHER,
+    UserRole.STUDENT,
+    UserRole.INSPECTOR,
+  )
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);
   }

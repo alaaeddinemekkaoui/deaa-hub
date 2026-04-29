@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
 import { LoadingScreen } from '@/components/admin/loading-screen';
 import { useAuth } from '@/features/auth/auth-context';
+import { STUDENT_ONLY_ROUTES } from '@/components/layout/navigation';
 
 // Pages that the 'user' role cannot access
 const USER_ROLE_BLOCKED = [
@@ -25,7 +26,23 @@ export default function ProtectedLayout({
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const syncSidebarWithViewport = () => {
+      setSidebarOpen(window.innerWidth >= 768);
+    };
+
+    syncSidebarWithViewport();
+    window.addEventListener('resize', syncSidebarWithViewport);
+    return () => window.removeEventListener('resize', syncSidebarWithViewport);
+  }, []);
+
+  useEffect(() => {
+    if (window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  }, [pathname]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -49,6 +66,14 @@ export default function ProtectedLayout({
     ) {
       router.replace('/restauration');
     }
+
+    if (
+      !loading &&
+      user?.role === 'student' &&
+      !STUDENT_ONLY_ROUTES.some((allowed) => pathname === allowed || pathname.startsWith(`${allowed}/`))
+    ) {
+      router.replace('/dashboard');
+    }
   }, [loading, user, router, pathname]);
 
   if (loading) {
@@ -59,31 +84,20 @@ export default function ProtectedLayout({
     return null;
   }
 
-  const isDashboard = pathname === '/dashboard';
-
-  if (isDashboard) {
-    return (
-      <div className="min-h-screen">
-        <div className="container-page">
-          <Topbar />
-          {children}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen md:flex md:items-start">
-      <Sidebar open={sidebarOpen} />
-      <main className="w-full min-w-0">
-        <div className="container-page">
-          <Topbar
-            sidebarOpen={sidebarOpen}
-            onToggleSidebar={() => setSidebarOpen((open) => !open)}
-          />
-          {children}
-        </div>
-      </main>
+    <div className="min-h-screen">
+      <Topbar
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen((open) => !open)}
+      />
+      <div className="md:flex md:items-start">
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <main className="w-full min-w-0">
+          <div className="container-page">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

@@ -54,6 +54,12 @@ export class GradesController {
     return this.gradesService.findByStudent(studentId);
   }
 
+  @Get('me')
+  @Roles(UserRole.STUDENT)
+  findMine(@CurrentUser() currentUser: JwtPayload) {
+    return this.gradesService.findMine(currentUser);
+  }
+
   @Get('teacher/:teacherId')
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   findByTeacher(@Param('teacherId', ParseIntPipe) teacherId: number) {

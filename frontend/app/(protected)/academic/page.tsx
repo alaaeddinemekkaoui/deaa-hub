@@ -25,6 +25,7 @@ type AcademicModule = {
 type ElementModule = {
   id: number; name: string; type: 'CM' | 'TD' | 'TP';
   volumeHoraire?: number | null; moduleId: number;
+  sessionDurationMinutes?: number | null;
   ponderation?: number | null; coefficient?: number | null;
   _count?: { sessions: number };
 };
@@ -34,6 +35,15 @@ const TYPE_COLOR: Record<string, string> = {
   TD: 'bg-teal-50 text-teal-700 border-teal-200',
   TP: 'bg-amber-50 text-amber-700 border-amber-200',
 };
+
+const SESSION_DURATIONS = [60, 90, 120, 150, 180];
+
+function formatDuration(minutes?: number | null) {
+  if (!minutes) return 'Durée non définie';
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return `${hours}h${remainder ? `${remainder}min` : ''}`;
+}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -73,6 +83,7 @@ export default function AcademicPage() {
   const [elName, setElName] = useState('');
   const [elType, setElType] = useState<'CM' | 'TD' | 'TP'>('CM');
   const [elVolume, setElVolume] = useState('');
+  const [elSessionDuration, setElSessionDuration] = useState('90');
   const [elPonderation, setElPonderation] = useState('1');
   const [elCoefficient, setElCoefficient] = useState('1');
   const [elModuleId, setElModuleId] = useState('');
@@ -218,7 +229,7 @@ export default function AcademicPage() {
 
   // ── Element CRUD ──
   const openCreateEl = () => {
-    setEditingElId(null); setElName(''); setElType('CM'); setElVolume('');
+    setEditingElId(null); setElName(''); setElType('CM'); setElVolume(''); setElSessionDuration('90');
     setElPonderation('1'); setElCoefficient('1');
     setElModuleId(String(selectedModule?.id ?? ''));
     setElModal(true);
@@ -226,6 +237,7 @@ export default function AcademicPage() {
   const openEditEl = (el: ElementModule) => {
     setEditingElId(el.id); setElName(el.name); setElType(el.type);
     setElVolume(String(el.volumeHoraire ?? '')); setElPonderation(String(el.ponderation ?? 1));
+    setElSessionDuration(String(el.sessionDurationMinutes ?? 90));
     setElCoefficient(String(el.coefficient ?? 1)); setElModuleId(String(el.moduleId));
     setElModal(true);
   };
@@ -237,6 +249,7 @@ export default function AcademicPage() {
         name: elName.trim(),
         type: elType,
         volumeHoraire: elVolume ? Number(elVolume) : null,
+        sessionDurationMinutes: elSessionDuration ? Number(elSessionDuration) : null,
         ponderation: elPonderation ? Number(elPonderation) : 1,
         coefficient: elCoefficient ? Number(elCoefficient) : 1,
         moduleId: Number(elModuleId),
@@ -379,6 +392,7 @@ export default function AcademicPage() {
                     <p className="truncate text-sm font-medium text-slate-800">{el.name}</p>
                     <p className="text-xs text-slate-400">
                       {el.volumeHoraire ? `${el.volumeHoraire}h` : 'Volume non défini'}
+                      {' • '}Séance {formatDuration(el.sessionDurationMinutes)}
                       {' • '}Pond. {el.ponderation ?? 1}
                       {' • '}Coefficient {el.coefficient ?? 1}
                       {' • '}{el._count?.sessions ?? 0} session{(el._count?.sessions ?? 0) !== 1 ? 's' : ''}
@@ -525,6 +539,17 @@ export default function AcademicPage() {
             <div className="field-stack">
               <label className="field-label">Volume horaire (h)</label>
               <input className="input" type="number" min={1} value={elVolume} onChange={(e) => setElVolume(e.target.value)} placeholder="ex. 30" />
+            </div>
+            <div className="field-stack">
+              <label className="field-label">Durée par séance</label>
+              <select className="input" value={elSessionDuration} onChange={(e) => setElSessionDuration(e.target.value)}>
+                <option value="">—</option>
+                {SESSION_DURATIONS.map((minutes) => (
+                  <option key={minutes} value={minutes}>
+                    {formatDuration(minutes)}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

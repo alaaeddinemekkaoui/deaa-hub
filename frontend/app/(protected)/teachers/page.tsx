@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -65,6 +66,7 @@ const PAGE_SIZE = 8;
 export default function TeachersPage() {
   const { user } = useAuth();
   const canDelete = user?.role === 'admin';
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
   const [docsTeacher, setDocsTeacher] = useState<{ id: number; name: string } | null>(null);
   const [rows, setRows] = useState<Teacher[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -98,6 +100,7 @@ export default function TeachersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [photoErrors, setPhotoErrors] = useState<Record<number, boolean>>({});
   const [meta, setMeta] = useState({
     page: 1,
     limit: PAGE_SIZE,
@@ -184,6 +187,9 @@ export default function TeachersPage() {
 
   const getTeacherName = (teacher: Teacher) =>
     `${teacher.firstName} ${teacher.lastName}`.trim();
+
+  const getInitials = (teacher: Teacher) =>
+    `${teacher.firstName?.[0] ?? ''}${teacher.lastName?.[0] ?? ''}`.toUpperCase() || 'EN';
 
   const openEditModal = (teacher: Teacher) => {
     setEditingId(teacher.id);
@@ -580,101 +586,101 @@ export default function TeachersPage() {
           />
         ) : (
           <>
-            <div className="data-table-wrap">
-              <div className="table-scroll">
-                <table className="table-base">
-                  <thead>
-                    <tr>
-                      <th>Enseignant</th>
-                      <th>Statut</th>
-                      <th>CIN</th>
-                      <th>Grade</th>
-                      <th>Inscription</th>
-                      <th>Département</th>
-                      <th>Filière</th>
-                      <th>Contact</th>
-                      <th>Mise à jour</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((item) => (
-                      <tr key={item.id}>
-                        <td>
-                          <div>
-                            <Link
-                              className="font-medium text-slate-950 transition hover:text-emerald-700 hover:underline"
-                              href={`/teachers/${item.id}`}
-                            >
-                              {getTeacherName(item)}
-                            </Link>
-                            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
-                              {item.grade.name}
-                            </p>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {rows.map((item) => {
+                const photoUrl = `${apiBaseUrl}/teachers/${item.id}/photo`;
+                const showPhoto = !photoErrors[item.id];
+                const permanent = !/vacataire/i.test(item.role.name);
+                return (
+                  <article key={item.id} className="flex min-h-[23rem] flex-col rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start gap-4">
+                      <div className="relative h-18 w-18 shrink-0 overflow-hidden rounded-[1.4rem] border border-slate-200 bg-slate-100">
+                        {showPhoto ? (
+                          <Image
+                            src={photoUrl}
+                            alt={getTeacherName(item)}
+                            fill
+                            unoptimized
+                            className="object-cover"
+                            onError={() => setPhotoErrors((current) => ({ ...current, [item.id]: true }))}
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-[#f3f5f4] text-lg font-semibold text-[#8f1d22]">
+                            {getInitials(item)}
                           </div>
-                        </td>
-                        <td>
-                          {/vacataire/i.test(item.role.name) ? (
-                            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">
-                              Vacataire
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-                              Permanent
-                            </span>
-                          )}
-                        </td>
-                        <td>{item.cin ?? '-'}</td>
-                        <td>{item.grade.name}</td>
-                        <td>
-                          {item.dateInscription
-                            ? new Date(item.dateInscription).toLocaleDateString()
-                            : '-'}
-                        </td>
-                        <td>{item.department.name}</td>
-                        <td>{item.filiere?.name ?? 'Toutes les filières'}</td>
-                        <td>
-                          <div className="space-y-1 text-sm text-slate-600">
-                            <p>{item.email ?? '-'}</p>
-                            <p>{item.phoneNumber ?? '-'}</p>
-                          </div>
-                        </td>
-                        <td>{new Date(item.updatedAt).toLocaleString()}</td>
-                        <td>
-                          <TableActionGrid>
-                            <TableActionLink
-                              href={`/teachers/${item.id}`}
-                              icon={Eye}
-                              tone="profile"
-                              label={`Voir le profil de ${getTeacherName(item)}`}
-                            />
-                            <TableActionButton
-                              icon={FolderOpen}
-                              tone="docs"
-                              label={`Ouvrir le dossier de ${getTeacherName(item)}`}
-                              onClick={() => setDocsTeacher({ id: item.id, name: getTeacherName(item) })}
-                            />
-                            <TableActionButton
-                              icon={Pencil}
-                              tone="edit"
-                              label={`Modifier ${getTeacherName(item)}`}
-                              onClick={() => openEditModal(item)}
-                            />
-                            {canDelete && (
-                              <TableActionButton
-                                icon={Trash2}
-                                tone="delete"
-                                label={`Supprimer ${getTeacherName(item)}`}
-                                onClick={() => onDelete(item.id)}
-                              />
-                            )}
-                          </TableActionGrid>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          className="text-lg font-semibold text-slate-950 transition hover:text-emerald-700"
+                          href={`/teachers/${item.id}`}
+                        >
+                          {getTeacherName(item)}
+                        </Link>
+                        <p className="mt-1 text-sm text-slate-500">{item.department.name}</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <span className={permanent ? 'status-chip status-chip--ok' : 'status-chip status-chip--warn'}>
+                            {permanent ? 'Permanent' : 'Vacataire'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid gap-3 text-sm text-slate-600">
+                      <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Département</p>
+                        <p className="mt-1 font-medium text-slate-900">{item.department.name}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Type</p>
+                          <p className="mt-1 font-medium text-slate-900">{permanent ? 'Permanent' : 'Vacataire'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Grade</p>
+                          <p className="mt-1 font-medium text-slate-900">{item.grade.name}</p>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Contact</p>
+                        <p className="mt-1 truncate font-medium text-slate-900">{item.email ?? 'Sans email'}</p>
+                        <p className="mt-0.5 font-medium text-slate-700">{item.phoneNumber ?? 'Sans téléphone'}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-auto pt-5">
+                      <TableActionGrid>
+                        <TableActionLink
+                          href={`/teachers/${item.id}`}
+                          icon={Eye}
+                          tone="profile"
+                          label={`Voir le profil de ${getTeacherName(item)}`}
+                        />
+                        <TableActionButton
+                          icon={FolderOpen}
+                          tone="docs"
+                          label={`Ouvrir le dossier de ${getTeacherName(item)}`}
+                          onClick={() => setDocsTeacher({ id: item.id, name: getTeacherName(item) })}
+                        />
+                        <TableActionButton
+                          icon={Pencil}
+                          tone="edit"
+                          label={`Modifier ${getTeacherName(item)}`}
+                          onClick={() => openEditModal(item)}
+                        />
+                        {canDelete ? (
+                          <TableActionButton
+                            icon={Trash2}
+                            tone="delete"
+                            label={`Supprimer ${getTeacherName(item)}`}
+                            onClick={() => onDelete(item.id)}
+                          />
+                        ) : null}
+                      </TableActionGrid>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
 
             <PaginationControls

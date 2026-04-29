@@ -1,9 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
+import { useAuth } from '@/features/auth/auth-context';
 import { api, getApiErrorMessage, PaginatedResponse } from '@/services/api';
 import { toast } from 'sonner';
 
@@ -23,7 +25,7 @@ type AcademicClass = {
 };
 type Room = { id: number; name: string };
 type Teacher = { id: number; firstName: string; lastName: string };
-type ElementModule = { id: number; name: string; type: 'CM' | 'TD' | 'TP'; volumeHoraire?: number | null; module: { name: string } };
+type ElementModule = { id: number; name: string; type: 'CM' | 'TD' | 'TP'; volumeHoraire?: number | null; sessionDurationMinutes?: number | null; module: { name: string } };
 
 type Session = {
   id: number;
@@ -35,7 +37,7 @@ type Session = {
   startTime: string;
   endTime: string;
   weekStart: string | null;
-  element: { id: number; name: string; type: 'CM' | 'TD' | 'TP'; module: { name: string } };
+  element: { id: number; name: string; type: 'CM' | 'TD' | 'TP'; module: { name: string }; cours?: { id: number; name: string } | null };
   class: { id: number; name: string; year: number };
   teacher?: { id: number; firstName: string; lastName: string } | null;
   room?: { id: number; name: string } | null;
@@ -45,6 +47,12 @@ type Conflict = { sessionIds: number[]; reason: string };
 
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'];
 const HOURS = Array.from({ length: 11 }, (_, i) => i + 8); // 8h to 18h
+const TIME_OPTIONS = Array.from({ length: 22 }, (_, index) => {
+  const totalMinutes = 8 * 60 + index * 30;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+});
 
 const TYPE_STYLE: Record<string, string> = {
   CM: 'bg-blue-50 border-blue-300 text-blue-900',
@@ -84,9 +92,21 @@ function addDays(dateValue: string, n: number): string {
   return formatDateInput(d);
 }
 
-function addHoursToTime(time: string, hours: number): string {
+function addMinutesToTime(time: string, minutesToAdd: number): string {
   const [h, m] = time.split(':').map(Number);
-  return `${String(h + hours).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  const total = h * 60 + m + minutesToAdd;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+function addHoursToTime(time: string, hours: number): string {
+  return addMinutesToTime(time, hours * 60);
+}
+
+function formatDuration(minutes?: number | null) {
+  if (!minutes) return 'Durée libre';
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return `${hours}h${remainder ? `${remainder}min` : ''}`;
 }
 
 function getSessionDate(weekStart: string, dayOfWeek: number): string {
@@ -104,9 +124,9 @@ function timeToRow(time: string): number {
 }
 
 function rowSpan(start: string, end: string): number {
-  const [sh] = start.split(':').map(Number);
-  const [eh] = end.split(':').map(Number);
-  return eh - sh;
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  return Math.max(1, Math.ceil(((eh * 60 + em) - (sh * 60 + sm)) / 60));
 }
 
 function getWeekNumber(date: Date): number {
@@ -120,6 +140,8 @@ function getWeekNumber(date: Date): number {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TimetablePage() {
+  const { user } = useAuth();
+  const isStudent = user?.role === 'student';
   const [classes, setClasses] = useState<AcademicClass[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -246,6 +268,13 @@ export default function TimetablePage() {
     }
   };
 
+  const applyElementDuration = (elementId: string, start = addStart) => {
+    const element = elements.find((item) => String(item.id) === elementId);
+    if (element?.sessionDurationMinutes) {
+      setAddEnd(addMinutesToTime(start, element.sessionDurationMinutes));
+    }
+  };
+
   // Session move modal
   const [moveModal, setMoveModal] = useState(false);
   const [movingSession, setMovingSession] = useState<Session | null>(null);
@@ -317,6 +346,14 @@ export default function TimetablePage() {
     };
     void load();
   }, []);
+
+  useEffect(() => {
+    if (!isStudent) return;
+    const classId = user?.studentProfile?.classId;
+    if (classId) {
+      setSelectedClassId(String(classId));
+    }
+  }, [isStudent, user?.studentProfile?.classId]);
 
   useEffect(() => {
     if (!selectedClassId) { setElements([]); return; }
@@ -400,16 +437,18 @@ export default function TimetablePage() {
   };
 
   const openAddModal = (day?: number, hour?: number, elementId?: string) => {
+    const startTime = hour !== undefined ? `${String(hour).padStart(2, '0')}:00` : '08:00';
     setAddDay(String(day ?? 1));
-    setAddStart(hour !== undefined ? `${String(hour).padStart(2, '0')}:00` : '08:00');
-    setAddEnd(hour !== undefined ? `${String(hour + 2).padStart(2, '0')}:00` : '10:00');
+    setAddStart(startTime);
     if (elementId) {
       const el = elements.find((e) => String(e.id) === elementId);
       setAddModuleFilter(el?.module.name ?? '');
       setAddElementId(elementId);
+      setAddEnd(addMinutesToTime(startTime, el?.sessionDurationMinutes ?? 120));
     } else {
       setAddModuleFilter('');
       setAddElementId('');
+      setAddEnd(addMinutesToTime(startTime, 120));
     }
     setAddTeacherId('');
     setAddRoomId('');
@@ -484,12 +523,12 @@ export default function TimetablePage() {
         <PageHeader
           eyebrow="Emploi du temps"
           title="L'emploi du temps"
-          description="Planifiez les cours par classe et semaine. Les conflits sont signalés automatiquement."
+          description={isStudent ? "Votre emploi du temps est chargé automatiquement à partir de votre classe." : "Planifiez les cours par classe et semaine. Les conflits sont signalés automatiquement."}
         />
 
         {/* ── Toolbar ── */}
         <section className="surface-card p-4 space-y-4">
-          {/* Row 1 — class cascade: Département → Filière → Option → Classe */}
+          {!isStudent ? (
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sélection de la classe</p>
             <div className="flex flex-wrap items-end gap-3">
@@ -579,6 +618,19 @@ export default function TimetablePage() {
               )}
             </div>
           </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Classe actuelle</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {selectedClass?.name ? `${selectedClass.name} · Année ${selectedClass.year}` : 'Classe non trouvée'}
+                </p>
+              </div>
+              <div className="text-sm text-slate-500">
+                Semaine du {toLocalDate(weekStart).toLocaleDateString('fr-FR')} au {toLocalDate(weekEnd).toLocaleDateString('fr-FR')}
+              </div>
+            </div>
+          )}
 
           {/* Row 2 — session filters */}
           <div className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3">
@@ -757,7 +809,13 @@ export default function TimetablePage() {
                                     ? `cursor-pointer ${isTodayCol ? 'hover:bg-blue-50' : 'hover:bg-slate-50'}`
                                     : ''
                                 } ${isTodayCol && !session ? 'bg-blue-50/30' : ''}`}
-                                onClick={!session ? () => openAddModal(day, hour) : undefined}
+                                onClick={!session && !isStudent ? () => openAddModal(day, hour) : undefined}
+                                onDragOver={!session && !isStudent ? (event) => event.preventDefault() : undefined}
+                                onDrop={!session && !isStudent ? (event) => {
+                                  event.preventDefault();
+                                  const elementId = event.dataTransfer.getData('text/plain');
+                                  if (elementId) openAddModal(day, hour, elementId);
+                                } : undefined}
                               >
                                 {session && (
                                   <div
@@ -781,18 +839,31 @@ export default function TimetablePage() {
                                       <p className="inline-block rounded-full bg-white/60 px-1.5 py-0.5 text-[10px] text-slate-600">{session.room.name}</p>
                                     )}
                                     <div className="mt-2 flex items-center gap-2">
-                                      <button
-                                        type="button"
-                                        className="rounded bg-white/70 px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-white"
-                                        onClick={(e) => { e.stopPropagation(); openMoveModal(session); }}
-                                      >
-                                        Déplacer
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="absolute bottom-1 right-1 text-[10px] text-slate-400 hover:text-red-500"
-                                        onClick={(e) => { e.stopPropagation(); void deleteSession(session.id); }}
-                                      >✕</button>
+                                      {session.element.cours?.id && (
+                                        <Link
+                                          href={`/cours/${session.element.cours.id}${session.class?.id ? `?classId=${session.class.id}` : ''}`}
+                                          className="rounded bg-white/70 px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-white"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          Détails
+                                        </Link>
+                                      )}
+                                      {!isStudent ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            className="rounded bg-white/70 px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-white"
+                                            onClick={(e) => { e.stopPropagation(); openMoveModal(session); }}
+                                          >
+                                            Déplacer
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="absolute bottom-1 right-1 text-[10px] text-slate-400 hover:text-red-500"
+                                            onClick={(e) => { e.stopPropagation(); void deleteSession(session.id); }}
+                                          >✕</button>
+                                        </>
+                                      ) : null}
                                     </div>
                                   </div>
                                 )}
@@ -808,7 +879,7 @@ export default function TimetablePage() {
             </div>
 
             {/* ── Unscheduled panel ── */}
-            <div className="w-72 shrink-0">
+            {!isStudent ? <div className="w-72 shrink-0">
               <div className="surface-card sticky top-4 overflow-hidden">
                 <div className="border-b border-slate-100 px-4 py-3 flex items-center justify-between">
                   <p className="font-semibold text-slate-800">Non planifiés</p>
@@ -824,6 +895,11 @@ export default function TimetablePage() {
                       <div
                         key={el.id}
                         className="flex cursor-pointer flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50 mx-3 my-2 p-3 hover:border-amber-400"
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData('text/plain', String(el.id));
+                          event.dataTransfer.effectAllowed = 'copy';
+                        }}
                         onClick={() => openAddModal(undefined, undefined, String(el.id))}
                       >
                         <p className="text-sm font-medium text-slate-800">{el.name}</p>
@@ -831,6 +907,7 @@ export default function TimetablePage() {
                         <div className="flex items-center gap-2">
                           <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${TYPE_BADGE[el.type]}`}>{el.type}</span>
                           {el.volumeHoraire && <span className="text-[10px] text-slate-400">{el.volumeHoraire}h</span>}
+                          {el.sessionDurationMinutes && <span className="text-[10px] text-slate-400">{formatDuration(el.sessionDurationMinutes)}</span>}
                         </div>
                       </div>
                     ))}
@@ -857,7 +934,7 @@ export default function TimetablePage() {
                   </div>
                 </div>
               )}
-            </div>
+            </div> : null}
           </section>
         )}
 
@@ -894,7 +971,10 @@ export default function TimetablePage() {
                 <select
                   className="input"
                   value={addElementId}
-                  onChange={(e) => setAddElementId(e.target.value)}
+                  onChange={(e) => {
+                    setAddElementId(e.target.value);
+                    applyElementDuration(e.target.value);
+                  }}
                   disabled={filteredElements.length === 0}
                 >
                   <option value="">
@@ -904,7 +984,7 @@ export default function TimetablePage() {
                   </option>
                   {filteredElements.map((el) => (
                     <option key={el.id} value={el.id}>
-                      {el.name} ({el.type}){el.volumeHoraire ? ` · ${el.volumeHoraire}h` : ''}
+                      {el.name} ({el.type}){el.volumeHoraire ? ` · ${el.volumeHoraire}h` : ''}{el.sessionDurationMinutes ? ` · ${formatDuration(el.sessionDurationMinutes)}` : ''}
                     </option>
                   ))}
                 </select>
@@ -919,14 +999,17 @@ export default function TimetablePage() {
               </div>
               <div className="field-stack">
                 <label className="field-label">Début</label>
-                <select className="input" value={addStart} onChange={(e) => setAddStart(e.target.value)}>
-                  {HOURS.map((h) => <option key={h} value={`${String(h).padStart(2, '0')}:00`}>{String(h).padStart(2, '0')}h00</option>)}
+                <select className="input" value={addStart} onChange={(e) => {
+                  setAddStart(e.target.value);
+                  if (addElementId) applyElementDuration(addElementId, e.target.value);
+                }}>
+                  {TIME_OPTIONS.map((time) => <option key={time} value={time}>{time.replace(':', 'h')}</option>)}
                 </select>
               </div>
               <div className="field-stack">
                 <label className="field-label">Fin</label>
                 <select className="input" value={addEnd} onChange={(e) => setAddEnd(e.target.value)}>
-                  {HOURS.slice(1).map((h) => <option key={h} value={`${String(h).padStart(2, '00')}:00`}>{String(h).padStart(2, '0')}h00</option>)}
+                  {TIME_OPTIONS.slice(1).map((time) => <option key={time} value={time}>{time.replace(':', 'h')}</option>)}
                 </select>
               </div>
             </div>
@@ -981,13 +1064,13 @@ export default function TimetablePage() {
                     setMoveEnd(addHoursToTime(nextStart, 2));
                   }}
                 >
-                  {HOURS.map((h) => <option key={h} value={`${String(h).padStart(2, '0')}:00`}>{String(h).padStart(2, '0')}h00</option>)}
+                  {TIME_OPTIONS.map((time) => <option key={time} value={time}>{time.replace(':', 'h')}</option>)}
                 </select>
               </div>
               <div className="field-stack">
                 <label className="field-label">Fin</label>
                 <select className="input" value={moveEnd} onChange={(e) => setMoveEnd(e.target.value)}>
-                  {HOURS.slice(1).map((h) => <option key={h} value={`${String(h).padStart(2, '0')}:00`}>{String(h).padStart(2, '0')}h00</option>)}
+                  {TIME_OPTIONS.slice(1).map((time) => <option key={time} value={time}>{time.replace(':', 'h')}</option>)}
                 </select>
               </div>
               <div className="field-stack">

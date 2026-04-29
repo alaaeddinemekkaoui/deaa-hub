@@ -18,6 +18,8 @@ export type AuthUser = {
   fullName?: string;
   role: 'admin' | 'staff' | 'viewer' | 'user' | 'teacher' | 'student' | 'inspector' | 'restauration';
   departments: Department[];
+  studentProfile?: { id: number; classId: number | null; fullName: string } | null;
+  teacherProfile?: { id: number; departmentId: number; firstName: string; lastName: string } | null;
 };
 
 type ProfileUpdate = { fullName?: string; email?: string; password?: string };
@@ -44,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     api
-      .get<{ sub: number; email: string; role: AuthUser['role']; fullName?: string; departments: Department[] }>('/auth/me')
+      .get<{ sub: number; email: string; role: AuthUser['role']; fullName?: string; departments: Department[]; studentProfile?: AuthUser['studentProfile']; teacherProfile?: AuthUser['teacherProfile'] }>('/auth/me')
       .then((response) => {
         const data = response.data;
         setUser({
@@ -53,6 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: data.role,
           fullName: data.fullName,
           departments: data.departments ?? [],
+          studentProfile: data.studentProfile ?? null,
+          teacherProfile: data.teacherProfile ?? null,
         });
       })
       .catch(() => {
@@ -81,6 +85,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: payloadUser.role,
           fullName: payloadUser.fullName,
           departments: payloadUser.departments ?? [],
+          studentProfile: null,
+          teacherProfile: null,
         });
       },
       logout: () => {
@@ -97,6 +103,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: AuthUser['role'];
           fullName?: string;
           departments: Department[];
+          studentProfile?: AuthUser['studentProfile'];
+          teacherProfile?: AuthUser['teacherProfile'];
         }>('/auth/me');
         setUser({
           id: res.data.sub,
@@ -104,6 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: res.data.role,
           fullName: res.data.fullName,
           departments: res.data.departments ?? [],
+          studentProfile: res.data.studentProfile ?? null,
+          teacherProfile: res.data.teacherProfile ?? null,
         });
       },
     }),

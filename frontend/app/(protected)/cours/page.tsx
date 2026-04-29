@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, GraduationCap, Plus, Users, X } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
@@ -373,7 +374,7 @@ export default function CoursPage() {
                       {groupedCours.map((cours) => (
                         <tr key={cours.id}>
                           <td>
-                            <p className="font-medium text-slate-900">{cours.name}</p>
+                            <Link href={`/cours/${cours.id}?classId=${selectedClassId}`} className="font-medium text-slate-900 transition hover:text-emerald-700 hover:underline">{cours.name}</Link>
                             {cours.teachers.length === 0 && (
                               <span className="mt-0.5 inline-block rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-600">
                                 Sans enseignant

@@ -1,8 +1,9 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { BookOpen, CalendarRange, Eye, FolderOpen, GraduationCap, KeyRound, Pencil, Search, Trash2, UserPlus, Users } from 'lucide-react';
+import { BookOpen, CalendarRange, Eye, FolderOpen, GraduationCap, KeyRound, MoreHorizontal, Pencil, Search, Trash2, UserPlus, Users } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
 import { ExportDataButton } from '@/components/admin/export-data-button';
 import { ImportDataButton } from '@/components/admin/import-data-button';
@@ -10,7 +11,6 @@ import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { ProfileDocsModal } from '@/components/profile/profile-docs-modal';
 import { PageHeader } from '@/components/admin/page-header';
-import { TableActionButton, TableActionGrid, TableActionLink } from '@/components/admin/table-actions';
 import { api, fetchRef, getApiErrorMessage, PaginatedResponse } from '@/services/api';
 import { useAuth } from '@/features/auth/auth-context';
 import { confirmDelete } from '@/lib/confirm';
@@ -58,6 +58,7 @@ type AcademicClass = { id: number; name: string; year: number; filiereId?: numbe
 export default function StudentsPage() {
   const { user } = useAuth();
   const canDelete = user?.role === 'admin';
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
   const [students, setStudents] = useState<Student[]>([]);
   const [filieres, setFilieres] = useState<Filiere[]>([]);
   const [classes, setClasses] = useState<AcademicClass[]>([]);
@@ -69,6 +70,7 @@ export default function StudentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [openActionsId, setOpenActionsId] = useState<number | null>(null);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -96,6 +98,7 @@ export default function StudentsPage() {
   const [accountStudentName, setAccountStudentName] = useState('');
   const [accountPassword, setAccountPassword] = useState('');
   const [accountSaving, setAccountSaving] = useState(false);
+  const [photoErrors, setPhotoErrors] = useState<Record<number, boolean>>({});
 
   // Bulk create-accounts modal
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
@@ -108,6 +111,14 @@ export default function StudentsPage() {
     const parsed = Number(trimmed);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
   };
+
+  const getInitials = (fullName: string) =>
+    fullName
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('') || 'ET';
 
   const getSortedHistory = (history: StudentClassHistory[] = []) =>
     [...history].sort(
@@ -460,137 +471,139 @@ export default function StudentsPage() {
       )}
 
       {!loading && students.length > 0 && (
-      <div className="data-table-wrap">
-        <div className="table-scroll max-h-[70vh] overflow-y-auto">
-          <table className="table-base">
-            <thead>
-              <tr>
-                <th>Code Étudiant</th>
-                <th>Nom complet</th>
-                <th>Sexe</th>
-                <th>Année d&apos;entrée</th>
-                <th>Code Massar</th>
-                <th>CIN</th>
-                <th>Filière</th>
-                <th>Classe actuelle</th>
-                <th>Année académique</th>
-                <th>Lauréat</th>
-                <th>Historique</th>
-                <th>E-mail</th>
-                <th>Téléphone</th>
-                <th>Compte</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((student) => (
-                <tr key={student.id}>
-                  <td className="font-mono text-xs text-slate-600">{student.codeEtudiant ?? '-'}</td>
-                  <td>
-                    <div className="flex items-center gap-2">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {students.map((student) => {
+            const photoUrl = `${apiBaseUrl}/students/${student.id}/photo`;
+            const showPhoto = !photoErrors[student.id];
+            const history = getSortedHistory(student.classHistory ?? []);
+            return (
+              <article key={student.id} className="flex min-h-[24rem] flex-col rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="relative h-18 w-18 shrink-0 overflow-hidden rounded-[1.4rem] border border-slate-200 bg-slate-100">
+                    {showPhoto ? (
+                      <Image
+                        src={photoUrl}
+                        alt={student.fullName}
+                        fill
+                        unoptimized
+                        className="object-cover"
+                        onError={() => setPhotoErrors((current) => ({ ...current, [student.id]: true }))}
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-[#f3f5f4] text-lg font-semibold text-[#8f1d22]">
+                        {getInitials(student.fullName)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Link
-                        className="font-medium text-slate-900 transition hover:text-emerald-700 hover:underline"
+                        className="text-lg font-semibold text-slate-950 transition hover:text-emerald-700"
                         href={`/students/${student.id}`}
                       >
                         {student.fullName}
                       </Link>
-                      {isCurrentClassRedoublant(student) && (
-                        <span className="status-chip status-chip--warn text-xs">
-                          Redoublant
-                        </span>
-                      )}
+                      {isCurrentClassRedoublant(student) ? <span className="status-chip status-chip--warn">Redoublant</span> : null}
                     </div>
-                  </td>
-                  <td>{student.sex}</td>
-                  <td>{student.firstYearEntry}</td>
-                  <td>{student.codeMassar}</td>
-                  <td>{student.cin}</td>
-                  <td>{student.filiere?.name ?? '-'}</td>
-                  <td>{student.academicClass ? `${student.academicClass.name} (Année ${student.academicClass.year})` : '-'}</td>
-                  <td>{student.anneeAcademique}</td>
-                  <td>
-                    {student.laureate ? (
-                      <span className="status-chip status-chip--ok">
-                        Lauréat {student.laureate.graduationYear}
-                      </span>
-                    ) : (
-                      <span className="status-chip status-chip--muted">Non</span>
-                    )}
-                  </td>
-                  <td>
-                    {student.classHistory && student.classHistory.length > 0 ? (
-                      <div className="space-y-1">
-                        {getSortedHistory(student.classHistory).map((entry, _idx, sortedHistory) => {
-                          const isEntryRedoublant = isHistoryEntryRedoublant(
-                            sortedHistory,
-                            entry.id,
-                          );
+                    <p className="mt-1 text-sm text-slate-500">{student.academicClass ? `${student.academicClass.name} · Année ${student.academicClass.year}` : 'Classe non affectée'}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="status-chip status-chip--muted">{student.sex === 'female' ? 'Femme' : 'Homme'}</span>
+                      {!student.userId ? <span className="status-chip status-chip--muted">Sans compte</span> : null}
+                      {student.laureate ? <span className="status-chip status-chip--ok">Lauréat {student.laureate.graduationYear}</span> : null}
+                    </div>
+                  </div>
+                </div>
 
+                <div className="mt-5 grid gap-3 text-sm text-slate-600">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Classe</p>
+                      <p className="mt-1 font-medium text-slate-900">{student.academicClass?.name ?? '-'}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Année</p>
+                      <p className="mt-1 font-medium text-slate-900">{student.anneeAcademique}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Code étudiant</p>
+                      <p className="mt-1 font-medium text-slate-900">{student.codeEtudiant ?? '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Code Massar</p>
+                      <p className="mt-1 font-medium text-slate-900">{student.codeMassar}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Contact</p>
+                    <p className="mt-1 truncate font-medium text-slate-900">{student.email ?? 'Sans email'}</p>
+                    <p className="mt-0.5 font-medium text-slate-700">{student.telephone ?? 'Sans téléphone'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Historique</p>
+                    {history.length > 0 ? (
+                      <div className="mt-1 space-y-1">
+                        {history.slice(0, 2).map((entry, _index, sortedHistory) => {
+                          const repeated = isHistoryEntryRedoublant(sortedHistory, entry.id);
                           return (
-                            <p key={entry.id} className="text-xs text-slate-600">
-                              {entry.academicYear}: {entry.academicClass.name} (Y{entry.studyYear})
-                              {isEntryRedoublant ? ' · Redoublant' : ''}
+                            <p key={entry.id} className="text-sm text-slate-700">
+                              {entry.academicYear}: {entry.academicClass.name} (Y{entry.studyYear}){repeated ? ' · Redoublant' : ''}
                             </p>
                           );
                         })}
                       </div>
                     ) : (
-                      '-'
+                      <p className="mt-1 text-sm text-slate-500">Aucun historique</p>
                     )}
-                  </td>
-                  <td>{student.email ?? '-'}</td>
-                  <td>{student.telephone ?? '-'}</td>
-                  <td>
-                    {student.userId ? (
-                      <span className="status-chip status-chip--ok">Actif</span>
-                    ) : (
-                      <span className="status-chip status-chip--muted">Aucun</span>
-                    )}
-                  </td>
-                  <td>
-                    <TableActionGrid>
-                      <TableActionLink
-                        href={`/students/${student.id}`}
-                        icon={Eye}
-                        tone="profile"
-                        label={`Voir le profil de ${student.fullName}`}
-                      />
-                      <TableActionButton
-                        icon={FolderOpen}
-                        tone="docs"
-                        label={`Ouvrir le dossier de ${student.fullName}`}
-                        onClick={() => setDocsStudent({ id: student.id, name: student.fullName })}
-                      />
-                      <TableActionButton
-                        icon={Pencil}
-                        tone="edit"
-                        label={`Modifier ${student.fullName}`}
-                        onClick={() => openEditModal(student)}
-                      />
-                      {!student.userId && (
-                        <TableActionButton
-                          icon={UserPlus}
-                          tone="account"
-                          label={`Créer un compte pour ${student.fullName}`}
-                          onClick={() => openAccountModal(student)}
-                        />
-                      )}
-                      {canDelete && (
-                        <TableActionButton
-                          icon={Trash2}
-                          tone="delete"
-                          label={`Supprimer ${student.fullName}`}
-                          onClick={() => onDelete(student.id)}
-                        />
-                      )}
-                    </TableActionGrid>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  </div>
+                </div>
+
+                <div className="mt-auto pt-5">
+                  <div className="relative flex justify-end">
+                    <button
+                      type="button"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+                      title={`Actions pour ${student.fullName}`}
+                      aria-label={`Actions pour ${student.fullName}`}
+                      onClick={() => setOpenActionsId((current) => current === student.id ? null : student.id)}
+                    >
+                      <MoreHorizontal size={17} />
+                    </button>
+                    {openActionsId === student.id ? (
+                      <div className="absolute bottom-12 right-0 z-20 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-sm shadow-lg">
+                        <Link className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50" href={`/students/${student.id}`}>
+                          <Eye size={14} />
+                          Voir le profil
+                        </Link>
+                        <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50" type="button" onClick={() => { setOpenActionsId(null); setDocsStudent({ id: student.id, name: student.fullName }); }}>
+                          <FolderOpen size={14} />
+                          Dossier
+                        </button>
+                        <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50" type="button" onClick={() => { setOpenActionsId(null); openEditModal(student); }}>
+                          <Pencil size={14} />
+                          Modifier
+                        </button>
+                        {!student.userId ? (
+                          <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50" type="button" onClick={() => { setOpenActionsId(null); openAccountModal(student); }}>
+                            <UserPlus size={14} />
+                            Créer compte
+                          </button>
+                        ) : null}
+                        {canDelete ? (
+                          <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-600 hover:bg-red-50" type="button" onClick={() => { setOpenActionsId(null); void onDelete(student.id); }}>
+                            <Trash2 size={14} />
+                            Supprimer
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </section>
       )}
 
       {/* Add / Edit student modal */}

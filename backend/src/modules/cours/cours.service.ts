@@ -87,6 +87,127 @@ export class CoursService {
     return cours;
   }
 
+  async getProfile(
+    id: number,
+    query?: { classId?: number; dateFrom?: string; dateTo?: string },
+  ) {
+    const cours = await this.prisma.cours.findUnique({
+      where: { id },
+      include: {
+        elementModule: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            volumeHoraire: true,
+            module: { select: { id: true, name: true } },
+          },
+        },
+        classes: {
+          include: {
+            class: {
+              include: {
+                filiere: {
+                  include: { department: { select: { id: true, name: true } } },
+                },
+              },
+            },
+            teacher: { select: { id: true, firstName: true, lastName: true } },
+          },
+          orderBy: [{ class: { name: 'asc' } }, { teacher: { lastName: 'asc' } }],
+        },
+      },
+    });
+
+    if (!cours) throw new NotFoundException(`Cours ${id} not found`);
+
+    const effectiveClassId =
+      query?.classId ??
+      cours.classes[0]?.classId ??
+      null;
+
+    const classFilter = effectiveClassId ? { classId: effectiveClassId } : {};
+    const dateFilter: Prisma.TimetableSessionWhereInput = {};
+    if (query?.dateFrom || query?.dateTo) {
+      dateFilter.weekStart = {};
+      if (query.dateFrom) dateFilter.weekStart.gte = new Date(query.dateFrom);
+      if (query.dateTo) dateFilter.weekStart.lte = new Date(query.dateTo);
+    }
+
+    const sessions = await this.prisma.timetableSession.findMany({
+      where: {
+        element: { cours: { id } },
+        ...classFilter,
+        ...(query?.dateFrom || query?.dateTo ? dateFilter : {}),
+      },
+      include: {
+        class: { select: { id: true, name: true, year: true } },
+        teacher: { select: { id: true, firstName: true, lastName: true } },
+        room: { select: { id: true, name: true } },
+        attendanceRecords: {
+          select: { id: true, status: true, studentId: true, timestamp: true },
+        },
+      },
+      orderBy: [{ weekStart: 'desc' }, { dayOfWeek: 'asc' }, { startTime: 'asc' }],
+    });
+
+    const students = effectiveClassId
+      ? await this.prisma.student.findMany({
+          where: { classId: effectiveClassId },
+          select: {
+            id: true,
+            fullName: true,
+            codeMassar: true,
+            codeEtudiant: true,
+            sex: true,
+            photoPath: true,
+          },
+          orderBy: { fullName: 'asc' },
+        })
+      : [];
+
+    const attendanceSummary = sessions.map((session) => {
+      const present = session.attendanceRecords.filter((r) => r.status === 'present').length;
+      const absent = session.attendanceRecords.filter((r) => r.status === 'absent').length;
+      const pending = session.attendanceRecords.filter((r) => r.status === 'pending').length;
+      return {
+        sessionId: session.id,
+        className: session.class.name,
+        teacherName: session.teacher
+          ? `${session.teacher.firstName} ${session.teacher.lastName}`
+          : null,
+        roomName: session.room?.name ?? null,
+        weekStart: session.weekStart,
+        dayOfWeek: session.dayOfWeek,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        present,
+        absent,
+        pending,
+      };
+    });
+
+    return {
+      cours,
+      selectedClassId: effectiveClassId,
+      students,
+      sessions: attendanceSummary,
+      stats: {
+        totalHours:
+          cours.elementModule?.volumeHoraire ??
+          sessions.reduce((sum, session) => {
+            const [sh, sm] = session.startTime.split(':').map(Number);
+            const [eh, em] = session.endTime.split(':').map(Number);
+            return sum + (eh * 60 + em - (sh * 60 + sm)) / 60;
+          }, 0),
+        totalStudents: students.length,
+        totalSessions: sessions.length,
+        totalPresent: attendanceSummary.reduce((sum, item) => sum + item.present, 0),
+        totalAbsent: attendanceSummary.reduce((sum, item) => sum + item.absent, 0),
+      },
+    };
+  }
+
   async create(dto: CreateCoursDto) {
     await this.ensureNameAvailable(dto.name);
     if (dto.elementModuleId)

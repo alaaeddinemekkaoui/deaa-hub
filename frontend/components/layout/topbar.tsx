@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, Check, Eye, EyeOff, LogOut, Menu, MessageSquare, Pencil, X } from 'lucide-react';
+import { Bell, Check, Eye, EyeOff, LogOut, Menu, MessageSquare, Pencil, Search, X } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/features/auth/auth-context';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -296,13 +297,30 @@ function NotificationBell() {
     } catch { /* silent */ }
   };
 
+  const clearRead = async () => {
+    try {
+      await api.delete('/notifications/read');
+      setItems((prev) => prev.filter((n) => !n.read));
+    } catch { /* silent */ }
+  };
+
   const openFromNotification = (notification: Notification) => {
     if (!notification.read) void markRead(notification.id);
 
+    setOpen(false);
+
+    if (notification.type.startsWith('room_request')) {
+      router.push('/room-reservations');
+      return;
+    }
+
+    if (notification.type.startsWith('workflow')) {
+      router.push('/workflows');
+      return;
+    }
+
     const groupId = notification.message?.group?.id;
     const senderId = notification.message?.sender?.id;
-
-    setOpen(false);
 
     if (groupId) {
       router.push(`/messages?tab=groups&groupId=${groupId}`);
@@ -316,6 +334,10 @@ function NotificationBell() {
 
     router.push('/messages');
   };
+
+  const featuredItems = items.slice(0, 5);
+  const olderItems = items.slice(5);
+  const readCount = items.filter((item) => item.read).length;
 
   return (
     <div ref={ref} className="relative">
@@ -337,33 +359,68 @@ function NotificationBell() {
         <div className="absolute right-0 top-11 z-50 w-80 rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
             <span className="text-sm font-semibold text-slate-800">Notifications</span>
-            {count > 0 && (
-              <button type="button" onClick={markAllRead} className="text-[11px] text-emerald-600 hover:text-emerald-700">
-                Tout marquer lu
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {count > 0 && (
+                <button type="button" onClick={markAllRead} className="text-[11px] text-emerald-600 hover:text-emerald-700">
+                  Tout marquer lu
+                </button>
+              )}
+              {readCount > 0 && (
+                <button type="button" onClick={clearRead} className="text-[11px] text-slate-500 hover:text-slate-700">
+                  Nettoyer les lues
+                </button>
+              )}
+            </div>
           </div>
-          <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
+          <div className="divide-y divide-slate-50">
             {loading ? (
               <div className="py-6 text-center text-xs text-slate-400">Chargement…</div>
             ) : items.length === 0 ? (
               <div className="py-8 text-center text-xs text-slate-400">Aucune notification</div>
             ) : (
-              items.slice(0, 20).map((n) => (
-                <div
-                  key={n.id}
-                  className={cn('flex gap-2.5 px-4 py-3 hover:bg-slate-50 cursor-pointer transition-colors', !n.read && 'bg-emerald-50/60')}
-                  onClick={() => openFromNotification(n)}
-                >
-                  <div className={cn('mt-0.5 h-2 w-2 shrink-0 rounded-full', n.read ? 'bg-slate-200' : 'bg-emerald-500')} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[12px] text-slate-700 leading-snug">{n.content}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">
-                      {new Date(n.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
-                    </p>
-                  </div>
+              <>
+                <div>
+                  {featuredItems.map((n) => (
+                    <div
+                      key={n.id}
+                      className={cn('flex gap-2.5 px-4 py-3 hover:bg-slate-50 cursor-pointer transition-colors', !n.read && 'bg-emerald-50/60')}
+                      onClick={() => openFromNotification(n)}
+                    >
+                      <div className={cn('mt-0.5 h-2 w-2 shrink-0 rounded-full', n.read ? 'bg-slate-200' : 'bg-emerald-500')} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] text-slate-700 leading-snug">{n.content}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          {new Date(n.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))
+                {olderItems.length > 0 && (
+                  <div>
+                    <div className="border-y border-slate-100 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Plus anciennes
+                    </div>
+                    <div className="max-h-56 overflow-y-auto">
+                      {olderItems.map((n) => (
+                        <div
+                          key={n.id}
+                          className={cn('flex gap-2.5 px-4 py-3 hover:bg-slate-50 cursor-pointer transition-colors', !n.read && 'bg-emerald-50/60')}
+                          onClick={() => openFromNotification(n)}
+                        >
+                          <div className={cn('mt-0.5 h-2 w-2 shrink-0 rounded-full', n.read ? 'bg-slate-200' : 'bg-emerald-500')} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[12px] text-slate-700 leading-snug">{n.content}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              {new Date(n.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
           <div className="border-t border-slate-100 px-4 py-2.5">
@@ -393,17 +450,18 @@ export function Topbar({ sidebarOpen = true, onToggleSidebar }: TopbarProps) {
 
   return (
     <>
-      <header className="mb-6 flex items-center justify-between gap-4 rounded-2xl border bg-white px-5 py-3 shadow-sm">
-        <div className="flex min-w-0 items-center gap-3">
+      <header className="sticky top-3 z-30 mx-3 rounded-[1.6rem] border border-slate-200/80 bg-white/88 px-4 py-3 text-slate-950 shadow-[0_24px_70px_-46px_rgba(15,36,26,0.55)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/72">
+        <div className="mx-auto grid w-full max-w-[1800px] gap-3 lg:grid-cols-[auto_minmax(260px,620px)_auto] lg:items-center">
+          <div className="flex min-w-0 items-center gap-3">
           {onToggleSidebar && (
             <button
               type="button"
               onClick={onToggleSidebar}
               className={cn(
-                'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-[background-color,border-color,color,box-shadow,transform] duration-300 hover:-translate-y-0.5 active:scale-95',
+                'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-[background-color,border-color,color,box-shadow,transform] duration-300 hover:-translate-y-0.5 active:scale-95',
                 sidebarOpen
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm'
-                  : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-emerald-700',
+                  ? 'border-[#1b5e3b]/20 bg-[#1b5e3b] text-white shadow-sm'
+                  : 'border-slate-200 bg-white text-[#1b5e3b] hover:bg-slate-50',
               )}
               title={sidebarOpen ? 'Masquer le menu' : 'Afficher le menu'}
               aria-label={sidebarOpen ? 'Masquer le menu' : 'Afficher le menu'}
@@ -418,27 +476,41 @@ export function Topbar({ sidebarOpen = true, onToggleSidebar }: TopbarProps) {
               />
             </button>
           )}
-          <div className="h-2 w-2 rounded-full bg-emerald-500" />
-          <span className="truncate text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-            IAV Hassan II — DEAA Hub
-          </span>
-        </div>
+            <Link href="/dashboard" className="flex min-w-0 items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
+                <Image src="/logo0.png" alt="DEAA Hub" width={24} height={24} priority />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-base font-bold leading-tight text-[#082f1d]">DEAA Hub</p>
+                <p className="truncate text-[10px] uppercase tracking-[0.24em] text-[#1b5e3b]/70">IAV Hassan II</p>
+              </div>
+            </Link>
+          </div>
 
-        <div className="flex items-center gap-3">
-          <NotificationBell />
+          <div className="flex min-w-0 items-center gap-2 rounded-2xl border border-slate-200 bg-white/92 px-4 py-2.5 text-slate-500 shadow-sm">
+            <Search size={16} className="text-[#1b5e3b]" />
+            <input
+              className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400"
+              placeholder="Recherche rapide"
+              aria-label="Recherche rapide"
+            />
+          </div>
+
+          <div className="flex min-w-0 items-center justify-end gap-3 text-slate-950">
+            <NotificationBell />
 
           {/* Clickable user info → opens profile drawer */}
           <button
             type="button"
             onClick={() => setProfileOpen(true)}
-            className="group flex items-center gap-2.5 rounded-xl px-3 py-1.5 transition hover:bg-slate-50"
+            className="group flex items-center gap-2.5 rounded-xl px-3 py-1.5 transition hover:bg-slate-100/70"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-700 text-white text-[11px] font-bold shadow-sm">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#00a66a] text-white text-[12px] font-bold shadow-sm ring-2 ring-white/20">
               {avatar}
             </div>
             <div className="text-right text-sm hidden sm:block">
-              <p className="font-semibold text-slate-900 leading-tight">{user?.fullName ?? user?.email}</p>
-              <p className="text-xs text-slate-400 capitalize">{user?.role ?? 'viewer'}</p>
+              <p className="font-semibold text-[#082f1d] leading-tight">{user?.fullName ?? user?.email}</p>
+              <p className="text-xs text-slate-500 capitalize">{user?.role ?? 'viewer'}</p>
             </div>
             <Pencil
               size={12}
@@ -447,13 +519,15 @@ export function Topbar({ sidebarOpen = true, onToggleSidebar }: TopbarProps) {
           </button>
 
           <button
-            className="btn-outline py-2 px-3 text-xs"
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#0b2417] shadow-sm transition hover:border-[#b71c1c]/30 hover:text-[#b71c1c]"
             type="button"
             onClick={() => { logout(); router.push('/login'); }}
+            title="Déconnexion"
+            aria-label="Déconnexion"
           >
             <LogOut size={14} />
-            Déconnexion
           </button>
+        </div>
         </div>
       </header>
 

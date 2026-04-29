@@ -13,6 +13,7 @@ type AcademicClass = {
   id: number;
   name: string;
   year: number;
+  semestre?: string | null;
   filiere?: { id?: number; name: string } | null;
   _count?: { students: number; teachers: number; cours: number };
 };
@@ -25,8 +26,13 @@ type Student = {
   filiere?: { id: number; name: string } | null;
 };
 
+type AcademicYear = { id: number; label: string; isCurrent?: boolean };
+
+const SEMESTERS = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'];
+
 export default function StudentClassTransferPage() {
   const [allClasses, setAllClasses] = useState<AcademicClass[]>([]);
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [loadingClasses, setLoadingClasses] = useState(true);
 
   // Step 1 — source class
@@ -57,10 +63,14 @@ export default function StudentClassTransferPage() {
     const load = async () => {
       try {
         setLoadingClasses(true);
-        const res = await api.get<PaginatedResponse<AcademicClass>>('/classes', {
-          params: { page: 1, limit: 500, sortBy: 'name', sortOrder: 'asc' },
-        });
+        const [res, yearsRes] = await Promise.all([
+          api.get<PaginatedResponse<AcademicClass>>('/classes', {
+            params: { page: 1, limit: 500, sortBy: 'name', sortOrder: 'asc' },
+          }),
+          api.get<AcademicYear[]>('/academic-years'),
+        ]);
         setAllClasses(res.data.data);
+        setAcademicYears(yearsRes.data);
       } catch {
         toast.error('Impossible de charger les classes');
       } finally {
@@ -93,8 +103,25 @@ export default function StudentClassTransferPage() {
   // Default academic year from source class
   useEffect(() => {
     const src = allClasses.find((c) => String(c.id) === sourceId);
-    if (src) setAcademicYear(`${src.year}/${src.year + 1}`);
-  }, [sourceId, allClasses]);
+    if (!src) return;
+    const currentAcademicYear =
+      academicYears.find((item) => item.isCurrent)?.label ??
+      `${src.year}/${src.year + 1}`;
+    setAcademicYear(currentAcademicYear);
+    const match = /^S(\d+)$/i.exec(src.semestre ?? '');
+    const nextSemestre = match ? `S${Math.min(10, Number(match[1]) + 1)}` : '';
+    if (nextSemestre) {
+      setSemestre(nextSemestre);
+      const nextClass = allClasses.find(
+        (candidate) =>
+          candidate.id !== src.id &&
+          candidate.year === src.year &&
+          candidate.semestre === nextSemestre &&
+          candidate.filiere?.id === src.filiere?.id,
+      );
+      if (nextClass) setTargetId(String(nextClass.id));
+    }
+  }, [sourceId, allClasses, academicYears]);
 
   const sourceCandidates = useMemo(() => {
     const q = sourceSearch.trim().toLowerCase();
@@ -228,7 +255,7 @@ export default function StudentClassTransferPage() {
                 <option value="">— Sélectionner une classe —</option>
                 {sourceCandidates.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} ({c.year}){c.filiere ? ` · ${c.filiere.name}` : ''}
+                    {c.name} ({c.year}${c.semestre ? ` · ${c.semestre}` : ''}){c.filiere ? ` · ${c.filiere.name}` : ''}
                   </option>
                 ))}
               </select>
@@ -269,7 +296,7 @@ export default function StudentClassTransferPage() {
               <option value="">— Sélectionner une classe cible —</option>
               {targetCandidates.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} ({c.year}){c.filiere ? ` · ${c.filiere.name}` : ''}
+                  {c.name} ({c.year}${c.semestre ? ` · ${c.semestre}` : ''}){c.filiere ? ` · ${c.filiere.name}` : ''}
                 </option>
               ))}
             </select>
@@ -277,22 +304,35 @@ export default function StudentClassTransferPage() {
           <div className="grid grid-cols-2 gap-3">
             <div className="field-stack">
               <label className="field-label">Année académique <span className="text-red-500">*</span></label>
-              <input
+              <select
                 className="input"
                 value={academicYear}
                 onChange={(e) => setAcademicYear(e.target.value)}
-                placeholder="ex. 2026/2027"
-              />
+              >
+                <option value="">Sélectionner une année</option>
+                {academicYears.map((item) => (
+                  <option key={item.id} value={item.label}>
+                    {item.label}{item.isCurrent ? ' · courant' : ''}
+                  </option>
+                ))}
+                {academicYear && !academicYears.some((item) => item.label === academicYear) ? (
+                  <option value={academicYear}>{academicYear}</option>
+                ) : null}
+              </select>
             </div>
             <div className="field-stack">
               <label className="field-label">Semestre <span className="text-red-500">*</span></label>
-              <input
+              <select
                 className="input"
                 value={semestre}
                 onChange={(e) => setSemestre(e.target.value)}
-                placeholder="ex. S5"
-              />
-              <p className="text-[11px] text-slate-400">Saisissez le semestre selon les règles du cycle (ex. S5, S6).</p>
+              >
+                {SEMESTERS.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           {targetClass && (

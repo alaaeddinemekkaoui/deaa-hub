@@ -1,188 +1,24 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import {
-  Activity,
-  ArrowLeftRight,
-  BarChart2,
-  BookOpen,
-  BookOpenCheck,
-  Building2,
-  CalendarRange,
-  CalendarDays,
-  ChevronDown,
-  CopyPlus,
-  DoorOpen,
-  FileStack,
-  FileText,
-  GraduationCap,
-  Home,
-  Layers,
-  Medal,
-  MessageSquare,
-  NotebookPen,
-  RefreshCw,
-  Scale,
-  Settings,
-  Utensils,
-  UserCog,
-  Users,
-} from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/features/auth/auth-context';
-
-type NavItem = {
-  href: string;
-  label: string;
-  caption: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
-};
-
-type NavGroup = {
-  heading: string;
-  items: NavItem[];
-  /** Roles that can see this group. Omit = everyone. */
-  roles?: string[];
-};
-
-const ACADEMIC_ROLES = ['admin', 'staff', 'viewer', 'user', 'teacher', 'student', 'inspector'];
-const ADMIN_ROLES = ['admin', 'staff'];
-const RESTAURATION_ROLES = ['admin', 'staff', 'restauration', 'student'];
-
-const navigation: NavGroup[] = [
-  {
-    heading: 'Accueil',
-    items: [
-      { href: '/dashboard', label: 'Tableau de bord', caption: 'Vue générale', icon: Home },
-    ],
-  },
-  {
-    heading: 'Étudiants',
-    roles: ['admin', 'staff', 'viewer', 'user', 'teacher', 'student', 'inspector'],
-    items: [
-      { href: '/students',      label: 'Étudiants',    caption: 'Profils et cohortes',              icon: GraduationCap },
-      { href: '/grades',        label: 'Épreuves',     caption: 'Notes par classe et module',       icon: BookOpen },
-      { href: '/deliberation',  label: 'Délibération', caption: 'Résultats et relevés de notes',    icon: Scale },
-      { href: '/laureates',     label: 'Lauréats',     caption: 'Diplômes et suivi',                icon: Medal },
-      { href: '/transfers',     label: 'Transferts',   caption: 'Passage inter-établissements',     icon: ArrowLeftRight },
-    ],
-  },
-  {
-    heading: 'Enseignants',
-    roles: ['admin', 'staff', 'viewer', 'user', 'teacher', 'student', 'inspector'],
-    items: [
-      { href: '/teachers', label: 'Professeurs', caption: 'Permanents et vacataires', icon: Users },
-    ],
-  },
-  {
-    heading: 'Structure Académique',
-    roles: ACADEMIC_ROLES,
-    items: [
-      { href: '/academic', label: 'Modules & Éléments', caption: 'Modules · CM · TD · TP', icon: BookOpenCheck },
-      { href: '/cours-resources', label: 'Ressources cours', caption: 'Supports et fichiers', icon: FileText },
-    ],
-  },
-  {
-    heading: 'Classes',
-    roles: ACADEMIC_ROLES,
-    items: [
-      { href: '/classes',          label: 'Gestion des Classes', caption: 'Cohortes et groupes',   icon: CalendarRange },
-      { href: '/classes/cours',    label: 'Cours par classe',    caption: 'Affectation des cours', icon: NotebookPen },
-      { href: '/classes/transfer', label: 'Transfert de classe', caption: 'Clonage inter-années',  icon: CopyPlus },
-    ],
-  },
-  {
-    heading: 'Emploi du Temps & Salles',
-    roles: ACADEMIC_ROLES,
-    items: [
-      { href: '/timetable',         label: 'Emploi du temps',      caption: 'Planification hebdomadaire', icon: CalendarDays },
-      { href: '/rooms',             label: 'Gestion des salles',   caption: 'Espaces et équipements',     icon: DoorOpen },
-      { href: '/room-reservations', label: 'Réservation de salle', caption: 'Occupation des salles',      icon: CalendarRange },
-    ],
-  },
-  {
-    heading: 'Structure Organisationnelle',
-    roles: ACADEMIC_ROLES,
-    items: [
-      { href: '/departments', label: 'Départements', caption: "Structures de l'établissement", icon: Building2 },
-      { href: '/filieres',    label: 'Filières',     caption: 'Programmes et voies',           icon: BookOpen },
-      { href: '/structure',   label: 'Options',      caption: 'Spécialités par filière',       icon: Layers },
-      { href: '/cycles',      label: 'Cycles',       caption: 'Cycles académiques',            icon: RefreshCw },
-    ],
-  },
-  {
-    heading: 'Messagerie',
-    roles: ACADEMIC_ROLES,
-    items: [
-      { href: '/messages', label: 'Messages', caption: 'Groupes et conversations', icon: MessageSquare },
-    ],
-  },
-  {
-    heading: 'Restauration',
-    roles: RESTAURATION_ROLES,
-    items: [
-      { href: '/restauration', label: 'Restauration', caption: 'Repas, solde et reçus', icon: Utensils },
-    ],
-  },
-  {
-    heading: 'Demandes de documents',
-    roles: ['admin', 'staff', 'viewer'],
-    items: [
-      { href: '/workflows', label: 'Demandes', caption: 'Suivi des demandes de docs', icon: FileText },
-    ],
-  },
-  {
-    heading: 'Administration',
-    roles: ADMIN_ROLES,
-    items: [
-      { href: '/users',       label: 'Utilisateurs', caption: 'Accès et rôles',         icon: UserCog },
-      { href: '/statistics',  label: 'Statistiques', caption: 'Données et exports CSV', icon: BarChart2 },
-    ],
-  },
-  {
-    heading: 'Paramètres',
-    roles: ADMIN_ROLES,
-    items: [
-      { href: '/settings/academic-years',   label: 'Années académiques',  caption: 'Gérer les années académiques',    icon: Settings },
-      { href: '/settings/restauration',     label: 'Repas restauration',  caption: 'Prix et repas actifs',             icon: Utensils },
-      { href: '/settings/document-types',   label: 'Types de documents',  caption: 'Catégories de documents admin',   icon: FileStack },
-      { href: '/settings/teacher-roles',          label: 'Rôles enseignants',      caption: 'Fonctions : permanent, vacataire',    icon: Users },
-      { href: '/settings/teacher-grades',         label: 'Grades enseignants',     caption: 'PH, PA, assistant, doctorant',        icon: GraduationCap },
-      { href: '/settings/profile-document-types', label: 'Types de docs profil',   caption: 'CIN, photo, acte de naissance…',      icon: FileStack },
-      { href: '/activity-logs',                   label: 'Journaux',               caption: "Historique d'activité",               icon: Activity },
-    ],
-  },
-];
-
-const allHrefs = navigation.flatMap((g) => g.items.map((i) => i.href));
-
-function getActiveHref(pathname: string): string | undefined {
-  return allHrefs
-    .filter((h) => pathname === h || pathname.startsWith(`${h}/`))
-    .sort((a, b) => b.length - a.length)[0];
-}
-
-function getActiveGroup(pathname: string): string | undefined {
-  const best = getActiveHref(pathname);
-  if (!best) return undefined;
-  return navigation.find((g) => g.items.some((i) => i.href === best))?.heading;
-}
+import { filterNavigationForRole, getActiveGroup, getActiveHref, navigation } from '@/components/layout/navigation';
 
 type SidebarProps = {
   open?: boolean;
+  onClose?: () => void;
 };
 
-export function Sidebar({ open = true }: SidebarProps) {
+export function Sidebar({ open = true, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { user } = useAuth();
   const role = user?.role ?? 'viewer';
 
-  const visibleGroups = navigation.filter(
-    (group) => !group.roles || group.roles.includes(role),
-  );
+  const visibleGroups = filterNavigationForRole(role);
 
   // Initialise: all groups open
   const [openGroups, setOpenGroups] = useState<Set<string>>(
@@ -207,35 +43,32 @@ export function Sidebar({ open = true }: SidebarProps) {
   const bestMatch = getActiveHref(pathname);
 
   return (
-    <aside
-      className={cn(
-        'w-full shrink-0 overflow-hidden text-white transition-all duration-300 ease-in-out md:sticky md:top-0 md:h-screen md:self-start',
-        open
-          ? 'max-h-[80vh] translate-y-0 border-b border-black/10 p-3 opacity-100 md:w-[260px] md:max-h-screen md:overflow-y-auto md:border-r md:border-b-0 md:p-4'
-          : 'pointer-events-none max-h-0 -translate-y-2 border-b-0 p-0 opacity-0 md:w-0 md:max-h-screen md:translate-y-0 md:border-r-0',
-      )}
-      style={{ background: 'linear-gradient(180deg, #0e2016 0%, #163320 100%)' }}
-      aria-hidden={!open}
-    >
-      <div className="space-y-4 md:min-h-full md:w-[228px]">
-        {/* Logo */}
-        <div className="flex items-center gap-3 px-2 py-1">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10">
-            <Image src="/logo0.png" alt="IAV Hassan II" width={24} height={24} priority />
-          </div>
-          <div>
-            <p className="text-[13px] font-bold leading-tight tracking-tight text-white">DEAA Hub</p>
-            <p className="text-[10px] leading-tight text-white/50">IAV Hassan II</p>
-          </div>
-        </div>
-
+    <>
+      <div
+        className={cn(
+          'fixed inset-0 z-30 bg-slate-950/28 backdrop-blur-[2px] transition-opacity duration-300 md:hidden',
+          open ? 'opacity-100' : 'pointer-events-none opacity-0',
+        )}
+        onClick={onClose}
+        aria-hidden={!open}
+      />
+      <aside
+        className={cn(
+          'text-slate-900 transition-all duration-300 ease-in-out md:sticky md:top-[94px] md:h-[calc(100vh-94px)] md:self-start',
+          open
+            ? 'fixed inset-x-3 top-[88px] z-40 max-h-[calc(100vh-104px)] overflow-y-auto p-0 opacity-100 md:static md:w-[260px] md:max-h-screen md:overflow-visible md:p-4'
+            : 'pointer-events-none fixed inset-x-3 top-[82px] z-40 max-h-0 -translate-y-3 overflow-hidden opacity-0 md:static md:w-0 md:max-h-screen md:translate-y-0',
+        )}
+        aria-hidden={!open}
+      >
+        <div className="space-y-4 rounded-[1.6rem] border border-slate-200/80 bg-white/92 p-3 shadow-[0_24px_70px_-46px_rgba(15,36,26,0.28)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/78 md:min-h-full md:w-[228px] md:bg-white/72 md:supports-[backdrop-filter]:bg-white/58">
         {/* Department badge for regular users */}
         {(['user', 'teacher', 'student', 'inspector'] as const).includes(role as 'user' | 'teacher' | 'student' | 'inspector') && user?.departments && user.departments.length > 0 && (
-          <div className="mx-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Mes départements</p>
+          <div className="mx-1 rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Mes départements</p>
             <div className="mt-1 flex flex-wrap gap-1">
               {user.departments.map((d) => (
-                <span key={d.id} className="rounded-full bg-emerald-800/60 px-2 py-0.5 text-[11px] font-medium text-emerald-200">
+                <span key={d.id} className="rounded-full border border-[#1b5e3b]/12 bg-[#1b5e3b]/8 px-2 py-0.5 text-[11px] font-medium text-[#1b5e3b]">
                   {d.name}
                 </span>
               ))}
@@ -244,7 +77,7 @@ export function Sidebar({ open = true }: SidebarProps) {
         )}
 
         {/* Divider */}
-        <div className="border-t border-white/8" />
+        <div className="border-t border-slate-200/80" />
 
         {/* Navigation groups */}
         <nav className="grid gap-1">
@@ -256,15 +89,15 @@ export function Sidebar({ open = true }: SidebarProps) {
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.heading)}
-                  className="group/hd flex w-full items-center justify-between px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                  className="group/hd flex w-full items-center justify-between rounded-xl px-3 py-1.5 transition-colors hover:bg-slate-100/70"
                 >
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/40 group-hover/hd:text-white/65 transition-colors">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500 group-hover/hd:text-slate-700 transition-colors">
                     {group.heading}
                   </p>
                   <ChevronDown
                     size={11}
                     className={cn(
-                      'text-white/30 transition-transform duration-300 group-hover/hd:text-white/55',
+                      'text-slate-400 transition-transform duration-300 group-hover/hd:text-slate-600',
                       isOpen ? 'rotate-0' : '-rotate-90',
                     )}
                   />
@@ -284,6 +117,7 @@ export function Sidebar({ open = true }: SidebarProps) {
                         <Link
                           key={`${group.heading}-${label}`}
                           href={href}
+                          onClick={onClose}
                           className={cn('sidebar-link', active && 'active')}
                         >
                           <div className="flex items-center gap-2.5">
@@ -293,7 +127,7 @@ export function Sidebar({ open = true }: SidebarProps) {
                           <span
                             className={cn(
                               'pl-[26px] text-[11px] leading-4',
-                              active ? 'text-slate-400' : 'text-white/35',
+                              active ? 'text-slate-500' : 'text-slate-500/80',
                             )}
                           >
                             {caption}
@@ -307,7 +141,8 @@ export function Sidebar({ open = true }: SidebarProps) {
             );
           })}
         </nav>
-      </div>
-    </aside>
+        </div>
+      </aside>
+    </>
   );
 }

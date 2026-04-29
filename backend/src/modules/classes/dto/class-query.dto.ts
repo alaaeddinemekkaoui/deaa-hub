@@ -37,6 +37,13 @@ export class ClassQueryDto extends PaginationDto {
   year?: number;
 
   @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsIn(['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'])
+  semestre?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ArrowRight, CopyPlus, Search } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
 import { MetricCard } from '@/components/admin/metric-card';
@@ -15,6 +16,7 @@ type AcademicClass = {
   id: number;
   name: string;
   year: number;
+  semestre?: string | null;
   classType?: string | null;
   filiereId?: number | null;
   filiere?: { id?: number; name: string; department?: { id: number; name: string } } | null;
@@ -27,6 +29,7 @@ const PAGE_SIZE = 10;
 
 export default function ClassTransferPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [rows, setRows] = useState<AcademicClass[]>([]);
   const [allClasses, setAllClasses] = useState<AcademicClass[]>([]);
   const [search, setSearch] = useState('');
@@ -77,6 +80,13 @@ export default function ClassTransferPage() {
     [allClasses, targetClassId],
   );
 
+  const nextSemester = (semestre?: string | null) => {
+    const match = /^S(\d+)$/i.exec(semestre ?? '');
+    if (!match) return '';
+    const next = Number(match[1]) + 1;
+    return next <= 10 ? `S${next}` : '';
+  };
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -114,6 +124,14 @@ export default function ClassTransferPage() {
           hasNextPage: page < Math.max(1, Math.ceil(scopedAllRows.length / PAGE_SIZE)),
           hasPreviousPage: page > 1,
         });
+
+        const requestedSourceId = searchParams.get('sourceClassId');
+        if (requestedSourceId && !selected) {
+          const source = scopedAllRows.find((item) => String(item.id) === requestedSourceId);
+          if (source) {
+            openModal(source, scopedAllRows);
+          }
+        }
       } catch (err) {
         setError(getApiErrorMessage(err, 'Impossible de charger les classes.'));
       } finally {
@@ -121,12 +139,20 @@ export default function ClassTransferPage() {
       }
     };
     void load();
-  }, [page, query, filterYear, refreshKey, sessionDepartmentIds, singleDepartmentId]);
+  }, [page, query, filterYear, refreshKey, searchParams, selected, sessionDepartmentIds, singleDepartmentId]);
 
-  const openModal = (item: AcademicClass) => {
+  const openModal = (item: AcademicClass, classPool = allClasses) => {
     setSelected(item);
-    setTargetClassId('');
-    setTargetSearch('');
+    const nextSemestre = nextSemester(item.semestre);
+    const matchingTarget = classPool.find(
+      (candidate) =>
+        candidate.id !== item.id &&
+        candidate.year === item.year &&
+        (!nextSemestre || candidate.semestre === nextSemestre) &&
+        candidate.filiereId === item.filiereId,
+    );
+    setTargetClassId(matchingTarget ? String(matchingTarget.id) : '');
+    setTargetSearch(nextSemestre || '');
     setTransferAcademicYear(`${item.year}/${item.year + 1}`);
   };
   const closeModal = () => { setSelected(null); setTargetClassId(''); setTargetSearch(''); setTransferAcademicYear(''); };
@@ -258,11 +284,14 @@ export default function ClassTransferPage() {
                           <div>
                             <p className="font-medium text-slate-950">{item.name}</p>
                             <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
-                              {[item.classType, item.cycle?.name, item.academicOption?.name].filter(Boolean).join(' • ') || '—'}
+                              {[item.semestre, item.classType, item.cycle?.name, item.academicOption?.name].filter(Boolean).join(' • ') || '—'}
                             </p>
                           </div>
                         </td>
-                        <td><span className="status-chip status-chip--ok">{item.year}</span></td>
+                        <td>
+                          <span className="status-chip status-chip--ok">{item.year}</span>
+                          {item.semestre ? <span className="status-chip status-chip--muted ml-1">{item.semestre}</span> : null}
+                        </td>
                         <td>{item.filiere?.name ?? '—'}</td>
                         <td>{item._count.students}</td>
                         <td>{item._count.teachers}</td>
@@ -303,7 +332,7 @@ export default function ClassTransferPage() {
           {selected && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 space-y-1 text-sm">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Classe source</p>
-              <p className="font-medium text-slate-800">{selected.name} <span className="status-chip status-chip--warn ml-1">{selected.year}</span></p>
+              <p className="font-medium text-slate-800">{selected.name} <span className="status-chip status-chip--warn ml-1">{selected.year}</span>{selected.semestre ? <span className="status-chip status-chip--muted ml-1">{selected.semestre}</span> : null}</p>
               <p className="text-slate-500 text-xs">
                 {selected._count.students} étudiant(s) · {selected._count.teachers} enseignant(s) · {selected._count.cours} cours
               </p>
@@ -337,7 +366,7 @@ export default function ClassTransferPage() {
               <option value="">— Sélectionner une classe —</option>
               {targetCandidates.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} ({c.year}){c.filiere ? ` · ${c.filiere.name}` : ''}
+                  {c.name} ({c.year}${c.semestre ? ` · ${c.semestre}` : ''}){c.filiere ? ` · ${c.filiere.name}` : ''}
                 </option>
               ))}
             </select>
@@ -363,7 +392,7 @@ export default function ClassTransferPage() {
               <ArrowRight size={16} className="text-emerald-600 shrink-0" />
               <div>
                 <p className="font-medium text-emerald-800">
-                  {selectedTarget.name} <span className="status-chip status-chip--ok ml-1">{selectedTarget.year}</span>
+                  {selectedTarget.name} <span className="status-chip status-chip--ok ml-1">{selectedTarget.year}</span>{selectedTarget.semestre ? <span className="status-chip status-chip--muted ml-1">{selectedTarget.semestre}</span> : null}
                   {transferAcademicYear && <span className="ml-2 text-emerald-600 text-xs">· {transferAcademicYear}</span>}
                 </p>
                 <p className="text-emerald-700 text-xs mt-0.5">

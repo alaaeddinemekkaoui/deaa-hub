@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Database, Download, MessageSquare, RefreshCw, Server, ShieldCheck, UserCheck, UserCog, Users2 } from 'lucide-react';
+import { AlertTriangle, Database, MessageSquare, RefreshCw, Search, Server, ShieldCheck, UserCheck, UserCog, Users2 } from 'lucide-react';
 import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
@@ -53,6 +53,7 @@ export default function UsersPage() {
   const isAdmin = user?.role === 'admin';
 
   const [rows, setRows] = useState<User[]>([]);
+  const [search, setSearch] = useState('');
   const [usersPage, setUsersPage] = useState(1);
   const [usersPageSize, setUsersPageSize] = useState(10);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -78,8 +79,21 @@ export default function UsersPage() {
   const [importPassword, setImportPassword] = useState('');
   const [importing, setImporting] = useState(false);
 
-  const usersTotalPages = Math.max(1, Math.ceil(rows.length / usersPageSize));
-  const pagedUsers = rows.slice((usersPage - 1) * usersPageSize, usersPage * usersPageSize);
+  const filteredRows = rows.filter((item) => {
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
+    return [
+      item.fullName,
+      item.email,
+      ROLE_LABELS[item.role] ?? item.role,
+      ...item.departments.map((department) => department.name),
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(query);
+  });
+  const usersTotalPages = Math.max(1, Math.ceil(filteredRows.length / usersPageSize));
+  const pagedUsers = filteredRows.slice((usersPage - 1) * usersPageSize, usersPage * usersPageSize);
 
   const loadUsers = async () => {
     const response = await api.get<User[]>('/users');
@@ -407,8 +421,25 @@ export default function UsersPage() {
 
         {/* User list with pagination */}
         <div className="space-y-3">
+          <div className="toolbar-shell">
+            <div className="toolbar-group">
+              <div className="relative flex-1 max-w-md">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  className="input pl-9"
+                  placeholder="Rechercher par nom, email, rôle ou département"
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setUsersPage(1);
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-slate-500">{rows.length} utilisateur{rows.length !== 1 ? 's' : ''}</p>
+            <p className="text-sm text-slate-500">{filteredRows.length} utilisateur{filteredRows.length !== 1 ? 's' : ''}</p>
             <div className="flex items-center gap-2 text-sm">
               <span className="text-slate-500">Par page</span>
               <select

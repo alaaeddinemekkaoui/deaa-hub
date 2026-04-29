@@ -24,7 +24,7 @@ export class NotificationsService {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      take: 50,
     });
   }
 
@@ -46,6 +46,12 @@ export class NotificationsService {
     return this.prisma.notification.updateMany({
       where: { userId: currentUser.sub, read: false },
       data: { read: true },
+    });
+  }
+
+  async clearRead(currentUser: JwtPayload) {
+    return this.prisma.notification.deleteMany({
+      where: { userId: currentUser.sub, read: true },
     });
   }
 }

@@ -50,6 +50,12 @@ export class TimetableController {
     return this.service.checkConflicts(classId, weekStart);
   }
 
+  @Get(':id')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.service.findOneDetailed(id);
+  }
+
   @Post()
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   create(@Body() dto: CreateSessionDto) {

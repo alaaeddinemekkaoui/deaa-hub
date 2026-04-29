@@ -161,12 +161,15 @@ function rowSpan(start: string, end: string): number {
 export default function RoomReservationsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const isInspector = user?.role === 'viewer';
+  const isInspector = user?.role === 'viewer' || user?.role === 'inspector';
+  const isStudent = user?.role === 'student';
+  const canReviewReservations = isAdmin || isInspector || user?.role === 'staff';
   const canReserveOutsideDepartment = isAdmin || isInspector;
   const userDeptIds = user?.departments.map((d) => d.id) ?? [];
 
   const canApprove = (reservation: Reservation) => {
-    if (isAdmin) return true;
+    if (!canReviewReservations) return false;
+    if (isAdmin || user?.role === 'staff') return true;
     const roomDeptId = reservation.room?.departmentId;
     return roomDeptId != null && userDeptIds.includes(roomDeptId);
   };
@@ -281,6 +284,28 @@ export default function RoomReservationsPage() {
   const [modalPurpose, setModalPurpose] = useState<Purpose>('cours');
   const [modalNotes, setModalNotes] = useState('');
   const [modalClassId, setModalClassId] = useState('');
+  const [modalRoomId, setModalRoomId] = useState('');
+  const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
+  const [availableRoomsLoading, setAvailableRoomsLoading] = useState(false);
+
+  const modalDayOfWeek = useMemo(
+    () => (modalDate ? getDayOfWeek(modalDate) : null),
+    [modalDate],
+  );
+
+  const canSearchAvailableRooms = useMemo(
+    () =>
+      Boolean(
+        modalDate &&
+        modalStart &&
+        modalEnd &&
+        modalStart < modalEnd &&
+        modalDayOfWeek !== null &&
+        modalDayOfWeek >= 1 &&
+        modalDayOfWeek <= 5,
+      ),
+    [modalDate, modalStart, modalEnd, modalDayOfWeek],
+  );
 
   // Detail modal
   const [detailRes, setDetailRes] = useState<Reservation | null>(null);
@@ -311,24 +336,78 @@ export default function RoomReservationsPage() {
     void load();
   }, []);
 
-  useEffect(() => {
-    const loadReservations = async () => {
-      try {
-        const params: Record<string, string> = { weekStart };
-        if (selectedRoomId) params.roomId = selectedRoomId;
-        if (selectedDepartmentId) params.departmentId = selectedDepartmentId;
-        if (selectedFiliereId) params.filiereId = selectedFiliereId;
-        if (selectedClassId) params.classId = selectedClassId;
+  const loadReservations = useCallback(async (silent = false) => {
+    try {
+      const params: Record<string, string> = { weekStart };
+      if (selectedRoomId) params.roomId = selectedRoomId;
+      if (selectedDepartmentId) params.departmentId = selectedDepartmentId;
+      if (selectedFiliereId) params.filiereId = selectedFiliereId;
+      if (selectedClassId) params.classId = selectedClassId;
 
-        const response = await api.get<Reservation[]>('/room-reservations', { params });
-        setReservations(Array.isArray(response.data) ? response.data : []);
-      } catch (err) {
+      const response = await api.get<Reservation[]>('/room-reservations', { params });
+      setReservations(Array.isArray(response.data) ? response.data : []);
+    } catch (err) {
+      if (!silent) {
         toast.error(getApiErrorMessage(err, 'Impossible de charger les réservations'));
       }
-    };
+    }
+  }, [selectedClassId, selectedDepartmentId, selectedFiliereId, selectedRoomId, weekStart]);
 
+  useEffect(() => {
     void loadReservations();
-  }, [weekStart, selectedRoomId, selectedDepartmentId, selectedFiliereId, selectedClassId]);
+  }, [loadReservations]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => void loadReservations(true), 12000);
+    return () => window.clearInterval(id);
+  }, [loadReservations]);
+
+  const loadAvailableRooms = useCallback(async (silent = false) => {
+    if (!canSearchAvailableRooms) {
+      setAvailableRooms([]);
+      setModalRoomId('');
+      return;
+    }
+
+    setAvailableRoomsLoading(true);
+    try {
+      const response = await api.get<Room[]>('/room-reservations/available', {
+        params: {
+          date: modalDate,
+          startTime: modalStart,
+          endTime: modalEnd,
+        },
+      });
+
+      const nextRooms = Array.isArray(response.data) ? response.data : [];
+      setAvailableRooms(nextRooms);
+      setModalRoomId((current) =>
+        current && nextRooms.some((room) => String(room.id) === current) ? current : '',
+      );
+    } catch (err) {
+      setAvailableRooms([]);
+      if (!silent) {
+        toast.error(getApiErrorMessage(err, 'Impossible de vérifier les salles disponibles'));
+      }
+    } finally {
+      setAvailableRoomsLoading(false);
+    }
+  }, [canSearchAvailableRooms, modalDate, modalEnd, modalStart]);
+
+  useEffect(() => {
+    if (!modal || !isStudent) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      await loadAvailableRooms();
+      if (cancelled) return;
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isStudent, loadAvailableRooms, modal]);
 
   // ── Week navigation ────────────────────────────────────────────────────────
 
@@ -432,11 +511,13 @@ export default function RoomReservationsPage() {
     setModalPurpose('cours');
     setModalNotes('');
     setModalClassId(selectedClassId);
+    setModalRoomId(selectedRoomId);
     setModal(true);
   };
 
   const saveReservation = async () => {
-    if (!selectedRoomId || !modalBy.trim() || !modalDate) return;
+    const effectiveRoomId = isStudent ? modalRoomId : selectedRoomId;
+    if (!effectiveRoomId || (!isStudent && !modalBy.trim()) || !modalDate) return;
     const dayOfWeek = getDayOfWeek(modalDate);
     if (dayOfWeek < 1 || dayOfWeek > 5) {
       toast.error('Choisissez une date de lundi à vendredi');
@@ -447,19 +528,22 @@ export default function RoomReservationsPage() {
       return;
     }
     const payload: CreateReservationPayload = {
-      roomId: Number(selectedRoomId),
+      roomId: Number(effectiveRoomId),
       date: modalDate,
       dayOfWeek,
       startTime: modalStart,
       endTime: modalEnd,
-      reservedBy: modalBy.trim(),
+      reservedBy: isStudent ? (user?.fullName ?? user?.email ?? 'Étudiant') : modalBy.trim(),
       purpose: modalPurpose,
       notes: modalNotes.trim() ? modalNotes.trim() : null,
-      classId: modalClassId ? Number(modalClassId) : null,
+      classId: isStudent ? (user?.studentProfile?.classId ?? null) : (modalClassId ? Number(modalClassId) : null),
     };
     try {
-      const created = await api.post<Reservation>('/room-reservations', payload);
-      setReservations((prev) => [...prev, created.data]);
+      await api.post<Reservation>('/room-reservations', payload);
+      await loadReservations(true);
+      if (isStudent) {
+        await loadAvailableRooms(true);
+      }
       setModal(false);
       toast.success('Réservation enregistrée');
     } catch (err) {
@@ -471,7 +555,7 @@ export default function RoomReservationsPage() {
     if (!window.confirm('Supprimer cette réservation ?')) return;
     try {
       await api.delete(`/room-reservations/${id}`);
-      setReservations((prev) => prev.filter((r) => r.id !== id));
+      await loadReservations(true);
       setDetailRes(null);
       toast.success('Réservation supprimée');
     } catch (err) {
@@ -482,8 +566,8 @@ export default function RoomReservationsPage() {
   const approveReservation = async (id: number) => {
     try {
       const updated = await api.patch<Reservation>(`/room-reservations/${id}/approve`, {});
-      setReservations((prev) => prev.map((r) => r.id === id ? updated.data : r));
-      setDetailRes((prev) => prev?.id === id ? updated.data : prev);
+      await loadReservations(true);
+      setDetailRes(updated.data);
       toast.success('Réservation approuvée');
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Échec de l'approbation"));
@@ -495,8 +579,8 @@ export default function RoomReservationsPage() {
     if (note === null) return; // cancelled
     try {
       const updated = await api.patch<Reservation>(`/room-reservations/${id}/reject`, { note });
-      setReservations((prev) => prev.map((r) => r.id === id ? updated.data : r));
-      setDetailRes((prev) => prev?.id === id ? updated.data : prev);
+      await loadReservations(true);
+      setDetailRes(updated.data);
       toast.success('Réservation rejetée');
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Échec du rejet'));
@@ -526,11 +610,11 @@ export default function RoomReservationsPage() {
         <PageHeader
           eyebrow="Infrastructure"
           title="Réservation des salles"
-          description="Réservez et consultez l'occupation des salles par semaine. Les conflits sont détectés automatiquement."
+          description={isStudent ? "Choisissez d'abord la date et le créneau, puis déposez votre demande parmi les salles réellement disponibles. Votre classe est reprise automatiquement depuis votre session." : "Réservez et consultez l'occupation des salles par semaine. Les conflits sont détectés automatiquement."}
         />
 
         {/* ── Pending approvals panel ── */}
-        {pendingReservations.length > 0 && (
+        {canReviewReservations && pendingReservations.length > 0 && (
           <section className="surface-card p-4 space-y-3">
             <div className="flex items-center gap-2">
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold">
@@ -573,7 +657,7 @@ export default function RoomReservationsPage() {
         )}
 
         {/* ── Toolbar ── */}
-        <section className="surface-card p-4 space-y-4">
+        {!isStudent ? <section className="surface-card p-4 space-y-4">
           {/* Row 1 — room selector */}
           <div className="flex flex-wrap items-end gap-3">
             <div className="field-stack flex-1 min-w-48">
@@ -715,7 +799,40 @@ export default function RoomReservationsPage() {
               <ChevronRight size={17} />
             </button>
           </div>
-        </section>
+        </section> : (
+          <section className="surface-card p-4 space-y-4">
+            <div className="panel-header">
+              <div>
+                <h2 className="panel-title">Déposer une demande</h2>
+                <p className="panel-copy">Choisissez le jour et le créneau souhaités. Le système filtre ensuite les salles disponibles pour cette période.</p>
+              </div>
+              <button
+                className="btn-primary"
+                type="button"
+                onClick={() => {
+                  setModalRoomId('');
+                  setAvailableRooms([]);
+                  setModalDate(fmt(new Date()));
+                  setModalStart('08:00');
+                  setModalEnd('10:00');
+                  setModalBy(user?.fullName ?? '');
+                  setModalPurpose('cours');
+                  setModalNotes('');
+                  setModalClassId(user?.studentProfile?.classId ? String(user.studentProfile.classId) : '');
+                  setModal(true);
+                }}
+              >
+                Nouvelle demande
+              </button>
+            </div>
+            <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-5">
+              <p className="text-sm font-semibold text-slate-900">Demande de salle</p>
+              <p className="mt-1 text-sm text-slate-600">
+                La liste des salles s&apos;affiche seulement apres le choix de la date et des heures, pour ne proposer que les salles libres sur ce créneau.
+              </p>
+            </div>
+          </section>
+        )}
 
         {/* ── Academic structure summary ── */}
         {classesByDepartment.length > 0 && (
@@ -771,7 +888,36 @@ export default function RoomReservationsPage() {
         )}
 
         {/* ── Room list (when no room selected) ── */}
-        {!selectedRoomId ? (
+        {isStudent ? (
+          <section className="surface-card space-y-4">
+            <div className="panel-header">
+              <div>
+                <h2 className="panel-title">Mes demandes</h2>
+                <p className="panel-copy">Suivi de vos demandes de réservation et des réponses du département.</p>
+              </div>
+            </div>
+            {reservations.length === 0 ? (
+              <div className="empty-note">Aucune demande pour le moment.</div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {reservations.map((res) => (
+                  <button key={res.id} type="button" className="rounded-[1.5rem] border bg-white p-4 text-left shadow-sm hover:border-slate-300" onClick={() => setDetailRes(res)}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-slate-900">{res.room?.name ?? `Salle #${res.roomId}`}</p>
+                        <p className="mt-1 text-sm text-slate-500">{res.date} · {res.startTime}–{res.endTime}</p>
+                      </div>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[res.status]}`}>{STATUS_LABELS[res.status]}</span>
+                    </div>
+                    <p className="mt-3 text-sm text-slate-700">{PURPOSE_LABELS[res.purpose]}</p>
+                    <p className="mt-1 text-sm text-slate-500">{res.notes ?? 'Sans motif précisé'}</p>
+                    {res.approvalNote ? <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">{res.approvalNote}</p> : null}
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : !selectedRoomId ? (
           <section className="surface-card p-0 overflow-hidden">
             <div className="border-b border-slate-100 px-5 py-4">
               <p className="font-semibold text-slate-800">
@@ -951,11 +1097,15 @@ export default function RoomReservationsPage() {
         <ModalShell
           open={modal}
           title="Nouvelle réservation"
-          description={selectedRoom ? `${selectedRoom.name} · ${toDate(weekStart).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}` : ''}
+          description={
+            isStudent
+              ? 'Renseignez le créneau souhaité puis choisissez une salle disponible.'
+              : (selectedRoom ? `${selectedRoom.name} · ${toDate(weekStart).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}` : '')
+          }
           onClose={() => setModal(false)}
           footer={
             <>
-              <button className="btn-primary" type="button" onClick={saveReservation} disabled={!modalBy.trim()}>
+              <button className="btn-primary" type="button" onClick={saveReservation} disabled={isStudent ? !modalRoomId : !modalBy.trim()}>
                 Réserver
               </button>
               <button className="btn-outline" type="button" onClick={() => setModal(false)}>Annuler</button>
@@ -996,7 +1146,40 @@ export default function RoomReservationsPage() {
                 </select>
               </div>
             </div>
-            <div className="field-stack">
+            {isStudent && (
+              <div className="field-stack">
+                <label className="field-label">Salle disponible <span className="text-red-500">*</span></label>
+                <select
+                  className="input"
+                  value={modalRoomId}
+                  onChange={(e) => setModalRoomId(e.target.value)}
+                  disabled={!canSearchAvailableRooms || availableRoomsLoading}
+                >
+                  <option value="">
+                    {!canSearchAvailableRooms
+                      ? 'Choisissez d’abord une date et un créneau valides'
+                      : availableRoomsLoading
+                        ? 'Recherche des salles disponibles...'
+                        : availableRooms.length > 0
+                          ? `Sélectionner une salle (${availableRooms.length})`
+                          : 'Aucune salle disponible pour ce créneau'}
+                  </option>
+                  {availableRooms.map((room) => (
+                    <option key={room.id} value={String(room.id)}>
+                      {room.name} — {room.capacity} places
+                    </option>
+                  ))}
+                </select>
+                {canSearchAvailableRooms && !availableRoomsLoading && (
+                  <p className="text-xs text-slate-500">
+                    {availableRooms.length > 0
+                      ? `${availableRooms.length} salle${availableRooms.length !== 1 ? 's' : ''} disponible${availableRooms.length !== 1 ? 's' : ''} pour cette période.`
+                      : 'Aucune salle n’est libre sur ce créneau. Essayez un autre horaire.'}
+                  </p>
+                )}
+              </div>
+            )}
+            {!isStudent && <div className="field-stack">
               <label className="field-label">Réservé par <span className="text-red-500">*</span></label>
               <input
                 className="input"
@@ -1004,8 +1187,8 @@ export default function RoomReservationsPage() {
                 value={modalBy}
                 onChange={(e) => setModalBy(e.target.value)}
               />
-            </div>
-            <div className="field-stack">
+            </div>}
+            {!isStudent && <div className="field-stack">
               <label className="field-label">Classe (optionnel)</label>
               <select
                 className="input"
@@ -1019,7 +1202,7 @@ export default function RoomReservationsPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </div>}
             <div className="field-stack">
               <label className="field-label">Objet</label>
               <div className="flex gap-2 flex-wrap">
@@ -1040,10 +1223,10 @@ export default function RoomReservationsPage() {
               </div>
             </div>
             <div className="field-stack">
-              <label className="field-label">Notes (optionnel)</label>
+              <label className="field-label">{isStudent ? 'Motif / raison' : 'Notes (optionnel)'}</label>
               <input
                 className="input"
-                placeholder="Examen Agronomie IAG2, Réunion pédagogique..."
+                placeholder={isStudent ? 'Expliquez la raison de votre demande...' : 'Examen Agronomie IAG2, Réunion pédagogique...'}
                 value={modalNotes}
                 onChange={(e) => setModalNotes(e.target.value)}
               />

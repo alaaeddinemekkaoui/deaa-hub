@@ -37,6 +37,21 @@ export class CoursController {
     return this.coursService.findOne(id);
   }
 
+  @Get(':id/profile')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  getProfile(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('classId') classId?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.coursService.getProfile(id, {
+      classId: classId ? Number(classId) : undefined,
+      dateFrom,
+      dateTo,
+    });
+  }
+
   @Post()
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   create(@Body() dto: CreateCoursDto) {

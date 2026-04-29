@@ -34,8 +34,17 @@ class ApprovalDto {
 export class RoomReservationsController {
   constructor(private readonly service: RoomReservationsService) {}
 
+  @Get('available')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR, UserRole.STUDENT)
+  findAvailableRooms(
+    @Query() query: RoomReservationQueryDto,
+    @CurrentUser() currentUser: JwtPayload,
+  ) {
+    return this.service.findAvailableRooms(query, currentUser);
+  }
+
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR, UserRole.STUDENT)
   findAll(
     @Query() query: RoomReservationQueryDto,
     @CurrentUser() currentUser: JwtPayload,
@@ -44,13 +53,13 @@ export class RoomReservationsController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findOne(id);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR, UserRole.STUDENT)
+  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() currentUser: JwtPayload) {
+    return this.service.findOne(id, currentUser);
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR, UserRole.STUDENT)
   create(
     @Body() dto: CreateRoomReservationDto,
     @CurrentUser() currentUser: JwtPayload,
@@ -59,7 +68,7 @@ export class RoomReservationsController {
   }
 
   @Patch(':id/approve')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.INSPECTOR)
   approve(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: ApprovalDto,
@@ -69,7 +78,7 @@ export class RoomReservationsController {
   }
 
   @Patch(':id/reject')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.INSPECTOR)
   reject(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: ApprovalDto,

@@ -29,39 +29,42 @@ export class WorkflowsController {
   ) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.INSPECTOR, UserRole.STUDENT)
   async findAll(@CurrentUser() payload: JwtPayload) {
     if (payload.role === UserRole.ADMIN) {
-      return this.workflowsService.findAll();
+      return this.workflowsService.findAll(undefined, payload);
     }
-    // For staff/viewer: filter to their assigned departments
+    if (payload.role === UserRole.STUDENT) {
+      return this.workflowsService.findAll(undefined, payload);
+    }
     const depts = await this.usersService.getUserDepartments(payload.sub);
     const ids = depts.map((d) => d.id);
-    return this.workflowsService.findAll(ids);
+    return this.workflowsService.findAll(ids, payload);
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER)
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.workflowsService.findOne(id);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.INSPECTOR, UserRole.STUDENT)
+  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() payload: JwtPayload) {
+    return this.workflowsService.findOne(id, payload);
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.STUDENT)
   create(@Body() dto: CreateWorkflowDto, @CurrentUser() payload: JwtPayload) {
     return this.workflowsService.create({
       ...dto,
       assignedToId: dto.assignedToId ?? payload.sub,
-    });
+    }, payload);
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.INSPECTOR)
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateWorkflowDto,
+    @CurrentUser() payload: JwtPayload,
   ) {
-    return this.workflowsService.update(id, dto);
+    return this.workflowsService.update(id, dto, payload);
   }
 
   @Delete(':id')

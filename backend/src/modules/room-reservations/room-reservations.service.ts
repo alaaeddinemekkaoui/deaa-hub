@@ -51,6 +51,69 @@ const ROOM_RESERVATION_INCLUDE = {
 export class RoomReservationsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findAvailableRooms(
+    query: RoomReservationQueryDto,
+    currentUser?: JwtPayload,
+  ) {
+    if (!query.date || !query.startTime || !query.endTime) {
+      throw new BadRequestException(
+        'date, startTime and endTime are required to check room availability',
+      );
+    }
+
+    const weekday = this.getWeekday(query.date);
+    this.ensureWeekdayMatches(query.date, weekday);
+    this.ensureTimeRange(query.startTime, query.endTime);
+
+    const allowedDepartmentIds = this.getAllowedDepartmentIds(currentUser);
+    if (
+      currentUser &&
+      query.departmentId &&
+      allowedDepartmentIds &&
+      !allowedDepartmentIds.includes(query.departmentId)
+    ) {
+      throw new ForbiddenException(
+        'You can only view room availability in your own department',
+      );
+    }
+
+    const rooms = await this.prisma.room.findMany({
+      where: {
+        availability: true,
+        ...(query.departmentId
+          ? { departmentId: query.departmentId }
+          : allowedDepartmentIds
+            ? { departmentId: { in: allowedDepartmentIds } }
+            : {}),
+      },
+      include: {
+        department: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    if (rooms.length === 0) return [];
+
+    const conflicts = await this.prisma.roomReservation.findMany({
+      where: {
+        roomId: { in: rooms.map((room) => room.id) },
+        date: query.date,
+        status: { in: ['pending', 'approved'] },
+        startTime: { lt: query.endTime },
+        endTime: { gt: query.startTime },
+      },
+      select: { roomId: true },
+    });
+
+    const blockedRoomIds = new Set(conflicts.map((reservation) => reservation.roomId));
+    return rooms.filter((room) => !blockedRoomIds.has(room.id));
+  }
+
   async findAll(query: RoomReservationQueryDto, currentUser?: JwtPayload) {
     const where = this.buildWhere(query, currentUser);
 
@@ -61,19 +124,40 @@ export class RoomReservationsService {
     });
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, currentUser?: JwtPayload) {
     const reservation = await this.prisma.roomReservation.findUnique({
       where: { id },
       include: ROOM_RESERVATION_INCLUDE,
     });
     if (!reservation)
       throw new NotFoundException(`Room reservation ${id} not found`);
+    this.ensureCanViewReservation(reservation, currentUser);
     return reservation;
   }
 
   async create(dto: CreateRoomReservationDto, currentUser: JwtPayload) {
+    const requestedBy = await this.prisma.user.findUnique({
+      where: { id: currentUser.sub },
+      select: { id: true, fullName: true },
+    });
+    const studentProfile =
+      currentUser.role === UserRole.STUDENT
+        ? await this.prisma.student.findUnique({
+            where: { userId: currentUser.sub },
+            select: {
+              id: true,
+              classId: true,
+              academicClass: { select: { filiere: { select: { departmentId: true } } } },
+            },
+          })
+        : null;
+
+    const effectiveClassId =
+      currentUser.role === UserRole.STUDENT
+        ? (studentProfile?.classId ?? null)
+        : (dto.classId ?? null);
     const room = await this.getRoomForReservation(dto.roomId);
-    const classDepartmentId = await this.getClassDepartmentId(dto.classId);
+    const classDepartmentId = await this.getClassDepartmentId(effectiveClassId ?? undefined);
 
     this.ensureCanCreateReservation(
       currentUser,
@@ -82,7 +166,9 @@ export class RoomReservationsService {
     );
 
     if (
-      dto.classId &&
+      currentUser.role !== UserRole.STUDENT &&
+      currentUser.role !== UserRole.TEACHER &&
+      effectiveClassId &&
       room.departmentId &&
       classDepartmentId &&
       room.departmentId !== classDepartmentId
@@ -101,29 +187,41 @@ export class RoomReservationsService {
       dto.endTime,
     );
 
-    // Admins get auto-approved; users get pending
-    const isAdmin = currentUser.role === UserRole.ADMIN;
-    const status: ReservationStatus = isAdmin ? 'approved' : 'pending';
+    // Admins/staff/inspectors can create direct approved reservations.
+    const canCreateDirect =
+      currentUser.role === UserRole.ADMIN ||
+      currentUser.role === UserRole.STAFF ||
+      currentUser.role === UserRole.INSPECTOR;
+    const status: ReservationStatus = canCreateDirect ? 'approved' : 'pending';
 
-    return this.prisma.roomReservation.create({
+    const created = await this.prisma.roomReservation.create({
       data: {
         roomId: dto.roomId,
-        classId: dto.classId ?? null,
+        classId: effectiveClassId,
         date: dto.date,
         dayOfWeek: dto.dayOfWeek,
         startTime: dto.startTime,
         endTime: dto.endTime,
-        reservedBy: dto.reservedBy,
+        reservedBy:
+          currentUser.role === UserRole.STUDENT
+            ? (requestedBy?.fullName ?? dto.reservedBy)
+            : dto.reservedBy,
         purpose: dto.purpose,
         notes: dto.notes?.trim() ? dto.notes.trim() : null,
         status,
         requestedById: currentUser.sub,
-        ...(isAdmin
+        ...(canCreateDirect
           ? { approvedById: currentUser.sub, approvedAt: new Date() }
           : {}),
       },
       include: ROOM_RESERVATION_INCLUDE,
     });
+
+    if (!canCreateDirect) {
+      await this.notifyReservationReviewers(created, currentUser);
+    }
+
+    return created;
   }
 
   async approve(id: number, currentUser: JwtPayload, note?: string) {
@@ -142,7 +240,7 @@ export class RoomReservationsService {
 
     await this.ensureCanApprove(reservation.room.departmentId, currentUser);
 
-    return this.prisma.roomReservation.update({
+    const updated = await this.prisma.roomReservation.update({
       where: { id },
       data: {
         status: 'approved',
@@ -152,6 +250,8 @@ export class RoomReservationsService {
       },
       include: ROOM_RESERVATION_INCLUDE,
     });
+    await this.notifyReservationRequester(updated, 'approved');
+    return updated;
   }
 
   async reject(id: number, currentUser: JwtPayload, note?: string) {
@@ -168,7 +268,7 @@ export class RoomReservationsService {
 
     await this.ensureCanApprove(reservation.room.departmentId, currentUser);
 
-    return this.prisma.roomReservation.update({
+    const updated = await this.prisma.roomReservation.update({
       where: { id },
       data: {
         status: 'rejected',
@@ -178,6 +278,8 @@ export class RoomReservationsService {
       },
       include: ROOM_RESERVATION_INCLUDE,
     });
+    await this.notifyReservationRequester(updated, 'rejected');
+    return updated;
   }
 
   async update(id: number, dto: UpdateRoomReservationDto) {
@@ -239,16 +341,22 @@ export class RoomReservationsService {
     roomDepartmentId: number | null,
     currentUser: JwtPayload,
   ) {
-    if (currentUser.role === UserRole.ADMIN) return;
-
-    // A user can approve if they are assigned to the room's department
     if (
-      roomDepartmentId &&
-      currentUser.departmentIds.includes(roomDepartmentId)
+      currentUser.role === UserRole.ADMIN ||
+      currentUser.role === UserRole.STAFF ||
+      currentUser.role === UserRole.INSPECTOR
     ) {
+      if (
+        currentUser.role !== UserRole.ADMIN &&
+        roomDepartmentId &&
+        !currentUser.departmentIds.includes(roomDepartmentId)
+      ) {
+        throw new ForbiddenException(
+          "Vous n'êtes pas autorisé à approuver cette réservation",
+        );
+      }
       return;
     }
-
     throw new ForbiddenException(
       "Vous n'êtes pas autorisé à approuver cette réservation",
     );
@@ -260,6 +368,9 @@ export class RoomReservationsService {
   ): Prisma.RoomReservationWhereInput {
     const filters: Prisma.RoomReservationWhereInput[] = [];
 
+    if (currentUser?.role === UserRole.STUDENT) {
+      filters.push({ requestedById: currentUser.sub });
+    } else
     // Department scoping for regular users
     if (
       currentUser &&
@@ -293,6 +404,26 @@ export class RoomReservationsService {
     }
 
     return filters.length ? { AND: filters } : {};
+  }
+
+  private ensureCanViewReservation(
+    reservation: { requestedById: number | null; room: { departmentId: number | null } },
+    currentUser?: JwtPayload,
+  ) {
+    if (!currentUser) return;
+    if (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.STAFF) return;
+    if (currentUser.role === UserRole.STUDENT) {
+      if (reservation.requestedById === currentUser.sub) return;
+      throw new ForbiddenException("Vous ne pouvez consulter que vos propres demandes");
+    }
+    if (
+      reservation.room.departmentId &&
+      currentUser.departmentIds.includes(reservation.room.departmentId)
+    ) {
+      return;
+    }
+    if (reservation.requestedById === currentUser.sub) return;
+    throw new ForbiddenException("Vous n'êtes pas autorisé à consulter cette réservation");
   }
 
   private getWeekDates(weekStart: string) {
@@ -333,6 +464,13 @@ export class RoomReservationsService {
     roomDepartmentId: number | null,
     classDepartmentId: number | null,
   ) {
+    if (
+      currentUser.role === UserRole.STUDENT ||
+      currentUser.role === UserRole.TEACHER
+    ) {
+      return;
+    }
+
     if (!isDeptScoped(currentUser.role)) return;
 
     const allowedDepartmentIds = currentUser.departmentIds ?? [];
@@ -356,6 +494,19 @@ export class RoomReservationsService {
         'You can only link classes from your own department',
       );
     }
+  }
+
+  private getAllowedDepartmentIds(currentUser?: JwtPayload) {
+    if (
+      !currentUser ||
+      !isDeptScoped(currentUser.role) ||
+      currentUser.role === UserRole.STUDENT ||
+      currentUser.role === UserRole.TEACHER
+    ) {
+      return undefined;
+    }
+
+    return currentUser.departmentIds ?? [];
   }
 
   private async getRoomForReservation(roomId: number) {
@@ -430,5 +581,59 @@ export class RoomReservationsService {
     throw new ConflictException(
       `This room is already reserved from ${conflict.startTime} to ${conflict.endTime} by ${conflict.reservedBy}`,
     );
+  }
+
+  private async notifyReservationReviewers(
+    reservation: Prisma.RoomReservationGetPayload<{ include: typeof ROOM_RESERVATION_INCLUDE }>,
+    currentUser: JwtPayload,
+  ) {
+    const reviewers = await this.prisma.user.findMany({
+      where: {
+        OR: [
+          { role: UserRole.ADMIN },
+          { role: UserRole.STAFF },
+          {
+            role: UserRole.INSPECTOR,
+            departments: {
+              some: {
+                departmentId: reservation.room?.departmentId ?? undefined,
+              },
+            },
+          },
+        ],
+      },
+      select: { id: true },
+    });
+
+    const reviewerIds = [...new Set(reviewers.map((reviewer) => reviewer.id).filter((id) => id !== currentUser.sub))];
+    if (reviewerIds.length === 0) return;
+
+    await this.prisma.notification.createMany({
+      data: reviewerIds.map((userId) => ({
+        userId,
+        type: 'room_request',
+        content: `Nouvelle demande de salle: ${reservation.room?.name ?? `Salle #${reservation.roomId}`} le ${reservation.date} de ${reservation.startTime} à ${reservation.endTime}.`,
+      })),
+    });
+  }
+
+  private async notifyReservationRequester(
+    reservation: Prisma.RoomReservationGetPayload<{ include: typeof ROOM_RESERVATION_INCLUDE }>,
+    status: 'approved' | 'rejected',
+  ) {
+    if (!reservation.requestedById) return;
+
+    const content =
+      status === 'approved'
+        ? `Votre demande de salle ${reservation.room?.name ?? `Salle #${reservation.roomId}`} du ${reservation.date} a été approuvée.`
+        : `Votre demande de salle ${reservation.room?.name ?? `Salle #${reservation.roomId}`} du ${reservation.date} a été rejetée.`;
+
+    await this.prisma.notification.create({
+      data: {
+        userId: reservation.requestedById,
+        type: `room_request_${status}`,
+        content,
+      },
+    });
   }
 }

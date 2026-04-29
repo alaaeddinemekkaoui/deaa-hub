@@ -446,6 +446,75 @@ async function main() {
     savedStudents[s.cin] = saved.id;
   }
 
+  // ─── Test accounts ────────────────────────────────────────────────────────
+  const studentTestPasswordHash = await bcrypt.hash('student123', 10);
+  const inspectorTestPasswordHash = await bcrypt.hash('inspector123', 10);
+
+  const studentTestUser = await prisma.user.upsert({
+    where: { email: 'student.test' },
+    update: {
+      fullName: 'Test Student',
+      passwordHash: studentTestPasswordHash,
+      role: UserRole.student,
+    },
+    create: {
+      fullName: 'Test Student',
+      email: 'student.test',
+      passwordHash: studentTestPasswordHash,
+      role: UserRole.student,
+    },
+  });
+
+  await prisma.userDepartment.upsert({
+    where: {
+      userId_departmentId: {
+        userId: studentTestUser.id,
+        departmentId: deptAgronomie.id,
+      },
+    },
+    update: {},
+    create: {
+      userId: studentTestUser.id,
+      departmentId: deptAgronomie.id,
+    },
+  });
+
+  await prisma.student.update({
+    where: { id: savedStudents['SB001001'] },
+    data: {
+      userId: studentTestUser.id,
+    },
+  });
+
+  const inspectorTestUser = await prisma.user.upsert({
+    where: { email: 'inspector.test' },
+    update: {
+      fullName: 'Test Inspector',
+      passwordHash: inspectorTestPasswordHash,
+      role: UserRole.inspector,
+    },
+    create: {
+      fullName: 'Test Inspector',
+      email: 'inspector.test',
+      passwordHash: inspectorTestPasswordHash,
+      role: UserRole.inspector,
+    },
+  });
+
+  await prisma.userDepartment.upsert({
+    where: {
+      userId_departmentId: {
+        userId: inspectorTestUser.id,
+        departmentId: deptAgronomie.id,
+      },
+    },
+    update: {},
+    create: {
+      userId: inspectorTestUser.id,
+      departmentId: deptAgronomie.id,
+    },
+  });
+
   // ─── StudentClassHistory ──────────────────────────────────────────────────
   const addHistory = async (
     studentId: number, classId: number, academicYear: string, studyYear: number, status: string,

@@ -29,6 +29,7 @@ model User {
   teacherProfile        Teacher?
   departments           UserDepartment[]
   assignedWorkflows     WorkflowTask[]
+  validatedAttendances  AttendanceRecord[]   @relation("AttendanceValidatedBy")
 }
 
 model UserDepartment {
@@ -111,6 +112,7 @@ model Student {
   mealWallet       MealWallet?
   observations     StudentObservation[]
   workflows        WorkflowTask[]
+  attendances      AttendanceRecord[]
 
   photoPath        String?
 
@@ -228,6 +230,7 @@ model AcademicClass {
   id                           Int                            @id @default(autoincrement())
   name                         String
   year                         Int
+  semestre                     String?
   filiereId                    Int?
   classType                    String?
   cycleId                      Int?
@@ -250,8 +253,9 @@ model AcademicClass {
   teachers                     TeacherClass[]
   sessions                     TimetableSession[]
 
-  @@unique([name, year])
+  @@unique([name, year, semestre])
   @@index([year])
+  @@index([semestre])
   @@index([filiereId])
   @@index([optionId])
   @@index([cycleId])
@@ -525,6 +529,7 @@ model Cours {
   elementModule         ElementModule?          @relation(fields: [elementModuleId], references: [id])
   classes               CoursClass[]
   resources             CoursResource[]
+  attendanceRecords     AttendanceRecord[]
 
   @@index([name])
   @@index([elementModuleId])
@@ -571,6 +576,7 @@ model ElementModule {
   moduleId              Int
   classId               Int?
   volumeHoraire         Int?
+  sessionDurationMinutes Int?
   type                  ElementType             @default(CM)
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
@@ -599,10 +605,16 @@ model TimetableSession {
   weekStart DateTime?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
+  attendanceEnabled Boolean @default(false)
+  attendanceTokenHash String? @unique
+  attendanceEnabledAt DateTime?
+  attendanceDeadline DateTime?
+  attendanceClosedAt DateTime?
   class     AcademicClass @relation(fields: [classId], references: [id], onDelete: Cascade)
   element   ElementModule @relation(fields: [elementId], references: [id], onDelete: Cascade)
   room      Room?         @relation(fields: [roomId], references: [id])
   teacher   Teacher?      @relation(fields: [teacherId], references: [id])
+  attendanceRecords AttendanceRecord[]
 
   @@index([classId])
   @@index([teacherId])
@@ -610,6 +622,32 @@ model TimetableSession {
   @@index([elementId])
   @@index([dayOfWeek])
   @@index([weekStart])
+  @@index([attendanceEnabled])
+  @@index([attendanceDeadline])
+}
+
+model AttendanceRecord {
+  id            Int              @id @default(autoincrement())
+  studentId     Int
+  courseId      Int?
+  sessionId     Int
+  status        AttendanceStatus @default(pending)
+  timestamp     DateTime?
+  validatedById Int?
+  method        AttendanceMethod @default(qr)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  course        Cours?           @relation(fields: [courseId], references: [id])
+  session       TimetableSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student       Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  validatedBy   User?            @relation("AttendanceValidatedBy", fields: [validatedById], references: [id])
+
+  @@unique([studentId, sessionId])
+  @@index([studentId])
+  @@index([courseId])
+  @@index([sessionId])
+  @@index([status])
+  @@index([timestamp])
 }
 
 model CoursClass {
@@ -884,4 +922,15 @@ enum MealTransactionType {
   credit
   debit
   adjustment
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  pending
+}
+
+enum AttendanceMethod {
+  qr
+  manual
 }

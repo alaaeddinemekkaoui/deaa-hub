@@ -194,6 +194,8 @@ function DemandeCard({
 export default function DemandesPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const isStudent = user?.role === 'student';
+  const canManage = isAdmin || user?.role === 'staff' || user?.role === 'inspector';
 
   const [items, setItems]       = useState<Demande[]>([]);
   const [docTypes, setDocTypes] = useState<DocumentType[]>([]);
@@ -215,7 +217,7 @@ export default function DemandesPage() {
       const [demandesRes, docTypesRes, studentsData] = await Promise.all([
         api.get<Demande[]>('/workflows'),
         api.get<DocumentType[]>('/document-types'),
-        fetchCollectionRef<Student>('/students', { page: 1, limit: 500 }),
+        isStudent ? Promise.resolve([] as Student[]) : fetchCollectionRef<Student>('/students', { page: 1, limit: 500 }),
       ]);
       setItems(demandesRes.data);
       setDocTypes(docTypesRes.data);
@@ -294,9 +296,9 @@ export default function DemandesPage() {
       <PageHeader
         eyebrow="Gestion administrative"
         title="Demandes de documents"
-        description="Suivez les demandes de documents administratifs des étudiants."
+        description={isStudent ? "Déposez vos demandes de documents et suivez leur avancement." : "Suivez les demandes de documents administratifs des étudiants."}
         actions={
-          (isAdmin || user?.role === 'staff') && (
+          (canManage || isStudent) && (
             <button type="button" className="btn-primary flex items-center gap-2" onClick={openModal}>
               <Plus size={14} />
               Nouvelle demande
@@ -342,7 +344,7 @@ export default function DemandesPage() {
             <DemandeCard
               key={item.id}
               item={item}
-              isAdmin={isAdmin}
+              isAdmin={canManage}
               onStatusChange={onStatusChange}
               onDelete={onDelete}
             />
@@ -378,7 +380,7 @@ export default function DemandesPage() {
             )}
           </div>
 
-          <div className="field-stack">
+          {!isStudent && <div className="field-stack">
             <label className="field-label">Étudiant concerné</label>
             <select className="input" value={formStudentId} onChange={(e) => setFormStudentId(e.target.value)}>
               <option value="">— Aucun —</option>
@@ -386,7 +388,7 @@ export default function DemandesPage() {
                 <option key={s.id} value={s.id}>{s.fullName} ({s.codeMassar})</option>
               ))}
             </select>
-          </div>
+          </div>}
 
           <div className="field-stack">
             <label className="field-label">Description / Remarques</label>

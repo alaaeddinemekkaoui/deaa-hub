@@ -39,6 +39,16 @@ export class UpdateElementDto {
   volumeHoraire?: number | null;
 
   @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === null || value === undefined || value === '') return null;
+    return Number(value);
+  })
+  @ValidateIf((_, v) => v !== null)
+  @IsInt()
+  @Min(15)
+  sessionDurationMinutes?: number | null;
+
+  @IsOptional()
   @IsEnum(ElementType)
   type?: ElementType;
 

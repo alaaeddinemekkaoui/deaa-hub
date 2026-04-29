@@ -10,6 +10,8 @@ import {
   Layers,
   Save,
   Upload,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
 import { MetricCard } from '@/components/admin/metric-card';
@@ -82,13 +84,38 @@ type GradeInput = {
   comment: string;
 };
 
+type StudentGradeView = {
+  id: number;
+  score: number;
+  maxScore: number;
+  academicYear: string;
+  semester?: string | null;
+  comment?: string | null;
+  module?: { id: number; name: string; semestre?: string | null } | null;
+  elementModule?: { id: number; name: string; type: 'CM' | 'TD' | 'TP' } | null;
+  teacher?: { id: number; firstName: string; lastName: string } | null;
+  academicClass?: { id: number; name: string; year: number } | null;
+};
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function EpreuvesPage() {
   const { user } = useAuth();
-  const canEdit = user?.role !== 'viewer';
+  const isStudent = user?.role === 'student';
+  const canEdit = !isStudent && user?.role !== 'viewer';
   const restrictedToOwnDepartments =
     user?.role === 'user' || user?.role === 'viewer';
+  const [myGrades, setMyGrades] = useState<StudentGradeView[]>([]);
+  const [currentAcademicYear, setCurrentAcademicYear] = useState<string | null>(null);
+  const [gradeHistory, setGradeHistory] = useState<Array<{ year: string; grades: StudentGradeView[] }>>([]);
+  const [openHistoryYears, setOpenHistoryYears] = useState<string[]>([]);
+  const [myStudent, setMyStudent] = useState<{
+    id: number;
+    fullName: string;
+    codeMassar: string;
+    codeEtudiant?: string | null;
+    academicClass?: { id: number; name: string; year: number } | null;
+  } | null>(null);
 
   // Reference data
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
@@ -186,9 +213,28 @@ export default function EpreuvesPage() {
     [gradeInputs],
   );
 
+  const groupedStudentGrades = useMemo(() => {
+    return myGrades.reduce<Record<string, StudentGradeView[]>>((acc, grade) => {
+      const key = [grade.academicYear, grade.semester].filter(Boolean).join(' · ');
+      const bucket = key || 'Résultats';
+      acc[bucket] = acc[bucket] ?? [];
+      acc[bucket].push(grade);
+      return acc;
+    }, {});
+  }, [myGrades]);
+
+  const simpleAverage = useMemo(
+    () =>
+      myGrades.length
+        ? `${(myGrades.reduce((sum, item) => sum + (item.score / item.maxScore) * 20, 0) / myGrades.length).toFixed(2)}/20`
+        : '-',
+    [myGrades],
+  );
+
   // ─── Load reference data ─────────────────────────────────────────────────
 
   useEffect(() => {
+    if (isStudent) return;
     const load = async () => {
       try {
         setLoadingReference(true);
@@ -223,7 +269,32 @@ export default function EpreuvesPage() {
       }
     };
     void load();
-  }, []);
+  }, [isStudent]);
+
+  useEffect(() => {
+    if (!isStudent) return;
+    const loadMine = async () => {
+      try {
+        setLoadingReference(true);
+        const res = await api.get<{
+          student: typeof myStudent;
+          currentAcademicYear: string | null;
+          currentGrades: StudentGradeView[];
+          historyByYear: Array<{ year: string; grades: StudentGradeView[] }>;
+        }>('/grades/me');
+        setMyStudent(res.data.student);
+        setCurrentAcademicYear(res.data.currentAcademicYear);
+        setMyGrades(res.data.currentGrades ?? []);
+        setGradeHistory(res.data.historyByYear ?? []);
+        setOpenHistoryYears([]);
+      } catch (error) {
+        toast.error(getApiErrorMessage(error, 'Impossible de charger vos notes.'));
+      } finally {
+        setLoadingReference(false);
+      }
+    };
+    void loadMine();
+  }, [isStudent]);
 
   // Auto-select single department
   useEffect(() => {
@@ -583,9 +654,113 @@ export default function EpreuvesPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Évaluations"
-        title="Épreuves et notes"
-        description="Choisissez la classe, le semestre, le module et l'élément avant de saisir ou d'importer les notes."
+        title={isStudent ? 'Mes notes' : 'Épreuves et notes'}
+        description={isStudent
+          ? 'Consultez uniquement vos notes, sans filtres ni actions d’administration.'
+          : "Choisissez la classe, le semestre, le module et l'élément avant de saisir ou d'importer les notes."}
       />
+
+      {isStudent ? (
+        <>
+          <section className="grid gap-4 md:grid-cols-4">
+            <MetricCard label="Étudiant" value={myStudent?.fullName ?? '-'} hint={myStudent?.academicClass ? `${myStudent.academicClass.name} · Année ${myStudent.academicClass.year}` : 'Classe non trouvée'} icon={GraduationCap} />
+            <MetricCard label="Code" value={myStudent?.codeEtudiant ?? myStudent?.codeMassar ?? '-'} hint="Identifiant académique" icon={FileSpreadsheet} />
+            <MetricCard label="Année courante" value={currentAcademicYear ?? '-'} hint="Résultats publiés pour cette année" icon={BookOpen} />
+            <MetricCard label="Moyenne simple" value={simpleAverage} hint="Calcul indicatif sur l'année courante" icon={Layers} />
+          </section>
+
+          {loadingReference ? (
+            <div className="empty-note">Chargement de vos notes...</div>
+          ) : myGrades.length === 0 ? (
+            <EmptyState title="Aucune note disponible" description={currentAcademicYear ? `Aucune note publiée pour ${currentAcademicYear}.` : 'Aucune note publiée pour l’année courante.'} />
+          ) : (
+            <section className="space-y-4">
+              {Object.entries(groupedStudentGrades).map(([group, rows]) => (
+                <div key={group} className="surface-card space-y-4">
+                  <div className="panel-header">
+                    <div>
+                      <h2 className="panel-title">{group}</h2>
+                      <p className="panel-copy">Historique des notes du compte connecté.</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {rows.map((grade) => (
+                      <article key={grade.id} className="rounded-[1.6rem] border border-slate-200 bg-white p-4 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{grade.module?.name ?? 'Module'}</p>
+                        <h3 className="mt-2 text-lg font-semibold text-slate-950">{grade.elementModule?.name ?? 'Élément'}</h3>
+                        <p className="mt-1 text-sm text-slate-500">{grade.academicClass ? `${grade.academicClass.name} · Année ${grade.academicClass.year}` : 'Classe actuelle'}</p>
+                        <div className="mt-4 flex items-end justify-between">
+                          <div>
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Note</p>
+                            <p className="mt-1 text-3xl font-semibold text-slate-950">{grade.score}<span className="text-base text-slate-400">/{grade.maxScore}</span></p>
+                          </div>
+                          <span className="status-chip status-chip--ok">{(((grade.score / grade.maxScore) * 20)).toFixed(2)}/20</span>
+                        </div>
+                        <div className="mt-4 space-y-1 text-sm text-slate-600">
+                          <p>{grade.elementModule?.type ?? '-'}{grade.semester ? ` · ${grade.semester}` : ''}</p>
+                          <p>{grade.teacher ? `${grade.teacher.firstName} ${grade.teacher.lastName}` : 'Enseignant non renseigné'}</p>
+                          {grade.comment ? <p className="rounded-2xl bg-slate-50 px-3 py-2 text-slate-700">{grade.comment}</p> : null}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </section>
+          )}
+
+          {gradeHistory.length > 0 && (
+            <section className="surface-card space-y-4">
+              <div className="panel-header">
+                <div>
+                  <h2 className="panel-title">Historique des années</h2>
+                  <p className="panel-copy">Les années précédentes restent disponibles à la demande.</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {gradeHistory.map((entry) => {
+                  const isOpen = openHistoryYears.includes(entry.year);
+                  return (
+                    <div key={entry.year} className="rounded-[1.5rem] border border-slate-200 bg-white">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between px-4 py-3 text-left"
+                        onClick={() =>
+                          setOpenHistoryYears((current) =>
+                            isOpen ? current.filter((year) => year !== entry.year) : [...current, entry.year],
+                          )
+                        }
+                      >
+                        <div>
+                          <p className="font-semibold text-slate-900">{entry.year}</p>
+                          <p className="text-sm text-slate-500">{entry.grades.length} note(s)</p>
+                        </div>
+                        {isOpen ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+                      </button>
+                      {isOpen && (
+                        <div className="grid gap-3 border-t border-slate-100 p-4 md:grid-cols-2 xl:grid-cols-3">
+                          {entry.grades.map((grade) => (
+                            <article key={grade.id} className="rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4">
+                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{grade.module?.name ?? 'Module'}</p>
+                              <h3 className="mt-2 text-base font-semibold text-slate-950">{grade.elementModule?.name ?? 'Élément'}</h3>
+                              <p className="mt-1 text-sm text-slate-500">{grade.academicClass ? `${grade.academicClass.name} · Année ${grade.academicClass.year}` : 'Classe'}</p>
+                              <div className="mt-4 flex items-end justify-between">
+                                <p className="text-2xl font-semibold text-slate-950">{grade.score}<span className="text-sm text-slate-400">/{grade.maxScore}</span></p>
+                                <span className="status-chip status-chip--muted">{((grade.score / grade.maxScore) * 20).toFixed(2)}/20</span>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+        </>
+      ) : (
+        <>
 
       {/* Metrics */}
       <section className="grid gap-4 md:grid-cols-4">
@@ -857,6 +1032,8 @@ export default function EpreuvesPage() {
           </div>
         )}
       </section>
+        </>
+      )}
     </div>
   );
 }

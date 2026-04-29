@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Download, NotebookPen, RefreshCw, Search, X } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
@@ -442,7 +443,7 @@ export default function ClassesCoursPage() {
                     {assignments.map((a) => (
                       <tr key={a.cours.id}>
                         <td>
-                          <p className="font-medium text-slate-950">{a.cours.name}</p>
+                          <Link href={`/cours/${a.cours.id}?classId=${selectedClassId}`} className="font-medium text-slate-950 transition hover:text-emerald-700 hover:underline">{a.cours.name}</Link>
                           {a.cours.elementModuleId && (
                             <p className="text-xs text-slate-400">Lié à un élément</p>
                           )}
@@ -536,7 +537,7 @@ export default function ClassesCoursPage() {
                   <tbody>
                     {allCours.map((c) => (
                       <tr key={c.id}>
-                        <td className="font-medium text-slate-950">{c.name}</td>
+                        <td><Link href={`/cours/${c.id}`} className="font-medium text-slate-950 transition hover:text-emerald-700 hover:underline">{c.name}</Link></td>
                         <td>
                           {c.elementModule ? (
                             <span className="status-chip status-chip--ok">

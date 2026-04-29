@@ -22,7 +22,6 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/types/role.type';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { deptScope } from '../../common/utils/dept-scope';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 
 @Controller('rooms')
@@ -31,13 +30,37 @@ export class RoomsController {
   constructor(private readonly roomsService: RoomsService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.TEACHER,
+    UserRole.STUDENT,
+    UserRole.INSPECTOR,
+  )
   findAll(@CurrentUser() user: JwtPayload) {
-    return this.roomsService.findAll(deptScope(user));
+    const departmentScope =
+      user.role === UserRole.TEACHER || user.role === UserRole.STUDENT
+        ? undefined
+        : user.departmentIds.length > 0 &&
+            (user.role === UserRole.USER || user.role === UserRole.INSPECTOR)
+          ? user.departmentIds
+          : undefined;
+
+    return this.roomsService.findAll(departmentScope);
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.TEACHER,
+    UserRole.STUDENT,
+    UserRole.INSPECTOR,
+  )
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.roomsService.findOne(id);
   }

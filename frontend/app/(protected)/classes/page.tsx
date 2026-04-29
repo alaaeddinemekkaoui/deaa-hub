@@ -32,6 +32,7 @@ type AcademicClass = {
   id: number;
   name: string;
   year: number;
+  semestre?: string | null;
   classType?: string | null;
   cycleId?: number | null;
   optionId?: number | null;
@@ -93,6 +94,7 @@ const CLASS_PAGE_SIZE = 50;
 const ROSTER_PAGE_SIZE = 50;
 const GRADE_PAGE_SIZE = 50;
 const CURRENT_YEAR = new Date().getFullYear();
+const SEMESTERS = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'];
 
 const initialMeta = (limit: number): PageMeta => ({
   page: 0,
@@ -137,6 +139,7 @@ function ClassesPageInner() {
 
   const [name, setName] = useState('');
   const [year, setYear] = useState(String(CURRENT_YEAR));
+  const [semestre, setSemestre] = useState('');
   const [classType, setClassType] = useState('');
   const [cycleId, setCycleId] = useState('');
   const [optionId, setOptionId] = useState('');
@@ -221,6 +224,7 @@ function ClassesPageInner() {
     setEditingId(null);
     setName('');
     setYear(String(CURRENT_YEAR));
+    setSemestre('');
     setClassType('');
     setCycleId('');
     setOptionId('');
@@ -624,6 +628,7 @@ function ClassesPageInner() {
       const payload = {
         name: name.trim(),
         year: Number(year),
+        semestre: semestre || null,
         classType: classType.trim() || null,
         cycleId: cycleId ? Number(cycleId) : null,
         optionId: optionId ? Number(optionId) : null,
@@ -662,8 +667,7 @@ function ClassesPageInner() {
   };
 
   const openTransferModal = (item: AcademicClass) => {
-    setTransferClass(item);
-    setTargetYear(String(item.year + 1));
+    window.location.href = `/classes/transfer?sourceClassId=${item.id}`;
   };
 
   const closeTransferModal = () => {
@@ -890,6 +894,7 @@ function ClassesPageInner() {
             setEditingId(item.id);
             setName(item.name);
             setYear(String(item.year));
+            setSemestre(item.semestre ?? '');
             setClassType(item.classType ?? '');
             setCycleId(String(item.cycleId ?? ''));
             setOptionId(String(item.optionId ?? ''));
@@ -911,6 +916,7 @@ function ClassesPageInner() {
         saving={saving}
         name={name}
         year={year}
+        semestre={semestre}
         classType={classType}
         cycleId={cycleId}
         departmentId={departmentId}
@@ -924,6 +930,7 @@ function ClassesPageInner() {
         onSubmit={onSubmit}
         onNameChange={setName}
         onYearChange={setYear}
+        onSemestreChange={setSemestre}
         onClassTypeChange={setClassType}
         onCycleChange={setCycleId}
         onDepartmentChange={setDepartmentId}
@@ -1014,6 +1021,7 @@ function ClassesTable({
               <tr>
                 <th>Classe</th>
                 <th>Année</th>
+                <th>Semestre</th>
                 <th>Filière</th>
                 <th>Département</th>
                 <th>Étudiants</th>
@@ -1122,6 +1130,7 @@ function ClassTableRows({
         <td>
           <span className="status-chip status-chip--ok">{item.year}</span>
         </td>
+        <td>{item.semestre ? <span className="status-chip status-chip--muted">{item.semestre}</span> : '-'}</td>
         <td>{item.filiere?.name ?? 'Non assignée'}</td>
         <td>{item.filiere?.department?.name ?? '-'}</td>
         <td>{item._count.students}</td>
@@ -1177,7 +1186,7 @@ function ClassTableRows({
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={9}>
+          <td colSpan={10}>
             <ClassRosterPanel
               classId={item.id}
               roster={roster}
@@ -1399,6 +1408,7 @@ type ClassFormModalProps = {
   saving: boolean;
   name: string;
   year: string;
+  semestre: string;
   classType: string;
   cycleId: string;
   departmentId: string;
@@ -1412,6 +1422,7 @@ type ClassFormModalProps = {
   onSubmit: () => Promise<void>;
   onNameChange: (value: string) => void;
   onYearChange: (value: string) => void;
+  onSemestreChange: (value: string) => void;
   onClassTypeChange: (value: string) => void;
   onCycleChange: (value: string) => void;
   onDepartmentChange: (value: string) => void;
@@ -1425,6 +1436,7 @@ function ClassFormModal({
   saving,
   name,
   year,
+  semestre,
   classType,
   cycleId,
   departmentId,
@@ -1438,6 +1450,7 @@ function ClassFormModal({
   onSubmit,
   onNameChange,
   onYearChange,
+  onSemestreChange,
   onClassTypeChange,
   onCycleChange,
   onDepartmentChange,
@@ -1491,6 +1504,21 @@ function ClassFormModal({
             onChange={(event) => onYearChange(event.target.value)}
             placeholder="ex. 2026"
           />
+        </div>
+        <div className="field-stack">
+          <label className="field-label">Semestre</label>
+          <select
+            className="input"
+            value={semestre}
+            onChange={(event) => onSemestreChange(event.target.value)}
+          >
+            <option value="">— Aucun semestre —</option>
+            {SEMESTERS.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="field-stack">
           <label className="field-label">Type de classe</label>

@@ -106,15 +106,17 @@ a:focus-visible {
 }
 
 .metric-card__label {
-  @apply text-xs font-semibold uppercase tracking-[0.2em] text-slate-500;
+  @apply text-xs font-bold uppercase tracking-[0.2em];
+  color: #7a1f1f;
 }
 
 .metric-card__value {
-  @apply text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl;
+  @apply text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl;
 }
 
 .metric-card__hint {
-  @apply text-sm text-slate-500;
+  @apply text-sm;
+  color: #334155;
 }
 
 .section-title {
@@ -216,19 +218,67 @@ a:focus-visible {
   background: rgba(27, 94, 59, 0.03);
 }
 
+.card-table-wrap {
+  @apply border-0 bg-transparent;
+}
+
+.card-table-wrap .table-scroll {
+  @apply overflow-visible;
+}
+
+.card-table-wrap .table-base,
+.card-table-wrap .table-base tbody {
+  @apply grid min-w-0 gap-4;
+}
+
+.card-table-wrap .table-base thead {
+  @apply hidden;
+}
+
+.card-table-wrap .table-base tr {
+  @apply grid rounded-3xl border bg-white p-4 shadow-sm transition;
+}
+
+.card-table-wrap .table-base tr:hover {
+  @apply -translate-y-1 shadow-xl;
+}
+
+.card-table-wrap .table-base tbody td {
+  @apply border-b-0 px-0 py-1.5;
+}
+
+.card-table-wrap .table-base tbody td:first-child {
+  @apply font-semibold text-slate-950;
+}
+
+@media (min-width: 1024px) {
+  .card-table-wrap .table-base,
+  .card-table-wrap .table-base tbody {
+    @apply grid-cols-2;
+  }
+}
+
+@media (min-width: 1280px) {
+  .card-table-wrap .table-base,
+  .card-table-wrap .table-base tbody {
+    @apply grid-cols-3;
+  }
+}
+
 .sidebar-link {
   @apply flex flex-col items-start rounded-xl px-3 py-2.5 text-sm font-medium transition;
-  color: rgba(232, 240, 235, 0.75);
+  color: #475569;
 }
 
 .sidebar-link:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  background: rgba(148, 163, 184, 0.1);
+  color: #0f172a;
 }
 
 .sidebar-link.active {
-  @apply bg-white text-slate-900;
-  box-shadow: 0 2px 12px -4px rgba(255, 255, 255, 0.5);
+  color: #082f1d;
+  background: linear-gradient(135deg, rgba(27, 94, 59, 0.14), rgba(183, 28, 28, 0.08));
+  box-shadow: 0 12px 30px -24px rgba(15, 23, 42, 0.55);
 }
 
 .topbar-badge {

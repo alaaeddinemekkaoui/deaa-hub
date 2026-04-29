@@ -1,6 +1,7 @@
 import { Type, Transform } from 'class-transformer';
 import {
   IsInt,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -24,6 +25,14 @@ export class CreateClassDto {
   @Min(1)
   @Max(2100)
   year: number;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @ValidateIf((_, value) => value !== null && value !== '')
+  @IsIn(['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'])
+  semestre?: string | null;
 
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => {

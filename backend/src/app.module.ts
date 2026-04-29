@@ -34,6 +34,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { RestaurationModule } from './modules/restauration/restauration.module';
 import { CoursResourcesModule } from './modules/cours-resources/cours-resources.module';
 import { ProfileDocumentTypesModule } from './modules/profile-document-types/profile-document-types.module';
+import { AttendanceModule } from './modules/attendance/attendance.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -69,6 +71,8 @@ import { ProfileDocumentTypesModule } from './modules/profile-document-types/pro
     RestaurationModule,
     CoursResourcesModule,
     ProfileDocumentTypesModule,
+    AttendanceModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

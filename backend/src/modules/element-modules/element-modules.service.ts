@@ -112,6 +112,7 @@ export class ElementModulesService {
         name: dto.name,
         moduleId: dto.moduleId,
         volumeHoraire: dto.volumeHoraire ?? null,
+        sessionDurationMinutes: dto.sessionDurationMinutes ?? null,
         type: dto.type ?? 'CM',
         ponderation: dto.ponderation ?? 1,
         coefficient: dto.coefficient ?? 1,
@@ -172,6 +173,9 @@ export class ElementModulesService {
         ...(dto.moduleId !== undefined ? { moduleId: dto.moduleId } : {}),
         ...(dto.volumeHoraire !== undefined
           ? { volumeHoraire: dto.volumeHoraire ?? null }
+          : {}),
+        ...(dto.sessionDurationMinutes !== undefined
+          ? { sessionDurationMinutes: dto.sessionDurationMinutes ?? null }
           : {}),
         ...(dto.type !== undefined ? { type: dto.type } : {}),
         ...(dto.ponderation !== undefined

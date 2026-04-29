@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -41,5 +42,10 @@ export class NotificationsController {
   @Patch('mark-all-read')
   markAllRead(@CurrentUser() user: JwtPayload) {
     return this.notificationsService.markAllRead(user);
+  }
+
+  @Delete('read')
+  clearRead(@CurrentUser() user: JwtPayload) {
+    return this.notificationsService.clearRead(user);
   }
 }

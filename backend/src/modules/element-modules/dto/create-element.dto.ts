@@ -32,6 +32,12 @@ export class CreateElementDto {
   volumeHoraire?: number | null;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(15)
+  sessionDurationMinutes?: number | null;
+
+  @IsOptional()
   @IsEnum(ElementType)
   type?: ElementType;
 

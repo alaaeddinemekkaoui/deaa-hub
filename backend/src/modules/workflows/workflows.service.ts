@@ -1,25 +1,35 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateWorkflowDto } from './dto/create-workflow.dto';
 import { UpdateWorkflowDto } from './dto/update-workflow.dto';
 import { WorkflowStatus } from '@prisma/client';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { UserRole } from '../../common/types/role.type';
 
 @Injectable()
 export class WorkflowsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** departmentIds: when provided, only return tasks whose student belongs to those departments */
-  async findAll(departmentIds?: number[]) {
-    const where =
-      departmentIds && departmentIds.length > 0
-        ? {
-            student: {
-              filiere: {
-                departmentId: { in: departmentIds },
-              },
-            },
-          }
-        : undefined;
+  async findAll(departmentIds?: number[], currentUser?: JwtPayload) {
+    const filters: Record<string, unknown>[] = [];
+    if (currentUser?.role === UserRole.STUDENT) {
+      const student = await this.prisma.student.findUnique({
+        where: { userId: currentUser.sub },
+        select: { id: true },
+      });
+      if (!student) return [];
+      filters.push({ studentId: student.id });
+    } else if (departmentIds && departmentIds.length > 0) {
+      filters.push({
+        student: {
+          filiere: {
+            departmentId: { in: departmentIds },
+          },
+        },
+      });
+    }
+    const where = filters.length > 0 ? { AND: filters } : undefined;
 
     return this.prisma.workflowTask.findMany({
       where,
@@ -40,8 +50,8 @@ export class WorkflowsService {
     });
   }
 
-  findOne(id: number) {
-    return this.prisma.workflowTask.findUnique({
+  async findOne(id: number, currentUser?: JwtPayload) {
+    const task = await this.prisma.workflowTask.findUnique({
       where: { id },
       include: {
         assignedTo: { select: { id: true, fullName: true, role: true } },
@@ -57,11 +67,34 @@ export class WorkflowsService {
         timeline: { orderBy: { changedAt: 'asc' } },
       },
     });
+    if (!task) throw new NotFoundException(`Workflow ${id} not found`);
+    if (currentUser?.role === UserRole.STUDENT) {
+      const student = await this.prisma.student.findUnique({
+        where: { userId: currentUser.sub },
+        select: { id: true },
+      });
+      if (!student || task.student?.id !== student.id) {
+        throw new ForbiddenException("Vous ne pouvez consulter que vos propres demandes");
+      }
+    }
+    return task;
   }
 
-  async create(dto: CreateWorkflowDto) {
+  async create(dto: CreateWorkflowDto, currentUser?: JwtPayload) {
     if (dto.assignedToId === undefined) {
       throw new BadRequestException('assignedToId is required');
+    }
+
+    let studentId = dto.studentId ?? null;
+    if (currentUser?.role === UserRole.STUDENT) {
+      const student = await this.prisma.student.findUnique({
+        where: { userId: currentUser.sub },
+        select: { id: true },
+      });
+      if (!student) {
+        throw new BadRequestException('Aucun profil étudiant lié à ce compte');
+      }
+      studentId = student.id;
     }
 
     const task = await this.prisma.workflowTask.create({
@@ -70,7 +103,7 @@ export class WorkflowsService {
         description: dto.description,
         status: dto.status ?? WorkflowStatus.pending,
         assignedToId: dto.assignedToId,
-        studentId: dto.studentId ?? null,
+        studentId,
         documentTypeId: dto.documentTypeId ?? null,
       },
     });
@@ -79,10 +112,30 @@ export class WorkflowsService {
       data: { taskId: task.id, status: task.status, note: 'Demande créée' },
     });
 
+    await this.prisma.notification.create({
+      data: {
+        userId: dto.assignedToId,
+        type: 'workflow_request',
+        content: `Nouvelle demande de document: ${dto.title}.`,
+      },
+    });
+
     return task;
   }
 
-  async update(id: number, dto: UpdateWorkflowDto) {
+  async update(id: number, dto: UpdateWorkflowDto, currentUser?: JwtPayload) {
+    if (currentUser?.role === UserRole.INSPECTOR) {
+      const existing = await this.prisma.workflowTask.findUnique({
+        where: { id },
+        select: {
+          student: { select: { filiere: { select: { departmentId: true } } } },
+        },
+      });
+      const departmentId = existing?.student?.filiere?.departmentId;
+      if (!departmentId || !currentUser.departmentIds.includes(departmentId)) {
+        throw new ForbiddenException("Vous n'êtes pas autorisé à modifier cette demande");
+      }
+    }
     const updated = await this.prisma.workflowTask.update({
       where: { id },
       data: {
@@ -115,6 +168,17 @@ export class WorkflowsService {
             `Statut changé : ${labels[dto.status] ?? dto.status}`,
         },
       });
+
+      const requesterUserId = await this.getWorkflowRequesterUserId(id);
+      if (requesterUserId) {
+        await this.prisma.notification.create({
+          data: {
+            userId: requesterUserId,
+            type: 'workflow_status',
+            content: `Votre demande de document est maintenant: ${labels[dto.status] ?? dto.status}.`,
+          },
+        });
+      }
     }
 
     return updated;
@@ -122,5 +186,13 @@ export class WorkflowsService {
 
   remove(id: number) {
     return this.prisma.workflowTask.delete({ where: { id } });
+  }
+
+  private async getWorkflowRequesterUserId(taskId: number) {
+    const task = await this.prisma.workflowTask.findUnique({
+      where: { id: taskId },
+      select: { student: { select: { userId: true } } },
+    });
+    return task?.student?.userId ?? null;
   }
 }

@@ -1,252 +1,36 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
 import {
-  Activity,
-  ArrowLeftRight,
   BarChart2,
-  BookOpen,
-  BookOpenCheck,
-  Building2,
-  CalendarDays,
-  CalendarRange,
   ChevronRight,
-  DoorOpen,
-  FileStack,
-  FileText,
-  GraduationCap,
-  Layers,
-  Medal,
-  MessageSquare,
-  NotebookPen,
-  RefreshCw,
-  Scale,
-  Settings,
-  UserCog,
-  Users,
-  CopyPlus,
-  MoveRight,
-  Utensils,
 } from 'lucide-react';
-import { MetricCard } from '@/components/admin/metric-card';
 import { PageHeader } from '@/components/admin/page-header';
-import { api, getApiErrorMessage } from '@/services/api';
+import { filterNavigationForRole } from '@/components/layout/navigation';
 import { useAuth } from '@/features/auth/auth-context';
 
-/* ── Types ────────────────────────────────────────────────────────── */
-type DashboardStats = {
-  totalStudents: number;
-  teachersCount: number;
-  departmentsCount: number;
-  filieresCount: number;
-  classesCount: number;
-  dossiersCount: number;
-};
-
-type SectionAction = {
-  href: string;
-  label: string;
-  description: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
-};
-
-type ActionSection = {
-  id: string;
-  heading: string;
-  description: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
-  accent: string;
-  cardColor: string;
-  actions: SectionAction[];
-  roles?: string[];
-};
-
-/* ── Section definitions ──────────────────────────────────────────── */
-const ACTION_SECTIONS: ActionSection[] = [
-  /* ── 1. Étudiants & Enseignants ─────────────────────────────── */
+const sectionStyles = [
   {
-    id: 'people',
-    heading: 'Étudiants & Enseignants',
-    description: 'Profils, dossiers, promotions et encadrement pédagogique',
-    icon: GraduationCap,
-    accent: 'bg-emerald-50 text-emerald-800 border-b border-emerald-200',
-    cardColor: 'hover:border-emerald-300 hover:bg-emerald-50/70 hover:shadow-emerald-100',
-    actions: [
-      { href: '/students',  label: 'Étudiants',    description: 'Profils et cohortes',           icon: GraduationCap },
-      { href: '/teachers',  label: 'Enseignants',  description: 'Permanents et vacataires',       icon: Users },
-      { href: '/laureates', label: 'Lauréats',     description: 'Diplômes et suivi',              icon: Medal },
-      { href: '/transfers', label: 'Transferts',   description: 'Passage inter-établissements',   icon: ArrowLeftRight },
-    ],
+    accent: 'bg-[#f3f5f4] text-[#123524] border-b border-slate-200',
+    cardColor: 'hover:border-[#1b5e3b]/25 hover:bg-[#1b5e3b]/[0.04] hover:shadow-emerald-100',
   },
-
-  /* ── 2. Épreuves & Délibération ─────────────────────────────── */
   {
-    id: 'exams',
-    heading: 'Épreuves & Délibération',
-    description: 'Saisie des notes, résultats et relevés officiels',
-    icon: Scale,
-    accent: 'bg-teal-50 text-teal-800 border-b border-teal-200',
-    cardColor: 'hover:border-teal-300 hover:bg-teal-50/70 hover:shadow-teal-100',
-    actions: [
-      { href: '/grades',       label: 'Épreuves',     description: 'Notes par classe et module',  icon: BookOpen },
-      { href: '/deliberation', label: 'Délibération', description: 'Résultats et relevés de notes', icon: Scale },
-      { href: '/student-class-transfer', label: 'Passage de classe', description: "Transfert d'étudiants", icon: MoveRight },
-    ],
+    accent: 'bg-[#f8f1f0] text-[#8f1d22] border-b border-[#e8d2d1]',
+    cardColor: 'hover:border-[#8f1d22]/25 hover:bg-[#8f1d22]/[0.04] hover:shadow-rose-100',
   },
-
-  /* ── 3. Filières & Structure académique ─────────────────────── */
   {
-    id: 'academic',
-    heading: 'Filières & Structure Académique',
-    description: 'Filières, modules, classes et organisation pédagogique',
-    icon: BookOpenCheck,
-    accent: 'bg-sky-50 text-sky-800 border-b border-sky-200',
-    cardColor: 'hover:border-sky-300 hover:bg-sky-50/70 hover:shadow-sky-100',
-    actions: [
-      { href: '/filieres',         label: 'Filières',           description: 'Programmes et voies',       icon: BookOpen },
-      { href: '/academic',         label: 'Modules & Éléments', description: 'CM · TD · TP',              icon: BookOpenCheck },
-      { href: '/cours-resources',  label: 'Ressources cours',   description: 'Supports et fichiers',      icon: FileText },
-      { href: '/classes',          label: 'Classes',            description: 'Cohortes et groupes',       icon: CalendarRange },
-      { href: '/classes/cours',    label: 'Cours par classe',   description: 'Affectation des cours',     icon: NotebookPen },
-      { href: '/classes/transfer', label: 'Transfert de classe',description: 'Clonage inter-années',      icon: CopyPlus },
-    ],
+    accent: 'bg-[#f5f5f5] text-slate-800 border-b border-slate-200',
+    cardColor: 'hover:border-slate-300 hover:bg-slate-50/90 hover:shadow-slate-100',
   },
-
-  /* ── 4. Organisation institutionnelle ───────────────────────── */
-  {
-    id: 'org',
-    heading: 'Organisation Institutionnelle',
-    description: 'Départements, cycles, options et structure de l\'établissement',
-    icon: Building2,
-    accent: 'bg-slate-50 text-slate-800 border-b border-slate-200',
-    cardColor: 'hover:border-slate-300 hover:bg-slate-50/70 hover:shadow-slate-100',
-    actions: [
-      { href: '/departments', label: 'Départements', description: 'Structures institutionnelles', icon: Building2 },
-      { href: '/structure',   label: 'Options',      description: 'Spécialités par filière',      icon: Layers },
-      { href: '/cycles',      label: 'Cycles',       description: 'Cycles académiques',           icon: RefreshCw },
-    ],
-  },
-
-  /* ── 5. Emploi du temps & Salles ────────────────────────────── */
-  {
-    id: 'timetable',
-    heading: 'Emploi du Temps & Salles',
-    description: 'Planification hebdomadaire et gestion des espaces',
-    icon: CalendarDays,
-    accent: 'bg-rose-50 text-rose-800 border-b border-rose-200',
-    cardColor: 'hover:border-rose-300 hover:bg-rose-50/70 hover:shadow-rose-100',
-    actions: [
-      { href: '/timetable',         label: 'Emploi du temps', description: 'Planification hebdomadaire', icon: CalendarDays },
-      { href: '/rooms',             label: 'Salles',          description: 'Espaces et équipements',     icon: DoorOpen },
-      { href: '/room-reservations', label: 'Réservations',    description: 'Occupation des salles',      icon: CalendarRange },
-    ],
-  },
-
-  /* ── 6. Demandes de documents ───────────────────────────────── */
-  {
-    id: 'demandes',
-    heading: 'Demandes de Documents',
-    description: 'Suivi des demandes de documents administratifs des étudiants',
-    icon: FileText,
-    accent: 'bg-amber-50 text-amber-800 border-b border-amber-200',
-    cardColor: 'hover:border-amber-300 hover:bg-amber-50/70 hover:shadow-amber-100',
-    actions: [
-      { href: '/workflows', label: 'Demandes',         description: 'Toutes les demandes en cours',    icon: FileText },
-      { href: '/settings/document-types', label: 'Types de documents', description: 'Catégories configurées', icon: FileStack },
-    ],
-    roles: ['admin', 'staff', 'viewer'],
-  },
-
-  /* ── 7. Restauration ────────────────────────────────────────── */
-  {
-    id: 'restauration',
-    heading: 'Restauration',
-    description: 'Réservation des repas, solde et reçus étudiants',
-    icon: Utensils,
-    accent: 'bg-lime-50 text-lime-800 border-b border-lime-200',
-    cardColor: 'hover:border-lime-300 hover:bg-lime-50/70 hover:shadow-lime-100',
-    roles: ['admin', 'staff', 'restauration', 'student'],
-    actions: [
-      { href: '/restauration', label: 'Restauration', description: 'Repas, solde et reçus', icon: Utensils },
-    ],
-  },
-
-  /* ── 8. Messagerie ──────────────────────────────────────────── */
-  {
-    id: 'messaging',
-    heading: 'Messagerie',
-    description: 'Échanges de messages en groupes ou en direct entre utilisateurs',
-    icon: MessageSquare,
-    accent: 'bg-indigo-50 text-indigo-800 border-b border-indigo-200',
-    cardColor: 'hover:border-indigo-300 hover:bg-indigo-50/70 hover:shadow-indigo-100',
-    actions: [
-      { href: '/messages',              label: 'Groupes',  description: 'Messages par groupe',        icon: Users },
-      { href: '/messages?tab=received', label: 'Reçus',    description: 'Messages reçus en direct',   icon: MessageSquare },
-      { href: '/messages?tab=sent',     label: 'Envoyés',  description: 'Messages envoyés en direct', icon: MessageSquare },
-    ],
-  },
-
-  /* ── 8. Administration ──────────────────────────────────────── */
-  {
-    id: 'admin',
-    heading: 'Administration',
-    description: 'Utilisateurs, statistiques et journaux d\'activité',
-    icon: UserCog,
-    accent: 'bg-purple-50 text-purple-800 border-b border-purple-200',
-    cardColor: 'hover:border-purple-300 hover:bg-purple-50/70 hover:shadow-purple-100',
-    roles: ['admin', 'staff'],
-    actions: [
-      { href: '/users',         label: 'Utilisateurs', description: 'Comptes et rôles',       icon: UserCog },
-      { href: '/statistics',    label: 'Statistiques', description: 'Données et exports CSV', icon: BarChart2 },
-      { href: '/activity-logs', label: 'Journaux',     description: "Historique d'activité",  icon: Activity },
-    ],
-  },
-
-  /* ── 9. Paramètres ──────────────────────────────────────────── */
-  {
-    id: 'settings',
-    heading: 'Paramètres',
-    description: 'Années académiques, types de documents et catalogues enseignants',
-    icon: Settings,
-    accent: 'bg-gray-50 text-gray-800 border-b border-gray-200',
-    cardColor: 'hover:border-gray-300 hover:bg-gray-50/70 hover:shadow-gray-100',
-    roles: ['admin', 'staff'],
-    actions: [
-      { href: '/settings/academic-years', label: 'Années académiques', description: 'Gérer les années',          icon: CalendarDays },
-      { href: '/settings/restauration',   label: 'Repas restauration', description: 'Prix et repas actifs',      icon: Utensils },
-      { href: '/settings/document-types', label: 'Types de documents', description: 'Catégories de documents',  icon: FileStack },
-      { href: '/settings/teacher-roles',          label: 'Rôles enseignants',    description: 'Permanent, vacataire…',      icon: Users },
-      { href: '/settings/teacher-grades',         label: 'Grades enseignants',   description: 'PH, PA, assistant…',         icon: GraduationCap },
-      { href: '/settings/profile-document-types', label: 'Types de docs profil', description: 'CIN, photo, acte de naiss.', icon: FileStack },
-    ],
-  },
-];
+] as const;
 
 /* ── Page ─────────────────────────────────────────────────────────── */
 export default function DashboardPage() {
   const { user } = useAuth();
   const role = user?.role ?? 'viewer';
 
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const res = await api.get<{ stats: DashboardStats }>('/dashboard/overview');
-        setStats(res.data.stats);
-      } catch (err) {
-        void getApiErrorMessage(err, '');
-      } finally {
-        setLoading(false);
-      }
-    };
-    void load();
-  }, []);
-
-  const visibleSections = ACTION_SECTIONS.filter((s) => !s.roles || s.roles.includes(role));
+  const visibleSections = filterNavigationForRole(role);
+  const studentItems = visibleSections.flatMap((section) => section.items).filter((item) => item.href !== '/dashboard');
 
   return (
     <div className="space-y-8">
@@ -254,25 +38,13 @@ export default function DashboardPage() {
         eyebrow="Aperçu institutionnel"
         title="Tableau de bord"
         description="Vue d'ensemble et accès rapide à tous les modules de la plateforme."
-        actions={
+        actions={['admin', 'staff'].includes(role) ? (
           <Link href="/statistics" className="btn-outline flex items-center gap-2">
             <BarChart2 size={14} />
             Statistiques & Export
           </Link>
-        }
+        ) : undefined}
       />
-
-      {/* ── Metric strip ── */}
-      {!loading && stats && (
-        <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-          <MetricCard label="Étudiants"    value={stats.totalStudents}    hint="Apprenants enregistrés"       icon={GraduationCap} />
-          <MetricCard label="Enseignants"  value={stats.teachersCount}    hint="Personnel pédagogique"        icon={Users} />
-          <MetricCard label="Départements" value={stats.departmentsCount} hint="Structures institutionnelles" icon={Building2} />
-          <MetricCard label="Filières"     value={stats.filieresCount}    hint="Programmes académiques"       icon={BookOpen} />
-          <MetricCard label="Classes"      value={stats.classesCount}     hint="Cohortes actives"             icon={CalendarRange} />
-          <MetricCard label="Documents"    value={stats.dossiersCount}    hint="Fichiers administratifs"      icon={FileStack} />
-        </section>
-      )}
 
       {/* ── Section navigation ── */}
       <section className="space-y-3">
@@ -283,30 +55,58 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2">
-          {visibleSections.map((section) => (
-            <div
-              key={section.id}
-              className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-            >
-              {/* Section header */}
-              <div className={`flex items-center gap-4 px-6 py-4 ${section.accent}`}>
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/70 shadow-sm">
-                  <section.icon size={20} strokeWidth={1.8} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[16px] font-bold leading-tight">{section.heading}</p>
-                  <p className="text-[12px] opacity-70 mt-0.5 leading-snug">{section.description}</p>
-                </div>
-              </div>
-
-              {/* Inner action cards */}
-              <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3">
-                {section.actions.map((action) => (
+        {role === 'student' ? (
+          <div className="surface-card">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {studentItems.map((action, index) => {
+                const style = sectionStyles[index % sectionStyles.length];
+                return (
                   <Link
                     key={action.href}
                     href={action.href}
-                    className={`group flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50/50 p-3.5 transition hover:-translate-y-0.5 hover:shadow-md ${section.cardColor}`}
+                    className={`group flex min-h-32 flex-col gap-3 rounded-[1.6rem] border border-slate-100 bg-slate-50/50 p-4 transition hover:-translate-y-0.5 hover:shadow-md ${style.cardColor}`}
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm">
+                      <action.icon size={18} strokeWidth={1.8} className="text-slate-600" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[14px] font-semibold text-slate-900 leading-snug">{action.label}</p>
+                      <p className="mt-0.5 text-[12px] leading-snug text-slate-500">{action.caption}</p>
+                    </div>
+                    <ChevronRight size={13} className="self-end text-slate-300 transition group-hover:text-slate-500 group-hover:translate-x-0.5" />
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+        <div className="grid gap-5 md:grid-cols-2">
+          {visibleSections.map((section, index) => {
+            const style = sectionStyles[index % sectionStyles.length];
+            const SectionIcon = section.items[0]?.icon;
+            return (
+            <div
+              key={section.heading}
+              className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+            >
+              <div className={`flex items-center gap-4 px-6 py-4 ${style.accent}`}>
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/70 shadow-sm">
+                  {SectionIcon ? <SectionIcon size={20} strokeWidth={1.8} /> : null}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[16px] font-bold leading-tight">{section.heading}</p>
+                  <p className="mt-0.5 text-[12px] opacity-70 leading-snug">
+                    Accès rapide aux pages de la section.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3">
+                {section.items.map((action) => (
+                  <Link
+                    key={action.href}
+                    href={action.href}
+                    className={`group flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50/50 p-3.5 transition hover:-translate-y-0.5 hover:shadow-md ${style.cardColor}`}
                   >
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-sm">
                       <action.icon size={17} strokeWidth={1.8} className="text-slate-600" />
@@ -315,8 +115,8 @@ export default function DashboardPage() {
                       <p className="text-[13px] font-semibold text-slate-900 leading-snug">
                         {action.label}
                       </p>
-                      <p className="text-[12px] text-slate-500 mt-0.5 leading-snug">
-                        {action.description}
+                      <p className="mt-0.5 text-[12px] leading-snug text-slate-500">
+                        {action.caption}
                       </p>
                     </div>
                     <ChevronRight
@@ -327,8 +127,9 @@ export default function DashboardPage() {
                 ))}
               </div>
             </div>
-          ))}
+          )})}
         </div>
+        )}
       </section>
     </div>
   );
