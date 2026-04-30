@@ -13,7 +13,9 @@ import { CreateObservationDto } from './dto/create-observation.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../../common/types/role.type';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 
 @Controller('students/:studentId/observations')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -21,9 +23,12 @@ export class StudentObservationsController {
   constructor(private readonly service: StudentObservationsService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
-  findAll(@Param('studentId', ParseIntPipe) studentId: number) {
-    return this.service.findAll(studentId);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.STUDENT)
+  findAll(
+    @Param('studentId', ParseIntPipe) studentId: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.findAllForUser(studentId, user);
   }
 
   @Post()

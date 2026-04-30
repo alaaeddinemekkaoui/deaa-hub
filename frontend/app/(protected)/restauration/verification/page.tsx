@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { Barcode, CheckCircle2, QrCode, ScanLine, Ticket, XCircle } from 'lucide-react';
+import { Barcode, CheckCircle2, ScanLine, Ticket, XCircle } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
-import { CameraCodeScanner } from '@/components/scanner/camera-code-scanner';
+import { MobileQRScanner } from '@/components/scanner/mobile-qr-scanner';
 import { useAuth } from '@/features/auth/auth-context';
 import { cn } from '@/lib/utils';
 import { api, getApiErrorMessage } from '@/services/api';
@@ -15,6 +15,78 @@ import { StudentLookup } from '../_components/student-lookup';
 import { TicketPreview } from '../_components/ticket-preview';
 import type { Meal, Reservation, StudentLookupResult, TicketValidation } from '../_components/types';
 import { statusClass, statusLabel, todayIso } from '../utils';
+
+function studentClassLabel(student: StudentLookupResult) {
+  if (!student.academicClass) return '-';
+  return [
+    student.academicClass.name,
+    student.academicClass.year ? `Année ${student.academicClass.year}` : '',
+    student.academicClass.semestre ?? '',
+  ].filter(Boolean).join(' · ');
+}
+
+function TicketLookupCard({
+  validation,
+  loading,
+  message,
+}: {
+  validation: TicketValidation | null;
+  loading: boolean;
+  message: string;
+}) {
+  if (loading) {
+    return (
+      <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800">
+        Recherche du ticket...
+      </div>
+    );
+  }
+
+  if (message) {
+    return (
+      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+        {message}
+      </div>
+    );
+  }
+
+  if (!validation) return null;
+
+  if (!validation.reservation) {
+    return (
+      <div className="mt-3 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
+        <XCircle size={16} />
+        {validation.reason}
+      </div>
+    );
+  }
+
+  const reservation = validation.reservation;
+
+  return (
+    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-base font-semibold text-slate-950">{reservation.student.fullName}</p>
+          <p className="text-xs text-slate-500">{reservation.student.codeEtudiant || reservation.student.codeMassar || '-'}</p>
+        </div>
+        <span className={cn('rounded-full px-2 py-1 text-xs font-semibold', statusClass(reservation.status))}>
+          {statusLabel(reservation.status)}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
+        <p><strong>Classe:</strong> {studentClassLabel(reservation.student)}</p>
+        <p><strong>Repas:</strong> {reservation.meal.name}</p>
+        <p><strong>Date:</strong> {reservation.reservationDate}</p>
+        <p><strong>Ticket:</strong> <span className="font-mono">{reservation.ticketCode ?? '-'}</span></p>
+      </div>
+      <div className={cn('mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold', validation.valid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>
+        {validation.valid ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
+        {validation.reason}
+      </div>
+    </div>
+  );
+}
 
 export default function RestaurationVerificationPage() {
   const { user } = useAuth();
@@ -27,6 +99,8 @@ export default function RestaurationVerificationPage() {
   const [autoMealId, setAutoMealId] = useState('');
   const [meals, setMeals] = useState<Meal[]>([]);
   const [validation, setValidation] = useState<TicketValidation | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [lookupMessage, setLookupMessage] = useState('');
   const [ticket, setTicket] = useState<Reservation | null>(null);
   const [ticketModalOpen, setTicketModalOpen] = useState(false);
 
@@ -74,8 +148,38 @@ export default function RestaurationVerificationPage() {
     setReservations([]);
     setTicket(null);
     setValidation(null);
+    setLookupMessage('');
     setTicketModalOpen(false);
   }, [selectedStudentId]);
+
+  useEffect(() => {
+    const query = scanCode.trim();
+    if (!query) {
+      setValidation(null);
+      setLookupMessage('');
+      setPreviewLoading(false);
+      return;
+    }
+
+    const timeout = window.setTimeout(async () => {
+      setPreviewLoading(true);
+      try {
+        const response = await api.post<TicketValidation>('/restauration/tickets/preview', {
+          query,
+          mealId: autoMealId ? Number(autoMealId) : undefined,
+        });
+        setValidation(response.data);
+        setLookupMessage('');
+      } catch (error) {
+        setValidation(null);
+        setLookupMessage(getApiErrorMessage(error, 'Aucun ticket trouve'));
+      } finally {
+        setPreviewLoading(false);
+      }
+    }, 450);
+
+    return () => window.clearTimeout(timeout);
+  }, [autoMealId, scanCode]);
 
   const handleStudentSelect = async (student: StudentLookupResult) => {
     setSelectedStudent(student);
@@ -100,15 +204,28 @@ export default function RestaurationVerificationPage() {
     }
   };
 
+  const openTicketFromHistory = async (reservation: Reservation) => {
+    if (reservation.ticketCode) {
+      setTicket(reservation);
+      setTicketModalOpen(true);
+      return;
+    }
+
+    await issueTicket(reservation);
+  };
+
   const validateTicket = async () => {
     if (!scanCode.trim()) return;
     try {
-      const response = await api.get<TicketValidation>(
-        `/restauration/tickets/validate/${encodeURIComponent(scanCode.trim())}`,
-      );
+      const response = await api.post<TicketValidation>('/restauration/tickets/preview', {
+        query: scanCode.trim(),
+        mealId: autoMealId ? Number(autoMealId) : undefined,
+      });
       setValidation(response.data);
+      setLookupMessage('');
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Validation impossible'));
+      setValidation(null);
+      setLookupMessage(getApiErrorMessage(error, 'Aucun ticket trouve'));
     }
   };
 
@@ -120,6 +237,7 @@ export default function RestaurationVerificationPage() {
       });
       setTicket(response.data);
       setValidation({ valid: false, reason: 'Ticket consomme', reservation: response.data });
+      setLookupMessage('');
       toast.success('Repas marque consomme');
       if (selectedStudentId) {
         await loadReservations(selectedStudentId);
@@ -137,8 +255,9 @@ export default function RestaurationVerificationPage() {
         mealId: autoMealId ? Number(autoMealId) : undefined,
       });
       setTicket(response.data);
-      setValidation({ valid: false, reason: 'Ticket sorti et repas consommé', reservation: response.data });
-      toast.success('Ticket trouvé et repas consommé');
+      setValidation({ valid: false, reason: 'Consommé', reservation: response.data });
+      setLookupMessage('');
+      toast.success('Ticket consommé');
       if (selectedStudentId) {
         await loadReservations(selectedStudentId);
       }
@@ -149,21 +268,6 @@ export default function RestaurationVerificationPage() {
 
   const handleCameraCode = (code: string) => {
     setScanCode(code);
-    void api
-      .post<Reservation>('/restauration/tickets/auto-consume', {
-        query: code,
-        mealId: autoMealId ? Number(autoMealId) : undefined,
-      })
-      .then((response) => {
-        setTicket(response.data);
-        setTicketModalOpen(true);
-        setValidation({ valid: false, reason: 'Ticket scanné et repas consommé', reservation: response.data });
-        toast.success('Ticket scanné et repas consommé');
-        if (selectedStudentId) void loadReservations(selectedStudentId);
-      })
-      .catch((error) => {
-        toast.error(getApiErrorMessage(error, 'Scan impossible'));
-      });
   };
 
   if (!canManage) {
@@ -235,28 +339,23 @@ export default function RestaurationVerificationPage() {
               </div>
             </div>
             <div className="mt-3">
-              <CameraCodeScanner
-                onCode={handleCameraCode}
-                label="Scanner caméra"
-                hint="Utilisez webcam PC, caméra USB ou mobile. Le scan valide automatiquement le repas du moment."
+              <MobileQRScanner
+                onScan={handleCameraCode}
+                label="Autoriser la caméra"
+                hint="Scannez le QR ticket. Le code sera rempli sans validation automatique."
               />
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button className="btn-primary" type="button" onClick={autoConsume}>
+              <button className="btn-primary" type="button" onClick={autoConsume} disabled={!validation?.valid}>
                 <CheckCircle2 size={14} />
-                Auto valider
+                Valider
               </button>
               <button className="btn-outline" type="button" onClick={validateTicket}>
                 <ScanLine size={14} />
-                Vérifier code ticket
+                Actualiser aperçu
               </button>
             </div>
-            {validation && (
-              <div className={cn('mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold', validation.valid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>
-                {validation.valid ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-                {validation.reason}
-              </div>
-            )}
+            <TicketLookupCard validation={validation} loading={previewLoading} message={lookupMessage} />
           </section>
           {ticket ? (
             <button
@@ -329,6 +428,7 @@ export default function RestaurationVerificationPage() {
                   <table className="table-base">
                     <thead>
                       <tr>
+                        <th>Etudiant</th>
                         <th>Date</th>
                         <th>Repas</th>
                         <th>Code</th>
@@ -338,6 +438,18 @@ export default function RestaurationVerificationPage() {
                     <tbody>
                       {consumedOrTicketed.map((item) => (
                         <tr key={item.id}>
+                          <td>
+                            <button
+                              type="button"
+                              className="text-left text-sm font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
+                              onClick={() => void openTicketFromHistory(item)}
+                            >
+                              {item.student.fullName}
+                            </button>
+                            <p className="text-xs text-slate-400">
+                              {item.student.codeEtudiant || item.student.codeMassar || 'Sans code'}
+                            </p>
+                          </td>
                           <td>{item.reservationDate}</td>
                           <td>{item.meal.name}</td>
                           <td className="font-mono text-xs">{item.ticketCode ?? '-'}</td>
@@ -390,21 +502,21 @@ export default function RestaurationVerificationPage() {
                 </div>
               </div>
               <div className="mt-3">
-                <CameraCodeScanner
-                  onCode={handleCameraCode}
-                  label="Scanner caméra"
-                  hint="Utilisez webcam PC, caméra USB ou mobile. Le scan valide automatiquement le ticket."
+                <MobileQRScanner
+                  onScan={handleCameraCode}
+                  label="Autoriser la caméra"
+                  hint="Scannez le QR ticket. Le code sera rempli sans validation automatique."
                 />
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2">
-                <button className="btn-primary" type="button" onClick={autoConsume}>
+                <button className="btn-primary" type="button" onClick={autoConsume} disabled={!validation?.valid}>
                   <CheckCircle2 size={14} />
-                  Auto valider
+                  Valider
                 </button>
                 <button className="btn-outline" type="button" onClick={validateTicket}>
                   <ScanLine size={14} />
-                  Vérifier code ticket
+                  Actualiser aperçu
                 </button>
                 <button className="btn-outline" type="button" onClick={consumeTicket}>
                   <CheckCircle2 size={14} />
@@ -412,26 +524,7 @@ export default function RestaurationVerificationPage() {
                 </button>
               </div>
 
-              {validation && (
-                <div
-                  className={cn(
-                    'mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold',
-                    validation.valid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
-                  )}
-                >
-                  {validation.valid ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-                  {validation.reason}
-                </div>
-              )}
-
-              {validation?.reservation && (
-                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                  <p><strong>Etudiant:</strong> {validation.reservation.student.fullName}</p>
-                  <p><strong>Code:</strong> {validation.reservation.student.codeEtudiant || validation.reservation.student.codeMassar || '-'}</p>
-                  <p><strong>Repas:</strong> {validation.reservation.meal.name}</p>
-                  <p><strong>Date:</strong> {validation.reservation.reservationDate}</p>
-                </div>
-              )}
+              <TicketLookupCard validation={validation} loading={previewLoading} message={lookupMessage} />
             </section>
 
             {ticket ? (

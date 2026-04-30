@@ -29,7 +29,7 @@ type AuthContextType = {
   loading: boolean;
   login: (identifier: string, password: string) => Promise<void>;
   logout: () => void;
-  updateProfile: (data: ProfileUpdate) => Promise<void>;
+  updateProfile: (data: ProfileUpdate) => Promise<{ submitted?: boolean; passwordUpdated?: boolean } | void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       },
       updateProfile: async (data: ProfileUpdate) => {
-        await api.patch('/auth/profile', data);
+        const updateRes = await api.patch<{ submitted?: boolean; passwordUpdated?: boolean }>('/auth/profile', data);
         // Re-fetch authoritative data
         const res = await api.get<{
           sub: number;
@@ -124,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           studentProfile: res.data.studentProfile ?? null,
           teacherProfile: res.data.teacherProfile ?? null,
         });
+        return updateRes.data;
       },
     }),
     [user, loading],

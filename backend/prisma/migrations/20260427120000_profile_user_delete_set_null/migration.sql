@@ -1,3 +1,9 @@
+ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "userId" INTEGER;
+ALTER TABLE "Teacher" ADD COLUMN IF NOT EXISTS "userId" INTEGER;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "Student_userId_key" ON "Student"("userId");
+CREATE UNIQUE INDEX IF NOT EXISTS "Teacher_userId_key" ON "Teacher"("userId");
+
 ALTER TABLE "Student" DROP CONSTRAINT IF EXISTS "Student_userId_fkey";
 ALTER TABLE "Student"
   ADD CONSTRAINT "Student_userId_fkey"

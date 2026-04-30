@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { AlertTriangle, Database, MessageSquare, RefreshCw, Search, Server, ShieldCheck, UserCheck, UserCog, Users2 } from 'lucide-react';
 import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
@@ -50,6 +51,7 @@ const DEPT_SCOPED_ROLES = new Set(['user', 'teacher', 'student', 'inspector']);
 
 export default function UsersPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const isAdmin = user?.role === 'admin';
 
   const [rows, setRows] = useState<User[]>([]);
@@ -78,6 +80,12 @@ export default function UsersPage() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPassword, setImportPassword] = useState('');
   const [importing, setImporting] = useState(false);
+
+  useEffect(() => {
+    const initialSearch = searchParams.get('search') ?? '';
+    setSearch(initialSearch);
+    setUsersPage(1);
+  }, [searchParams]);
 
   const filteredRows = rows.filter((item) => {
     const query = search.trim().toLowerCase();

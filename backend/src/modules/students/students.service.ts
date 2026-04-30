@@ -137,7 +137,17 @@ export class StudentsService {
     });
   }
 
-  findOne(id: number) {
+  async findOne(id: number, currentUser?: JwtPayload) {
+    if (currentUser?.role === UserRole.STUDENT) {
+      const student = await this.prisma.student.findUnique({
+        where: { userId: currentUser.sub },
+        select: { id: true },
+      });
+      if (!student || student.id !== id) {
+        throw new ForbiddenException('Vous ne pouvez consulter que votre propre profil');
+      }
+    }
+
     return this.prisma.student.findUnique({
       where: { id },
       include: {
@@ -157,6 +167,75 @@ export class StudentsService {
         },
       },
     });
+  }
+
+  async lookupProfileQr(rawCode: string | undefined, currentUser: JwtPayload) {
+    const code = (rawCode ?? '').trim();
+    if (!code) throw new BadRequestException('Code QR requis');
+
+    const studentIdFromStructured = /^deaa:student:(\d+)$/i.exec(code)?.[1];
+    const studentIdFromUrl = /\/students\/(\d+)/i.exec(code)?.[1];
+    const userIdFromStructured = /^deaa:user:(\d+)$/i.exec(code)?.[1];
+
+    if (userIdFromStructured && currentUser.role !== UserRole.STUDENT) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: Number(userIdFromStructured) },
+        select: { id: true, fullName: true, email: true },
+      });
+      if (!user) throw new NotFoundException('Utilisateur introuvable');
+      return {
+        type: 'user',
+        title: user.fullName,
+        subtitle: user.email,
+        href: `/users?search=${encodeURIComponent(user.email)}`,
+      };
+    }
+
+    const student = studentIdFromStructured || studentIdFromUrl
+      ? await this.prisma.student.findUnique({
+          where: { id: Number(studentIdFromStructured ?? studentIdFromUrl) },
+          select: {
+            id: true,
+            fullName: true,
+            codeEtudiant: true,
+            codeMassar: true,
+            userId: true,
+            academicClass: { select: { name: true, year: true } },
+          },
+        })
+      : await this.prisma.student.findFirst({
+          where: {
+            OR: [
+              { codeEtudiant: { equals: code, mode: 'insensitive' } },
+              { codeMassar: { equals: code, mode: 'insensitive' } },
+              { email: { equals: code, mode: 'insensitive' } },
+              { fullName: { equals: code, mode: 'insensitive' } },
+            ],
+          },
+          select: {
+            id: true,
+            fullName: true,
+            codeEtudiant: true,
+            codeMassar: true,
+            userId: true,
+            academicClass: { select: { name: true, year: true } },
+          },
+        });
+
+    if (!student) throw new NotFoundException('Profil introuvable');
+    if (currentUser.role === UserRole.STUDENT && student.userId !== currentUser.sub) {
+      throw new ForbiddenException('Vous ne pouvez scanner que votre propre profil');
+    }
+
+    return {
+      type: 'student',
+      title: student.fullName,
+      subtitle: [
+        student.codeEtudiant ?? student.codeMassar ?? '',
+        student.academicClass ? `${student.academicClass.name} A${student.academicClass.year}` : '',
+      ].filter(Boolean).join(' · '),
+      href: `/students/${student.id}`,
+    };
   }
 
   async create(dto: CreateStudentDto, currentUser?: JwtPayload) {

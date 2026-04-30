@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateObservationDto } from './dto/create-observation.dto';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { UserRole } from '../../common/types/role.type';
 
 @Injectable()
 export class StudentObservationsService {
@@ -12,6 +14,20 @@ export class StudentObservationsService {
       where: { studentId },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async findAllForUser(studentId: number, user: JwtPayload) {
+    if (user.role === UserRole.STUDENT) {
+      const student = await this.prisma.student.findUnique({
+        where: { id: studentId },
+        select: { userId: true },
+      });
+      if (!student || student.userId !== user.sub) {
+        throw new ForbiddenException('Vous ne pouvez consulter que vos propres observations');
+      }
+    }
+
+    return this.findAll(studentId);
   }
 
   async create(studentId: number, dto: CreateObservationDto) {

@@ -14,6 +14,12 @@ export type StudentLookupResult = {
   fullName: string;
   codeMassar?: string;
   codeEtudiant?: string | null;
+  academicClass?: {
+    id: number;
+    name: string;
+    year: number;
+    semestre?: string | null;
+  } | null;
 };
 
 export type Wallet = { studentId: number; balance: number };

@@ -48,6 +48,7 @@ export const ADMIN_ROLES = ['admin', 'staff'];
 export const RESTAURATION_ROLES = ['admin', 'staff', 'restauration', 'student'];
 export const STUDENT_ONLY_ROUTES = [
   '/dashboard',
+  '/students',
   '/grades',
   '/timetable',
   '/attendance',
@@ -56,6 +57,7 @@ export const STUDENT_ONLY_ROUTES = [
   '/cours-resources',
   '/workflows',
   '/modules',
+  '/messages',
 ];
 
 export const navigation: NavGroup[] = [
@@ -125,7 +127,7 @@ export const navigation: NavGroup[] = [
     heading: 'Messagerie',
     roles: ACADEMIC_ROLES,
     items: [
-      { href: '/messages', label: 'Messages', caption: 'Groupes et conversations', icon: MessageSquare, roles: ['admin', 'staff', 'viewer', 'user', 'teacher', 'inspector'] },
+      { href: '/messages', label: 'Messages', caption: 'Groupes et conversations', icon: MessageSquare, roles: ['admin', 'staff', 'viewer', 'user', 'teacher', 'student', 'inspector'] },
     ],
   },
   {

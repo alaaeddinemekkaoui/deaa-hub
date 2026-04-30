@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   MessageSquare,
@@ -391,11 +391,9 @@ function ComposeModal({
     try {
       if (target === 'group') {
         await api.post('/messaging/send', { content: content.trim(), groupId: Number(groupId) });
-        toast.success('Message envoyé.');
       } else {
         const uniqueIds = [...new Set(recipientIds.map(Number).filter(Boolean))];
         await Promise.all(uniqueIds.map((recipientId) => api.post('/messaging/send', { content: content.trim(), recipientId })));
-        toast.success(uniqueIds.length > 1 ? `Message envoyé à ${uniqueIds.length} destinataires.` : 'Message envoyé.');
       }
       onSent();
       onClose();
@@ -556,6 +554,12 @@ export default function MessagesPage() {
   const preselectHandled = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const compatibleGroups = useMemo(() => {
+    if (!user) return [];
+    if (isAdmin) return groups;
+    return groups.filter((group) => group.type !== 'ADMINS_ONLY');
+  }, [groups, isAdmin, user]);
+
   const loadGroups = useCallback(async () => {
     try {
       const res = await api.get<Group[]>('/messaging/groups');
@@ -581,7 +585,7 @@ export default function MessagesPage() {
     if (!groupIdParam && !peerIdParam) { preselectHandled.current = true; return; }
     if (groupIdParam) {
       const groupId = Number(groupIdParam);
-      const group = groups.find((g) => g.id === groupId);
+      const group = compatibleGroups.find((g) => g.id === groupId);
       if (!group) return;
       setActiveTab('groups');
       setActiveThread({ kind: 'group', group });
@@ -598,7 +602,7 @@ export default function MessagesPage() {
       setActiveThread({ kind: 'direct', peer });
       preselectHandled.current = true;
     }
-  }, [groups, receivedThreads, searchParams, sentThreads]);
+  }, [compatibleGroups, receivedThreads, searchParams, sentThreads]);
 
   const loadThreadMessages = useCallback(async (showLoader = false) => {
     if (!activeThread) return;
@@ -648,7 +652,7 @@ export default function MessagesPage() {
     }
   };
 
-  const filteredGroups = groups.filter((g) => g.name.toLowerCase().includes(search.toLowerCase()));
+  const filteredGroups = compatibleGroups.filter((g) => g.name.toLowerCase().includes(search.toLowerCase()));
   const filteredReceived = receivedThreads.filter((item) => item.peer.fullName.toLowerCase().includes(search.toLowerCase()));
   const filteredSent = sentThreads.filter((item) => item.peer.fullName.toLowerCase().includes(search.toLowerCase()));
 
@@ -921,7 +925,7 @@ export default function MessagesPage() {
       {composeOpen && user && (
         <ComposeModal
           currentUser={user}
-          groups={groups}
+          groups={compatibleGroups}
           onClose={() => setComposeOpen(false)}
           onSent={() => { void loadGroups(); void loadInbox(); }}
         />

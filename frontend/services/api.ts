@@ -23,6 +23,10 @@ function getApiBaseUrl() {
 
   if (typeof window === 'undefined') return configured;
 
+  if (window.location.protocol === 'https:') {
+    return '/api';
+  }
+
   const pageHost = window.location.hostname;
   const isLocalPage = ['localhost', '127.0.0.1', '::1'].includes(pageHost);
 

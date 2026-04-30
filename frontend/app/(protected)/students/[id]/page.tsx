@@ -8,6 +8,7 @@ import { api, getApiErrorMessage } from '@/services/api';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
 import { toast } from 'sonner';
+import { useAuth } from '@/features/auth/auth-context';
 
 type StudentClassHistory = {
   id: number;
@@ -46,6 +47,11 @@ type GradeItem = {
   academicClass?: { id: number; name: string; year: number } | null;
 };
 
+type StudentGradesMeResponse = {
+  currentGrades?: GradeItem[];
+  historyByYear?: { year: string; grades: GradeItem[] }[];
+};
+
 type StudentProfile = {
   id: number;
   firstName?: string | null;
@@ -69,6 +75,7 @@ type StudentProfile = {
 
 export default function StudentProfilePage() {
   const params = useParams<{ id: string }>();
+  const { user } = useAuth();
   const [student, setStudent] = useState<StudentProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +93,9 @@ export default function StudentProfilePage() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const photoObjectUrlRef = useRef<string | null>(null);
+  const profileId = Number(params.id);
+  const isStudentOwner = user?.role === 'student' && user.studentProfile?.id === profileId;
+  const canUseDirectAdminActions = Boolean(user && user.role !== 'student');
 
   const setPhotoObjectUrl = useCallback((url: string | null) => {
     if (photoObjectUrlRef.current) {
@@ -165,6 +175,8 @@ export default function StudentProfilePage() {
     let isCancelled = false;
 
     const load = async () => {
+      if (!user) return;
+
       const id = Number(params.id);
       if (!Number.isInteger(id) || id < 1) {
         setError('Identifiant étudiant invalide.');
@@ -178,13 +190,23 @@ export default function StudentProfilePage() {
           api.get<StudentProfile>(`/students/${id}`),
           api.get<Observation[]>(`/students/${id}/observations`),
           api.get<DocumentItem[]>(`/documents/student/${id}`),
-          api.get<GradeItem[]>(`/grades/student/${id}`),
+          isStudentOwner
+            ? api.get<StudentGradesMeResponse>('/grades/me')
+            : api.get<GradeItem[]>(`/grades/student/${id}`),
         ]);
         if (isCancelled) return;
         setStudent(profileRes.data);
         setObservations(Array.isArray(obsRes.data) ? obsRes.data : []);
         setDocuments(Array.isArray(docsRes.data) ? docsRes.data : []);
-        setGrades(Array.isArray(gradesRes.data) ? gradesRes.data : []);
+        if (isStudentOwner) {
+          const data = gradesRes.data as StudentGradesMeResponse;
+          setGrades([
+            ...(data.currentGrades ?? []),
+            ...(data.historyByYear ?? []).flatMap((entry) => entry.grades),
+          ]);
+        } else {
+          setGrades(Array.isArray(gradesRes.data) ? gradesRes.data : []);
+        }
         if (!isCancelled) await loadPhoto(id);
       } catch (loadError) {
         if (!isCancelled) {
@@ -199,7 +221,7 @@ export default function StudentProfilePage() {
     return () => {
       isCancelled = true;
     };
-  }, [loadPhoto, params.id]);
+  }, [isStudentOwner, loadPhoto, params.id, user]);
 
   useEffect(() => {
     return () => {
@@ -296,8 +318,8 @@ export default function StudentProfilePage() {
       />
 
       <section className="flex justify-end">
-        <Link className="btn-outline" href="/students">
-          Retour aux étudiants
+        <Link className="btn-outline" href={isStudentOwner ? '/dashboard' : '/students'}>
+          {isStudentOwner ? 'Retour tableau de bord' : 'Retour aux étudiants'}
         </Link>
       </section>
 
@@ -329,25 +351,29 @@ export default function StudentProfilePage() {
               <p className="mt-1 text-sm text-slate-500">
                 Code Étudiant : {student.codeEtudiant ?? '-'} · Code Massar : {student.codeMassar}
               </p>
-              <button
-                type="button"
-                className="btn-outline mt-3 flex items-center gap-1.5"
-                onClick={() => photoInputRef.current?.click()}
-                disabled={uploadingPhoto}
-              >
-                <Camera size={14} />
-                {uploadingPhoto ? 'Upload...' : photoUrl ? 'Changer photo' : 'Ajouter photo'}
-              </button>
-              <input
-                ref={photoInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void handleUploadPhoto(file);
-                }}
-              />
+              {canUseDirectAdminActions ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn-outline mt-3 flex items-center gap-1.5"
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={uploadingPhoto}
+                  >
+                    <Camera size={14} />
+                    {uploadingPhoto ? 'Upload...' : photoUrl ? 'Changer photo' : 'Ajouter photo'}
+                  </button>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void handleUploadPhoto(file);
+                    }}
+                  />
+                </>
+              ) : null}
             </div>
           </div>
 
@@ -477,13 +503,15 @@ export default function StudentProfilePage() {
               <h2 className="panel-title">Observations</h2>
               <p className="panel-copy">{observations.length} observation{observations.length !== 1 ? 's' : ''}</p>
             </div>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => { setObsText(''); setObsModalOpen(true); }}
-            >
-              Ajouter une observation
-            </button>
+            {canUseDirectAdminActions ? (
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => { setObsText(''); setObsModalOpen(true); }}
+              >
+                Ajouter une observation
+              </button>
+            ) : null}
           </div>
 
           {observations.length === 0 ? (
@@ -518,13 +546,17 @@ export default function StudentProfilePage() {
                           </div>
                         </td>
                         <td>
-                          <button
-                            type="button"
-                            className="btn-outline text-xs"
-                            onClick={() => void handleDeleteObs(obs.id)}
-                          >
-                            Supprimer
-                          </button>
+                          {canUseDirectAdminActions ? (
+                            <button
+                              type="button"
+                              className="btn-outline text-xs"
+                              onClick={() => void handleDeleteObs(obs.id)}
+                            >
+                              Supprimer
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-400">Lecture seule</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -630,27 +662,29 @@ export default function StudentProfilePage() {
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-            <div className="field-stack">
-              <label className="field-label">Téléverser un document</label>
-              <input
-                className="input"
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg"
-                onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-              />
+          {canUseDirectAdminActions ? (
+            <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+              <div className="field-stack">
+                <label className="field-label">Téléverser un document</label>
+                <input
+                  className="input"
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  className="btn-primary"
+                  type="button"
+                  onClick={() => void handleUploadDocument()}
+                  disabled={!uploadFile || uploadingFile}
+                >
+                  {uploadingFile ? 'Téléversement...' : 'Téléverser'}
+                </button>
+              </div>
             </div>
-            <div className="flex items-end">
-              <button
-                className="btn-primary"
-                type="button"
-                onClick={() => void handleUploadDocument()}
-                disabled={!uploadFile || uploadingFile}
-              >
-                {uploadingFile ? 'Téléversement...' : 'Téléverser'}
-              </button>
-            </div>
-          </div>
+          ) : null}
 
           {documents.length === 0 ? (
             <p className="text-sm text-slate-400">Aucun document enregistré pour cet étudiant.</p>
@@ -673,13 +707,19 @@ export default function StudentProfilePage() {
                         <td>{doc.mimeType}</td>
                         <td>{new Date(doc.createdAt).toLocaleDateString('fr-FR')}</td>
                         <td>
-                          <button
-                            type="button"
-                            className="btn-outline text-xs"
-                            onClick={() => void handleDeleteDocument(doc.id)}
-                          >
-                            Supprimer
-                          </button>
+                          {canUseDirectAdminActions ? (
+                            <button
+                              type="button"
+                              className="btn-outline text-xs"
+                              onClick={() => void handleDeleteDocument(doc.id)}
+                            >
+                              Supprimer
+                            </button>
+                          ) : (
+                            <a className="btn-outline text-xs" href={`/api/documents/${doc.id}/file`} target="_blank" rel="noreferrer">
+                              Ouvrir
+                            </a>
+                          )}
                         </td>
                       </tr>
                     ))}

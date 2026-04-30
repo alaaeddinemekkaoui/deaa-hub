@@ -23,7 +23,9 @@ import { CreateDocumentDto } from './dto/create-document.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../../common/types/role.type';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 
 @Controller('documents')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -92,9 +94,12 @@ export class DocumentsController {
   }
 
   @Get('student/:studentId')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
-  findByStudent(@Param('studentId', ParseIntPipe) studentId: number) {
-    return this.documentsService.findByStudent(studentId);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.STUDENT)
+  findByStudent(
+    @Param('studentId', ParseIntPipe) studentId: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.documentsService.findByStudentForUser(studentId, user);
   }
 
   @Get('teacher/:teacherId')

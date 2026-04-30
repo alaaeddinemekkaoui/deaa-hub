@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -8,6 +9,8 @@ import { CreateDocumentDto } from './dto/create-document.dto';
 import { existsSync, mkdirSync, renameSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { UserRole } from '../../common/types/role.type';
 
 @Injectable()
 export class DocumentsService {
@@ -166,6 +169,20 @@ export class DocumentsService {
       where: { studentId },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async findByStudentForUser(studentId: number, user: JwtPayload) {
+    if (user.role === UserRole.STUDENT) {
+      const student = await this.prisma.student.findUnique({
+        where: { id: studentId },
+        select: { userId: true },
+      });
+      if (!student || student.userId !== user.sub) {
+        throw new ForbiddenException('Vous ne pouvez consulter que vos propres documents');
+      }
+    }
+
+    return this.findByStudent(studentId);
   }
 
   findByTeacher(teacherId: number) {

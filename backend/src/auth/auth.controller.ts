@@ -13,6 +13,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from './strategies/jwt.strategy';
 import { UsersService } from '../modules/users/users.service';
+import { UserRole } from '../common/types/role.type';
 
 @Controller('auth')
 export class AuthController {
@@ -48,6 +49,23 @@ export class AuthController {
     @CurrentUser() payload: JwtPayload,
     @Body() dto: UpdateProfileDto,
   ) {
-    return this.usersService.update(payload.sub, dto);
+    if (payload.role !== UserRole.STUDENT) {
+      return this.usersService.update(payload.sub, dto);
+    }
+
+    const { password, ...profileChanges } = dto;
+    const result: { passwordUpdated?: boolean; submitted?: boolean; taskId?: number; message?: string } = {};
+
+    if (password) {
+      await this.usersService.update(payload.sub, { password });
+      result.passwordUpdated = true;
+    }
+
+    if (profileChanges.fullName || profileChanges.email) {
+      const request = await this.usersService.requestOwnProfileUpdate(payload.sub, profileChanges);
+      Object.assign(result, request);
+    }
+
+    return result;
   }
 }

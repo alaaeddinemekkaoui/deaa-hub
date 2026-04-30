@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { GroupType } from '@prisma/client';
+import { GroupType, Prisma, UserRole as PrismaUserRole } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { TtlCache } from '../../common/utils/ttl-cache';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -159,24 +159,27 @@ export class UsersService {
   }
 
   async create(dto: CreateUserDto) {
+    await this.ensureEmailAvailable(dto.email);
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    const user = await this.prisma.user.create({
-      data: {
-        fullName: dto.fullName,
-        email: dto.email,
-        role: dto.role,
-        passwordHash,
-        departments: dto.departmentIds?.length
-          ? {
-              create: dto.departmentIds.map((departmentId) => ({
-                departmentId,
-              })),
-            }
-          : undefined,
-      },
-      select: USER_SELECT,
-    });
+    const user = await this.mapUniqueConstraint(async () =>
+      this.prisma.user.create({
+        data: {
+          fullName: dto.fullName,
+          email: dto.email,
+          role: dto.role,
+          passwordHash,
+          departments: dto.departmentIds?.length
+            ? {
+                create: dto.departmentIds.map((departmentId) => ({
+                  departmentId,
+                })),
+              }
+            : undefined,
+        },
+        select: USER_SELECT,
+      }),
+    );
 
     await this.syncUserMessagingGroups({
       userId: user.id,
@@ -191,30 +194,41 @@ export class UsersService {
   async update(id: number, dto: UpdateUserDto) {
     const { departmentIds, password, ...rest } = dto;
 
+    const existing = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Utilisateur introuvable');
+    if (rest.email) {
+      await this.ensureEmailAvailable(rest.email, id);
+    }
+
     const data: Record<string, unknown> = { ...rest };
     if (password) {
       data.passwordHash = await bcrypt.hash(password, 10);
     }
 
-    const user = await this.prisma.$transaction(async (tx) => {
-      if (departmentIds !== undefined) {
-        await tx.userDepartment.deleteMany({ where: { userId: id } });
-        if (departmentIds.length > 0) {
-          await tx.userDepartment.createMany({
-            data: departmentIds.map((departmentId) => ({
-              userId: id,
-              departmentId,
-            })),
-          });
+    const user = await this.mapUniqueConstraint(() =>
+      this.prisma.$transaction(async (tx) => {
+        if (departmentIds !== undefined) {
+          await tx.userDepartment.deleteMany({ where: { userId: id } });
+          if (departmentIds.length > 0) {
+            await tx.userDepartment.createMany({
+              data: departmentIds.map((departmentId) => ({
+                userId: id,
+                departmentId,
+              })),
+            });
+          }
         }
-      }
 
-      return tx.user.update({
-        where: { id },
-        data,
-        select: USER_SELECT,
-      });
-    });
+        return tx.user.update({
+          where: { id },
+          data,
+          select: USER_SELECT,
+        });
+      }),
+    );
 
     await this.syncUserMessagingGroups({
       userId: user.id,
@@ -224,6 +238,102 @@ export class UsersService {
 
     this.listCache.invalidate();
     return mapDepartments(user);
+  }
+
+  async requestOwnProfileUpdate(userId: number, dto: UpdateUserDto) {
+    const requestedChanges: string[] = [];
+    const profilePatch: { fullName?: string; email?: string } = {};
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        studentProfile: {
+          select: {
+            id: true,
+            fullName: true,
+            filiere: { select: { departmentId: true } },
+            academicClass: {
+              select: { filiere: { select: { departmentId: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (!user?.studentProfile) {
+      throw new NotFoundException('Profil étudiant introuvable');
+    }
+
+    if (dto.fullName && dto.fullName.trim() !== user.fullName) {
+      profilePatch.fullName = dto.fullName.trim();
+      requestedChanges.push(`Nom complet: "${user.fullName}" -> "${profilePatch.fullName}"`);
+    }
+    if (dto.email && dto.email.trim().toLowerCase() !== user.email.toLowerCase()) {
+      await this.ensureEmailAvailable(dto.email, userId);
+      profilePatch.email = dto.email.trim();
+      requestedChanges.push(`Email: "${user.email}" -> "${profilePatch.email}"`);
+    }
+
+    if (requestedChanges.length === 0) {
+      return { submitted: false, message: 'Aucune modification à approuver' };
+    }
+
+    const departmentId =
+      user.studentProfile.academicClass?.filiere?.departmentId ??
+      user.studentProfile.filiere?.departmentId ??
+      null;
+
+    const assignee = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          ...(departmentId
+            ? [{
+                role: PrismaUserRole.inspector,
+                departments: { some: { departmentId } },
+              }]
+            : []),
+          { role: PrismaUserRole.admin },
+          { role: PrismaUserRole.staff },
+        ],
+      },
+      orderBy: { id: 'asc' },
+      select: { id: true },
+    });
+    if (!assignee) {
+      throw new NotFoundException('Aucun validateur disponible');
+    }
+
+    const task = await this.prisma.workflowTask.create({
+      data: {
+        title: 'Demande modification profil',
+        description: [
+          ...requestedChanges,
+          `PROFILE_UPDATE_PAYLOAD:${JSON.stringify(profilePatch)}`,
+        ].join('\n'),
+        studentId: user.studentProfile.id,
+        assignedToId: assignee.id,
+        status: 'pending',
+      },
+    });
+
+    await this.prisma.workflowTimeline.create({
+      data: {
+        taskId: task.id,
+        status: 'pending',
+        note: 'Demande de modification profil créée',
+      },
+    });
+
+    await this.prisma.notification.create({
+      data: {
+        userId: assignee.id,
+        type: 'workflow_request',
+        content: `Nouvelle demande de modification profil: ${user.studentProfile.fullName}.`,
+      },
+    });
+
+    return { submitted: true, taskId: task.id };
   }
 
   async remove(id: number) {
@@ -450,6 +560,36 @@ export class UsersService {
 
   private isAdminLikeRole(role: string): boolean {
     return role === 'admin' || role === 'staff';
+  }
+
+  private async ensureEmailAvailable(email: string, currentUserId?: number) {
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        email: { equals: email, mode: 'insensitive' },
+        ...(currentUserId ? { id: { not: currentUserId } } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new ConflictException('Email déjà utilisé par un autre utilisateur');
+    }
+  }
+
+  private async mapUniqueConstraint<T>(task: () => Promise<T>): Promise<T> {
+    try {
+      return await task();
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002' &&
+        Array.isArray(error.meta?.target) &&
+        error.meta.target.includes('email')
+      ) {
+        throw new ConflictException('Email déjà utilisé par un autre utilisateur');
+      }
+      throw error;
+    }
   }
 
   /**

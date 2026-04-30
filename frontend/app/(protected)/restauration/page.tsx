@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { api, getApiErrorMessage } from '@/services/api';
 import { toast } from 'sonner';
 import { StudentLookup } from './_components/student-lookup';
+import { TicketPreview } from './_components/ticket-preview';
 import type {
   Meal,
   Reservation,
@@ -52,6 +53,7 @@ export default function RestaurationPage() {
   const [savingWallet, setSavingWallet] = useState(false);
 
   const [receipt, setReceipt] = useState<Reservation | null>(null);
+  const [ticket, setTicket] = useState<Reservation | null>(null);
 
   const selectedStudentId = selectedStudent ? String(selectedStudent.id) : '';
   const activeMeals = useMemo(() => meals.filter((meal) => meal.active), [meals]);
@@ -102,6 +104,7 @@ export default function RestaurationPage() {
     setAdjustBalance('');
     setSelectedKeys(new Set());
     setReceipt(null);
+    setTicket(null);
   }, []);
 
   const loadStudentData = useCallback(
@@ -238,6 +241,23 @@ export default function RestaurationPage() {
       await loadStudentData(canManage ? selectedStudentId : undefined);
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Annulation impossible'));
+    }
+  };
+
+  const openTicketFromHistory = async (reservation: Reservation) => {
+    if (reservation.ticketCode) {
+      setTicket(reservation);
+      return;
+    }
+
+    try {
+      const response = await api.post<Reservation>('/restauration/tickets/issue', {
+        reservationId: reservation.id,
+      });
+      setTicket(response.data);
+      await loadStudentData(canManage ? selectedStudentId : undefined);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Ticket impossible'));
     }
   };
 
@@ -516,6 +536,7 @@ export default function RestaurationPage() {
                     <thead>
                       <tr>
                         <th>Recu</th>
+                        <th>Etudiant</th>
                         <th>Repas</th>
                         <th>Date</th>
                         <th>Statut</th>
@@ -530,6 +551,18 @@ export default function RestaurationPage() {
                         return (
                           <tr key={item.id}>
                             <td>{item.receiptNumber}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className="text-left text-sm font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
+                                onClick={() => void openTicketFromHistory(item)}
+                              >
+                                {item.student.fullName}
+                              </button>
+                              <p className="text-xs text-slate-400">
+                                {item.ticketCode ? item.ticketCode : item.student.codeEtudiant || item.student.codeMassar || 'Sans code'}
+                              </p>
+                            </td>
                             <td>{item.meal.name}</td>
                             <td>{item.reservationDate}</td>
                             <td>
@@ -542,6 +575,9 @@ export default function RestaurationPage() {
                               <div className="flex flex-wrap gap-2">
                                 <button className="btn-outline" type="button" onClick={() => setReceipt(item)}>
                                   Recu
+                                </button>
+                                <button className="btn-outline" type="button" onClick={() => void openTicketFromHistory(item)}>
+                                  Ticket QR
                                 </button>
                                 {cancellable && (
                                   <button className="btn-outline" type="button" onClick={() => cancelReservation(item)}>
@@ -655,6 +691,21 @@ export default function RestaurationPage() {
             </div>
           </div>
         )}
+      </ModalShell>
+
+      <ModalShell
+        open={Boolean(ticket)}
+        title="Ticket restauration"
+        description="Ticket scannable avec QR code et code-barres."
+        onClose={() => setTicket(null)}
+        size="lg"
+        footer={
+          <button className="btn-outline" type="button" onClick={() => setTicket(null)}>
+            Fermer
+          </button>
+        }
+      >
+        {ticket ? <TicketPreview reservation={ticket} /> : null}
       </ModalShell>
     </div>
   );

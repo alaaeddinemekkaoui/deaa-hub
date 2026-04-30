@@ -2,6 +2,20 @@
 CREATE TYPE "AccreditationPlanStatus" AS ENUM ('draft', 'published', 'archived');
 
 -- CreateTable
+CREATE TABLE "Cycle" (
+	"id" SERIAL NOT NULL,
+	"name" TEXT NOT NULL,
+	"code" TEXT,
+	"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	"updatedAt" TIMESTAMP(3) NOT NULL,
+
+	CONSTRAINT "Cycle_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Cycle_name_key" ON "Cycle"("name");
+
+-- CreateTable
 CREATE TABLE "AccreditationPlan" (
 	"id" SERIAL NOT NULL,
 	"name" TEXT NOT NULL,

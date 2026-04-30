@@ -179,6 +179,10 @@ export class WorkflowsService {
           },
         });
       }
+
+      if (dto.status === WorkflowStatus.completed) {
+        await this.applyApprovedProfileUpdate(id);
+      }
     }
 
     return updated;
@@ -194,5 +198,63 @@ export class WorkflowsService {
       select: { student: { select: { userId: true } } },
     });
     return task?.student?.userId ?? null;
+  }
+
+  private parseProfileUpdatePayload(description?: string | null) {
+    const marker = 'PROFILE_UPDATE_PAYLOAD:';
+    const line = description
+      ?.split(/\r?\n/)
+      .find((item) => item.startsWith(marker));
+    if (!line) return null;
+
+    try {
+      const parsed = JSON.parse(line.slice(marker.length)) as unknown;
+      if (!parsed || typeof parsed !== 'object') return null;
+
+      const patch = parsed as { fullName?: unknown; email?: unknown };
+      return {
+        ...(typeof patch.fullName === 'string' && patch.fullName.trim()
+          ? { fullName: patch.fullName.trim() }
+          : {}),
+        ...(typeof patch.email === 'string' && patch.email.trim()
+          ? { email: patch.email.trim() }
+          : {}),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private async applyApprovedProfileUpdate(taskId: number) {
+    const task = await this.prisma.workflowTask.findUnique({
+      where: { id: taskId },
+      select: {
+        title: true,
+        description: true,
+        student: { select: { id: true, userId: true } },
+      },
+    });
+
+    if (task?.title !== 'Demande modification profil' || !task.student?.userId) {
+      return;
+    }
+
+    const patch = this.parseProfileUpdatePayload(task.description);
+    if (!patch || Object.keys(patch).length === 0) return;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: task.student!.userId! },
+        data: patch,
+      });
+
+      await tx.student.update({
+        where: { id: task.student!.id },
+        data: {
+          ...(patch.fullName ? { fullName: patch.fullName } : {}),
+          ...(patch.email ? { email: patch.email } : {}),
+        },
+      });
+    });
   }
 }

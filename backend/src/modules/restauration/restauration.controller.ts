@@ -189,6 +189,15 @@ export class RestaurationController {
     return this.restaurationService.validateTicket(code);
   }
 
+  @Post('tickets/preview')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION)
+  previewTicket(
+    @Body() dto: AutoConsumeTicketDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.restaurationService.previewTicket(dto, user);
+  }
+
   @Post('tickets/consume')
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.RESTAURATION)
   consumeTicket(

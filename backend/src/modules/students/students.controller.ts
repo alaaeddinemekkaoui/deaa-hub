@@ -77,6 +77,23 @@ export class StudentsController {
     );
   }
 
+  @Get('profile-lookup/scan')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.TEACHER,
+    UserRole.INSPECTOR,
+    UserRole.STUDENT,
+  )
+  lookupProfileQr(
+    @Query('code') code: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.studentsService.lookupProfileQr(code, user);
+  }
+
   @Post('import')
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   @UseInterceptors(
@@ -118,9 +135,9 @@ export class StudentsController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.studentsService.findOne(id);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.STUDENT)
+  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: JwtPayload) {
+    return this.studentsService.findOne(id, user);
   }
 
   @Post()

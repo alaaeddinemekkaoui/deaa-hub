@@ -213,10 +213,8 @@ export class AttendanceService {
     await this.ensureCanManageSession(session, user);
 
     const now = new Date();
-    const sessionEnd = this.sessionBoundary(session, 'end');
     const requestedDeadline = new Date(now.getTime() + (dto.minutes ?? 90) * 60_000);
-    const deadline = requestedDeadline < sessionEnd ? requestedDeadline : sessionEnd;
-    if (deadline <= now) throw new BadRequestException('attendance closed');
+    const deadline = requestedDeadline;
 
     const token = `att_${id}_${randomBytes(32).toString('base64url')}`;
     const updated = await this.prisma.timetableSession.update({
@@ -255,23 +253,26 @@ export class AttendanceService {
   async extend(id: number, minutes: number, user: JwtPayload) {
     const session = await this.getSessionOrThrow(id);
     await this.ensureCanManageSession(session, user);
-    if (!session.attendanceEnabled || !session.attendanceDeadline) {
-      throw new BadRequestException('attendance closed');
-    }
-
     const now = new Date();
-    const sessionEnd = this.sessionBoundary(session, 'end');
-    const base = session.attendanceDeadline > now ? session.attendanceDeadline : now;
-    const requested = new Date(base.getTime() + minutes * 60_000);
-    const deadline = requested < sessionEnd ? requested : sessionEnd;
-    if (deadline <= now) throw new BadRequestException('attendance closed');
+    const base =
+      session.attendanceEnabled && session.attendanceDeadline && session.attendanceDeadline > now
+        ? session.attendanceDeadline
+        : now;
+    const deadline = new Date(base.getTime() + minutes * 60_000);
+    const token = `att_${id}_${randomBytes(32).toString('base64url')}`;
 
     const updated = await this.prisma.timetableSession.update({
       where: { id },
-      data: { attendanceDeadline: deadline, attendanceClosedAt: null, attendanceEnabled: true },
+      data: {
+        attendanceDeadline: deadline,
+        attendanceClosedAt: null,
+        attendanceEnabled: true,
+        attendanceEnabledAt: now,
+        attendanceTokenHash: this.hashToken(token),
+      },
       include: SESSION_INCLUDE,
     });
-    return this.presentSession(updated);
+    return { ...this.presentSession(updated), qrToken: token };
   }
 
   async manual(id: number, dto: ManualAttendanceDto, user: JwtPayload) {
@@ -315,16 +316,12 @@ export class AttendanceService {
       throw new BadRequestException('invalid session');
     }
     if (!session.attendanceEnabled || session.attendanceClosedAt) {
-      throw new BadRequestException('attendance closed');
+      throw new BadRequestException('QR non actif');
     }
     if (!session.attendanceDeadline || now > session.attendanceDeadline) {
       await this.closeExpiredSession(session.id);
       throw new BadRequestException('expired QR code');
     }
-    if (!this.isSessionCalendarActive(session, now)) {
-      throw new BadRequestException('invalid session');
-    }
-
     const student = await this.prisma.student.findUnique({
       where: { userId: user.sub },
       select: { id: true, fullName: true, classId: true },
@@ -594,9 +591,4 @@ export class AttendanceService {
     return minutes >= sh * 60 + sm && minutes <= eh * 60 + em;
   }
 
-  private isSessionCalendarActive(session: SessionWithAttendance, now: Date) {
-    if (session.dayOfWeek !== this.dayOfWeek(now)) return false;
-    if (!session.weekStart) return true;
-    return session.weekStart.getTime() === this.weekStart(now).getTime();
-  }
 }

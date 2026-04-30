@@ -562,6 +562,45 @@ export class RestaurationService {
     return { valid: true, reason: 'Ticket valide', reservation };
   }
 
+  async previewTicket(dto: AutoConsumeTicketDto, user: JwtPayload) {
+    this.ensureCanManageRestauration(user);
+    const query = dto.query.trim();
+    if (!query) throw new BadRequestException('Code ou nom requis');
+
+    const directValidation = await this.validateTicket(query);
+    if (directValidation.reservation) {
+      return directValidation;
+    }
+
+    const student = await this.findStudentForTicketLookup(query);
+    const mealId = dto.mealId ?? (await this.resolveCurrentMealId());
+    if (!mealId) {
+      throw new BadRequestException(
+        'Aucun repas ne correspond à l’heure actuelle',
+      );
+    }
+
+    const reservation = await this.prisma.mealReservation.findFirst({
+      where: {
+        studentId: student.id,
+        mealId,
+        reservationDate: todayIso(),
+        status: { in: ['confirmed', 'consumed'] },
+      },
+      include: this.reservationInclude(),
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!reservation) {
+      throw new NotFoundException('Aucune réservation valide pour ce repas');
+    }
+
+    if (reservation.status === 'consumed' || reservation.consumedAt) {
+      return { valid: false, reason: 'Déjà consommé', reservation };
+    }
+
+    return { valid: true, reason: 'Prêt à valider', reservation };
+  }
+
   async consumeTicket(dto: ConsumeTicketDto, user: JwtPayload) {
     this.ensureCanManageRestauration(user);
     const validation = await this.validateTicket(dto.code.trim());
@@ -676,6 +715,14 @@ export class RestaurationService {
           fullName: true,
           codeMassar: true,
           codeEtudiant: true,
+          academicClass: {
+            select: {
+              id: true,
+              name: true,
+              year: true,
+              semestre: true,
+            },
+          },
         },
       },
       reservedBy: { select: { id: true, fullName: true, role: true } },

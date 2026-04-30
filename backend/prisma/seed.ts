@@ -237,12 +237,21 @@ async function main() {
   const upsertClass = async (
     name: string, year: number, filiereId: number, cycleId: number,
     classType: string, optionId?: number,
-  ) =>
-    prisma.academicClass.upsert({
-      where: { name_year: { name, year } },
-      update: { filiereId, cycleId, classType, optionId: optionId ?? null },
-      create: { name, year, filiereId, cycleId, classType, optionId: optionId ?? null },
+  ) => {
+    const existing = await prisma.academicClass.findFirst({
+      where: { name, year, semestre: null },
     });
+    const data = { filiereId, cycleId, classType, optionId: optionId ?? null };
+    if (existing) {
+      return prisma.academicClass.update({
+        where: { id: existing.id },
+        data,
+      });
+    }
+    return prisma.academicClass.create({
+      data: { name, year, ...data },
+    });
+  };
 
   const classAPESA1 = await upsertClass('APESA 1', 1, filiereAPESA.id, cyclePrepa.id, 'prepa');
   const classAPESA2 = await upsertClass('APESA 2', 2, filiereAPESA.id, cyclePrepa.id, 'prepa');
@@ -966,6 +975,49 @@ async function main() {
   await upsertRoomReservation('Salle de Conférences', 4, '09:00', '11:00', 'Direction', RoomReservationPurpose.reunion, 'Réunion pédagogique mensuelle');
   await upsertRoomReservation('Labo Informatique 1', 5, '08:00', '10:00', 'Pr. Fennich', RoomReservationPurpose.cours, 'TP Informatique IAG1');
   await upsertRoomReservation('Amphi B', 1, '14:00', '16:00', 'Pr. Chakroun', RoomReservationPurpose.cours, 'Cours Anatomie MV2');
+
+  // ─── Restauration demo data ──────────────────────────────────────────────
+  const restaurantPasswordHash = await bcrypt.hash('admin', 10);
+  await prisma.user.upsert({
+    where: { email: 'restaurant' },
+    update: {
+      fullName: 'Demo Restaurant',
+      passwordHash: restaurantPasswordHash,
+      role: UserRole.restauration,
+    },
+    create: {
+      fullName: 'Demo Restaurant',
+      email: 'restaurant',
+      passwordHash: restaurantPasswordHash,
+      role: UserRole.restauration,
+    },
+  });
+
+  const mealDefs = [
+    { name: 'Petit déjeuner', price: 8, serviceStartTime: '07:00', serviceEndTime: '09:30' },
+    { name: 'Déjeuner', price: 15, serviceStartTime: '12:00', serviceEndTime: '14:30' },
+    { name: 'Dîner', price: 12, serviceStartTime: '18:30', serviceEndTime: '21:00' },
+  ];
+
+  for (const meal of mealDefs) {
+    const existingMeal = await prisma.meal.findFirst({ where: { name: meal.name } });
+    if (existingMeal) {
+      await prisma.meal.update({
+        where: { id: existingMeal.id },
+        data: { ...meal, active: true },
+      });
+    } else {
+      await prisma.meal.create({ data: { ...meal, active: true } });
+    }
+  }
+
+  for (const studentId of Object.values(savedStudents)) {
+    await prisma.mealWallet.upsert({
+      where: { studentId },
+      update: { balance: 150 },
+      create: { studentId, balance: 150 },
+    });
+  }
 
   // ─── Academic Years ───────────────────────────────────────────────────────
   const yearDefs = [

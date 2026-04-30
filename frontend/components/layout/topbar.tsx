@@ -1,14 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, Check, Eye, EyeOff, Grid3X3, LogOut, Menu, MessageSquare, Pencil, Search, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Bell, Check, Eye, EyeOff, LogOut, Menu, MessageSquare, MoreVertical, Pencil, QrCode, ScanLine, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import QRCode from 'qrcode';
 import { useAuth } from '@/features/auth/auth-context';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { cn } from '@/lib/utils';
+import { filterNavigationForRole } from './navigation';
+import { MobileQRScanner } from '@/components/scanner/mobile-qr-scanner';
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 function initials(name?: string, email?: string): string {
@@ -23,9 +26,79 @@ function initials(name?: string, email?: string): string {
   return (email?.[0] ?? 'U').toUpperCase();
 }
 
+type SearchResultKind = 'module' | 'student' | 'teacher' | 'user';
+
+type SearchResult = {
+  kind: SearchResultKind;
+  title: string;
+  subtitle: string;
+  href: string;
+  group?: string;
+};
+
+type SearchableUser = {
+  id: number;
+  fullName: string;
+  email: string;
+  role: string;
+  departments?: { id: number; name: string }[];
+};
+
+type SearchableStudent = {
+  id: number;
+  fullName: string;
+  codeMassar?: string | null;
+  codeEtudiant?: string | null;
+  cin?: string | null;
+};
+
+type SearchableTeacher = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  cin?: string | null;
+  email?: string | null;
+  department?: { name: string } | null;
+};
+
+type ProfileQrLookup = {
+  type: 'student' | 'user';
+  title: string;
+  subtitle?: string;
+  href: string;
+};
+
+function normalizeSearchValue(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function matchesSearch(value: string | undefined, query: string): boolean {
+  if (!value) return false;
+  return normalizeSearchValue(value).includes(query);
+}
+
+function dedupeSearchResults(items: SearchResult[]): SearchResult[] {
+  const seen = new Set<string>();
+  const next: SearchResult[] = [];
+
+  for (const item of items) {
+    const key = `${item.kind}:${item.href}:${item.title}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    next.push(item);
+  }
+
+  return next;
+}
+
 /* ── Profile drawer ─────────────────────────────────────────── */
 function ProfileDrawer({ onClose }: { onClose: () => void }) {
   const { user, updateProfile } = useAuth();
+  const router = useRouter();
 
   const [fullName, setFullName] = useState(user?.fullName ?? '');
   const [email, setEmail]       = useState(user?.email ?? '');
@@ -33,6 +106,10 @@ function ProfileDrawer({ onClose }: { onClose: () => void }) {
   const [confirm, setConfirm]   = useState('');
   const [showPw, setShowPw]     = useState(false);
   const [saving, setSaving]     = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanValue, setScanValue] = useState('');
+  const [scanLoading, setScanLoading] = useState(false);
 
   const drawerRef = useRef<HTMLDivElement>(null);
 
@@ -44,6 +121,53 @@ function ProfileDrawer({ onClose }: { onClose: () => void }) {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const profileCode = user?.studentProfile?.id
+      ? `deaa:student:${user.studentProfile.id}`
+      : user?.id
+        ? `deaa:user:${user.id}`
+        : '';
+
+    if (!profileCode) {
+      setQrDataUrl(null);
+      return;
+    }
+
+    QRCode.toDataURL(profileCode, { margin: 1, width: 180 })
+      .then((value) => {
+        if (!cancelled) setQrDataUrl(value);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.studentProfile?.id]);
+
+  const handleProfileScan = async (value: string) => {
+    const raw = value.trim();
+    if (!raw) return;
+
+    setScanValue(raw);
+    setScanLoading(true);
+    try {
+      const response = await api.get<ProfileQrLookup>('/students/profile-lookup/scan', {
+        params: { code: raw },
+      });
+      toast.success(`Profil trouvé : ${response.data.title}`);
+      setScanOpen(false);
+      onClose();
+      router.push(response.data.href);
+    } catch {
+      toast.error('Profil introuvable ou accès non autorisé.');
+    } finally {
+      setScanLoading(false);
+    }
+  };
 
   const handleSave = async () => {
     if (password && password !== confirm) {
@@ -67,8 +191,16 @@ function ProfileDrawer({ onClose }: { onClose: () => void }) {
 
     try {
       setSaving(true);
-      await updateProfile(payload);
-      toast.success('Profil mis à jour avec succès.');
+      const result = await updateProfile(payload);
+      if (result?.submitted && result?.passwordUpdated) {
+        toast.success('Mot de passe mis à jour. Demande de modification envoyée pour validation.');
+      } else if (result?.submitted) {
+        toast.success('Demande de modification envoyée pour validation.');
+      } else if (result?.passwordUpdated) {
+        toast.success('Mot de passe mis à jour.');
+      } else {
+        toast.success('Profil mis à jour avec succès.');
+      }
       setPassword('');
       setConfirm('');
       onClose();
@@ -121,6 +253,13 @@ function ProfileDrawer({ onClose }: { onClose: () => void }) {
           <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
             Informations personnelles
           </p>
+
+          {user?.role === 'student' ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+              Les changements de nom ou d'e-mail seront envoyés à l'administration pour validation.
+              Le mot de passe est modifié immédiatement.
+            </p>
+          ) : null}
 
           {/* Full name */}
           <div className="space-y-1.5">
@@ -187,6 +326,76 @@ function ProfileDrawer({ onClose }: { onClose: () => void }) {
               {confirm && password !== confirm && (
                 <p className="text-[11px] text-red-500">Les mots de passe ne correspondent pas.</p>
               )}
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
+                  QR profil
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Affichez votre QR ou scannez un profil pour l'ouvrir.
+                </p>
+              </div>
+              <QrCode size={18} className="text-emerald-700" />
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-24 w-24 items-center justify-center rounded-xl border border-slate-200 bg-white p-2">
+                  {qrDataUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={qrDataUrl} alt="QR profil" className="h-full w-full object-contain" />
+                  ) : (
+                    <QrCode size={32} className="text-slate-300" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-900">
+                    {user?.studentProfile?.fullName ?? user?.fullName ?? user?.email}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {user?.studentProfile?.id ? `Étudiant #${user.studentProfile.id}` : `Utilisateur #${user?.id ?? '-'}`}
+                  </p>
+                  <button
+                    type="button"
+                    className="btn-outline mt-3 text-xs"
+                    onClick={() => setScanOpen((current) => !current)}
+                  >
+                    <ScanLine size={13} />
+                    {scanOpen ? 'Fermer le scan' : 'Scanner un QR'}
+                  </button>
+                </div>
+              </div>
+
+              {scanOpen ? (
+                <div className="mt-3 space-y-2">
+                  <MobileQRScanner
+                    label="Autoriser la caméra"
+                    hint="Scannez un QR profil étudiant."
+                    onScan={(value) => void handleProfileScan(value)}
+                  />
+                  <div className="field-stack">
+                    <label className="field-label">Valeur scannée</label>
+                    <input
+                      className="input text-xs"
+                      value={scanValue}
+                      onChange={(event) => setScanValue(event.target.value)}
+                      placeholder="deaa:student:1"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-primary w-full justify-center"
+                    disabled={!scanValue.trim() || scanLoading}
+                    onClick={() => void handleProfileScan(scanValue)}
+                  >
+                    {scanLoading ? 'Recherche...' : 'Ouvrir le profil'}
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -444,9 +653,211 @@ type TopbarProps = {
 export function Topbar({ sidebarOpen = true, onToggleSidebar }: TopbarProps) {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const searchWrapRef = useRef<HTMLDivElement>(null);
+  const modulesMenuRef = useRef<HTMLDivElement>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [modulesMenuOpen, setModulesMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 
   const avatar = initials(user?.fullName, user?.email);
+  const role = user?.role ?? 'viewer';
+  const navigationItems = useMemo(() => filterNavigationForRole(role), [role]);
+  const canSearchUsers = useMemo(
+    () => navigationItems.some((group) => group.items.some((item) => item.href === '/users')),
+    [navigationItems],
+  );
+
+  const moduleGroupHref = useCallback((heading: string) => `/modules?group=${encodeURIComponent(heading)}`, []);
+
+  const openSearchResult = useCallback((result: SearchResult) => {
+    setSearchQuery('');
+    setSearchOpen(false);
+    setSearchResults([]);
+    router.push(result.href);
+  }, [router]);
+
+  const toggleModulesMenu = useCallback(() => {
+    setSearchOpen(false);
+    setModulesMenuOpen((current) => !current);
+  }, []);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSearchOpen(false);
+      }
+    };
+
+    const handleOutside = (event: MouseEvent) => {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(event.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    document.addEventListener('mousedown', handleOutside);
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('mousedown', handleOutside);
+    };
+  }, [searchOpen]);
+
+  useEffect(() => {
+    if (!modulesMenuOpen) return;
+
+    const handleOutside = (event: MouseEvent) => {
+      if (modulesMenuRef.current && !modulesMenuRef.current.contains(event.target as Node)) {
+        setModulesMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setModulesMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [modulesMenuOpen]);
+
+  useEffect(() => {
+    const query = normalizeSearchValue(searchQuery);
+
+    if (query.length < 1) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      const moduleResults: SearchResult[] = [];
+      for (const group of navigationItems) {
+        const groupMatch = matchesSearch(group.heading, query);
+        for (const item of group.items) {
+          const itemMatch = groupMatch || [item.label, item.caption, item.href].some((value) => matchesSearch(value, query));
+          if (!itemMatch) continue;
+          moduleResults.push({
+            kind: 'module',
+            title: item.label,
+            subtitle: item.caption,
+            href: item.href,
+            group: group.heading,
+          });
+        }
+      }
+
+      const runSearch = async (): Promise<void> => {
+        setSearching(true);
+        try {
+          const requests: Array<Promise<unknown>> = [
+            api.get<{ data: SearchableStudent[] }>('/students', { params: { page: 1, limit: 8, search: searchQuery.trim() } }),
+            api.get<{ data: SearchableTeacher[] }>('/teachers', { params: { page: 1, limit: 8, search: searchQuery.trim() } }),
+          ];
+
+          if (canSearchUsers) {
+            requests.push(api.get<SearchableUser[]>('/users'));
+          }
+
+          const [studentsResponse, teachersResponse, usersResponse] = await Promise.allSettled(requests);
+
+          const studentItems: SearchResult[] = [];
+          if (studentsResponse.status === 'fulfilled') {
+            const students = Array.isArray((studentsResponse.value as { data?: { data?: SearchableStudent[] } }).data?.data)
+              ? (studentsResponse.value as { data: { data: SearchableStudent[] } }).data.data
+              : [];
+            for (const student of students) {
+              studentItems.push({
+                kind: 'student',
+                title: student.fullName,
+                subtitle: [student.codeEtudiant ?? student.codeMassar ?? student.cin ?? 'Étudiant', 'Profil étudiant']
+                  .filter(Boolean)
+                  .join(' · '),
+                href: `/students/${student.id}`,
+              });
+            }
+          }
+
+          const teacherItems: SearchResult[] = [];
+          if (teachersResponse.status === 'fulfilled') {
+            const teachers = Array.isArray((teachersResponse.value as { data?: { data?: SearchableTeacher[] } }).data?.data)
+              ? (teachersResponse.value as { data: { data: SearchableTeacher[] } }).data.data
+              : [];
+            for (const teacher of teachers) {
+              teacherItems.push({
+                kind: 'teacher',
+                title: `${teacher.firstName} ${teacher.lastName}`.trim(),
+                subtitle: [teacher.cin ?? teacher.email ?? teacher.department?.name ?? 'Enseignant', 'Profil enseignant']
+                  .filter(Boolean)
+                  .join(' · '),
+                href: `/teachers/${teacher.id}`,
+              });
+            }
+          }
+
+          const userItems: SearchResult[] = [];
+          if (canSearchUsers && usersResponse && usersResponse.status === 'fulfilled') {
+            const usersPayload = usersResponse.value as { data: SearchableUser[] };
+            const users = Array.isArray(usersPayload.data) ? usersPayload.data : [];
+            const normalized = searchQuery.trim().toLowerCase();
+            for (const item of users) {
+              if (![
+                item.fullName,
+                item.email,
+                item.role,
+                ...(item.departments?.map((department) => department.name) ?? []),
+              ].some((value) => matchesSearch(value, normalized))) {
+                continue;
+              }
+
+              userItems.push({
+                kind: 'user',
+                title: item.fullName,
+                subtitle: [item.email, item.role, item.departments?.map((department) => department.name).join(', ') ?? '']
+                  .filter(Boolean)
+                  .join(' · '),
+                href: `/users?search=${encodeURIComponent(item.fullName)}`,
+              });
+            }
+          }
+
+          const allResults = dedupeSearchResults([
+            ...moduleResults,
+            ...studentItems,
+            ...teacherItems,
+            ...userItems,
+          ]).slice(0, 12);
+          setSearchResults(allResults);
+        } finally {
+          setSearching(false);
+        }
+      };
+
+      void runSearch();
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [canSearchUsers, navigationItems, searchQuery]);
+
+  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (searchResults.length > 0) {
+        openSearchResult(searchResults[0]);
+      }
+    }
+  };
 
   return (
     <>
@@ -487,24 +898,139 @@ export function Topbar({ sidebarOpen = true, onToggleSidebar }: TopbarProps) {
             </Link>
           </div>
 
-          <div className="flex min-w-0 items-center gap-2 rounded-2xl border border-slate-200 bg-white/92 px-4 py-2.5 text-slate-500 shadow-sm">
-            <Search size={16} className="text-[#1b5e3b]" />
-            <input
-              className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400"
-              placeholder="Recherche rapide"
-              aria-label="Recherche rapide"
-            />
+          <div ref={searchWrapRef} className="relative">
+            <div className="flex min-w-0 items-center gap-2 rounded-2xl border border-slate-200 bg-white/92 px-4 py-2.5 text-slate-500 shadow-sm">
+              <Search size={16} className="text-[#1b5e3b]" />
+              <input
+                className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400"
+                placeholder="Chercher un étudiant, enseignant, module, restauration…"
+                aria-label="Recherche rapide"
+                value={searchQuery}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value);
+                  setSearchOpen(true);
+                }}
+                onFocus={() => setSearchOpen(true)}
+                onKeyDown={handleSearchKeyDown}
+              />
+              {searchQuery ? (
+                <button
+                  type="button"
+                  className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Effacer la recherche"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSearchResults([]);
+                    setSearchOpen(false);
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              ) : null}
+            </div>
+
+            {searchOpen && searchQuery.trim() ? (
+              <div className="absolute left-0 top-[calc(100%+0.5rem)] z-50 w-[min(42rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 text-xs text-slate-500">
+                  <span>{searching ? 'Recherche…' : `${searchResults.length} résultat${searchResults.length !== 1 ? 's' : ''}`}</span>
+                  <span>Entrée pour ouvrir le premier résultat</span>
+                </div>
+                <div className="max-h-[min(60vh,32rem)] overflow-y-auto">
+                  {searchResults.length === 0 && !searching ? (
+                    <div className="px-4 py-6 text-sm text-slate-500">
+                      Aucun résultat. Essayez un nom, un code, un CIN ou un module comme <strong>restauration</strong>.
+                    </div>
+                  ) : null}
+
+                  {searchResults.map((result) => (
+                    <button
+                      key={`${result.kind}:${result.href}:${result.title}`}
+                      type="button"
+                      className="flex w-full items-start gap-3 border-b border-slate-50 px-4 py-3 text-left transition hover:bg-emerald-50/50"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => openSearchResult(result)}
+                    >
+                      <span className={cn(
+                        'mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-semibold',
+                        result.kind === 'module' ? 'bg-emerald-50 text-emerald-700' :
+                        result.kind === 'student' ? 'bg-blue-50 text-blue-700' :
+                        result.kind === 'teacher' ? 'bg-violet-50 text-violet-700' :
+                        'bg-slate-100 text-slate-700',
+                      )}>
+                        {result.kind === 'module' ? 'Md' : result.kind === 'student' ? 'Et' : result.kind === 'teacher' ? 'En' : 'Us'}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-slate-950">{result.title}</span>
+                        <span className="block truncate text-xs text-slate-500">{result.subtitle}</span>
+                        {result.group ? <span className="mt-1 block text-[10px] uppercase tracking-[0.18em] text-slate-400">{result.group}</span> : null}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="flex min-w-0 items-center justify-end gap-3 text-slate-950">
-            <Link
-              href="/modules"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-[#1b5e3b]"
-              title="Tous les modules"
-              aria-label="Tous les modules"
-            >
-              <Grid3X3 size={15} />
-            </Link>
+            <div ref={modulesMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={toggleModulesMenu}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-[#1b5e3b]"
+                title="Liste des modules"
+                aria-label="Liste des modules"
+                aria-expanded={modulesMenuOpen}
+                aria-haspopup="menu"
+              >
+                <MoreVertical size={15} />
+              </button>
+
+              {modulesMenuOpen ? (
+                <div className="absolute right-0 top-10 z-50 w-[min(40rem,calc(100vw-1rem))] overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-2xl">
+                  <div className="flex items-center justify-between gap-3 px-2 py-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Modules</p>
+                    <Link
+                      href="/modules"
+                      onClick={() => setModulesMenuOpen(false)}
+                      className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800"
+                    >
+                      Tout voir
+                    </Link>
+                  </div>
+                  <div className="max-h-[min(70vh,30rem)] overflow-y-auto pt-1">
+                    <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-4">
+                      {navigationItems.map((group) => (
+                        <Link
+                          key={group.heading}
+                          href={moduleGroupHref(group.heading)}
+                          onClick={() => setModulesMenuOpen(false)}
+                          className="rounded-lg border border-slate-100 bg-white px-2.5 py-2 text-left transition hover:border-emerald-200 hover:bg-emerald-50/50"
+                        >
+                          <span className="min-w-0">
+                            <span
+                              className="block text-[12px] font-semibold leading-4 text-slate-900"
+                              style={{
+                                display: '-webkit-box',
+                                WebkitBoxOrient: 'vertical',
+                                WebkitLineClamp: 2,
+                                overflow: 'hidden',
+                                wordBreak: 'break-word',
+                              }}
+                            >
+                              {group.heading}
+                            </span>
+                            <span className="mt-0.5 block text-[10px] leading-4 text-slate-500">
+                              {group.items.length} module{group.items.length !== 1 ? 's' : ''}
+                            </span>
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
             <NotificationBell />
 
           {/* Clickable user info → opens profile drawer */}

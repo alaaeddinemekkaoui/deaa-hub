@@ -3,10 +3,10 @@
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import QRCode from 'qrcode';
-import { CheckCircle2, Clock3, QrCode, RefreshCw, ShieldCheck, Timer, XCircle } from 'lucide-react';
+import { Camera, CheckCircle2, Clock3, QrCode, RefreshCw, ShieldCheck, Timer, XCircle } from 'lucide-react';
 import { PageHeader } from '@/components/admin/page-header';
 import { EmptyState } from '@/components/admin/empty-state';
-import { CameraCodeScanner } from '@/components/scanner/camera-code-scanner';
+import { MobileQRScanner } from '@/components/scanner/mobile-qr-scanner';
 import { api, getApiErrorMessage } from '@/services/api';
 import { useAuth } from '@/features/auth/auth-context';
 import { toast } from 'sonner';
@@ -91,9 +91,9 @@ function Scanner({ onToken }: { onToken: (token: string) => void }) {
           <p className="panel-copy">La validation finale reste faite côté serveur: session, délai, classe et inscription.</p>
         </div>
       </div>
-      <CameraCodeScanner
-        onCode={onToken}
-        label="Ouvrir la caméra"
+      <MobileQRScanner
+        onScan={onToken}
+        label="Autoriser la caméra"
         hint="Fonctionne avec webcam PC, caméra USB ou caméra mobile. Un lecteur code-barres matériel peut aussi remplir le champ manuel."
       />
       <div className="flex flex-col gap-2 sm:flex-row">
@@ -115,6 +115,8 @@ export default function AttendancePage() {
   const [records, setRecords] = useState<RecordRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [qrImage, setQrImage] = useState('');
+  const [cameraTestOpen, setCameraTestOpen] = useState(false);
+  const [cameraTestValue, setCameraTestValue] = useState('');
   const [remaining, setRemaining] = useState(0);
   const [classes, setClasses] = useState<AttendanceOption[]>([]);
   const [courses, setCourses] = useState<AttendanceOption[]>([]);
@@ -226,12 +228,17 @@ export default function AttendancePage() {
   const enable = async () => {
     if (!session) return;
     try {
+      if (session.attendanceEnabled) {
+        await disable();
+        return;
+      }
+
       const shouldReopenAbsent =
         !session.attendanceEnabled &&
         records.some((record) => record.status === 'absent') &&
         window.confirm('Réouvrir le QR pour les étudiants absents ? Les présents restent présents.');
       const res = await api.post<Session>(`/attendance/sessions/${session.id}/enable`, {
-        minutes: 90,
+        minutes: 15,
         reopenAbsent: shouldReopenAbsent,
       });
       setSession(res.data);
@@ -398,20 +405,21 @@ export default function AttendancePage() {
                     {session.class.name} · Salle {session.room?.name ?? '-'} · {session.startTime} - {session.endTime}
                   </p>
                 </div>
-                <span className={session.attendanceEnabled ? 'status-chip status-chip--ok' : 'status-chip status-chip--muted'}>
-                  {session.attendanceEnabled ? 'Ouverte' : 'Fermée'}
-                </span>
               </div>
 
               {isTeacher && (
                 <div className="flex flex-wrap gap-2">
                   <button type="button" className="btn-primary" onClick={enable}>
-                    <QrCode size={16} />
-                    {session.attendanceEnabled ? 'Nouveau QR' : session.attendanceClosedAt ? 'Réouvrir QR' : 'Activer la présence'}
+                    {session.attendanceEnabled ? <XCircle size={16} /> : <QrCode size={16} />}
+                    {session.attendanceEnabled ? 'Stop QR' : session.attendanceClosedAt ? 'Réouvrir QR 15 min' : 'Activer QR 15 min'}
                   </button>
                   <button type="button" className="btn-outline" onClick={extend} disabled={!session.attendanceEnabled}>
                     <Timer size={16} />
                     +15 minutes
+                  </button>
+                  <button type="button" className="btn-outline px-3" onClick={() => setCameraTestOpen((open) => !open)}>
+                    <Camera size={16} />
+                    Test caméra
                   </button>
                   <button type="button" className="btn-outline" onClick={disable}>
                     <XCircle size={16} />
@@ -424,6 +432,27 @@ export default function AttendancePage() {
                 </div>
               )}
             </div>
+
+            {cameraTestOpen ? (
+              <div className="surface-card space-y-3">
+                <div className="panel-header">
+                  <div>
+                    <h2 className="panel-title">Test caméra</h2>
+                    <p className="panel-copy">Scanne un QR pour vérifier que la caméra lit correctement. Aucun pointage n&apos;est envoyé.</p>
+                  </div>
+                </div>
+                <MobileQRScanner
+                  onScan={(value) => setCameraTestValue(value)}
+                  label="Autoriser la caméra"
+                  hint="Test local: le QR scanné s'affiche ici sans appel serveur."
+                />
+                {cameraTestValue ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                    <span className="font-semibold">Dernier scan:</span> <span className="font-mono">{cameraTestValue}</span>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="surface-card space-y-4">
               <div className="flex items-center justify-between">
