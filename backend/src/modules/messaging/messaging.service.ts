@@ -19,6 +19,9 @@ const isInspectorOrAdmin = (role: UserRole) =>
 const canManageClassDelegation = (role: UserRole) =>
   role === UserRole.TEACHER || role === UserRole.INSPECTOR || isAdmin(role);
 
+type GroupScope = 'mine' | 'all';
+type GroupMemberSeed = { userId: number; canSend: boolean };
+
 function canSendDirectMessage(
   senderRole: UserRole,
   recipientRole: UserRole,
@@ -57,23 +60,29 @@ function canSendDirectMessage(
 
 @Injectable()
 export class MessagingService {
+  private systemGroupSyncPromise: Promise<void> | null = null;
+  private lastSystemGroupSyncAt = 0;
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ─── Groups ────────────────────────────────────────────────────────────────
 
-  async listGroups(currentUser: JwtPayload) {
-    if (isAdmin(currentUser.role)) {
-      return this.prisma.messageGroup.findMany({
-        include: { _count: { select: { members: true, messages: true } } },
-        orderBy: { name: 'asc' },
-      });
-    }
-    // Non-admin: only groups they belong to
-    return this.prisma.messageGroup.findMany({
-      where: { members: { some: { userId: currentUser.sub } } },
+  async listGroups(currentUser: JwtPayload, scope: GroupScope = 'mine') {
+    await this.ensureSystemGroupsSynced();
+
+    const adminUser = isAdmin(currentUser.role);
+    const groups = await this.prisma.messageGroup.findMany({
+      where:
+        adminUser || scope === 'all'
+          ? adminUser
+            ? {}
+            : { type: { not: GroupType.ADMINS_ONLY } }
+          : { members: { some: { userId: currentUser.sub } } },
       include: { _count: { select: { members: true, messages: true } } },
       orderBy: { name: 'asc' },
     });
+
+    return this.withCurrentUserAccess(groups, currentUser);
   }
 
   async createGroup(dto: CreateGroupDto, currentUser: JwtPayload) {
@@ -375,6 +384,8 @@ export class MessagingService {
 
   /** All conversations (inboxes) for current user */
   async getInbox(currentUser: JwtPayload) {
+    await this.ensureSystemGroupsSynced();
+
     // Direct messages
     const directMessages = await this.prisma.message.findMany({
       where: {
@@ -468,124 +479,384 @@ export class MessagingService {
   // ─── Seed default groups ────────────────────────────────────────────────────
 
   async seedSystemGroups() {
-    // EVERYONE group
-    await this.prisma.messageGroup.upsert({
-      where: { id: 1 },
-      update: {},
-      create: { id: 1, name: 'Tout le monde', type: GroupType.EVERYONE },
-    });
-
-    // ADMINS_ONLY group
-    await this.prisma.messageGroup.upsert({
-      where: { id: 2 },
-      update: {},
-      create: {
-        id: 2,
-        name: 'Administrateurs uniquement',
-        type: GroupType.ADMINS_ONLY,
+    const users = await this.prisma.user.findMany({
+      select: {
+        id: true,
+        role: true,
+        departments: { select: { departmentId: true } },
+        studentProfile: {
+          select: {
+            classId: true,
+            filiereId: true,
+            academicClass: {
+              select: {
+                id: true,
+                filiereId: true,
+                cycleId: true,
+                filiere: { select: { departmentId: true } },
+              },
+            },
+            filiere: { select: { departmentId: true } },
+          },
+        },
+        teacherProfile: {
+          select: {
+            departmentId: true,
+            filiereId: true,
+            filiere: { select: { departmentId: true } },
+            taughtClasses: {
+              select: {
+                classId: true,
+                class: {
+                  select: {
+                    filiereId: true,
+                    cycleId: true,
+                    filiere: { select: { departmentId: true } },
+                  },
+                },
+              },
+            },
+            taughtCours: {
+              select: {
+                classId: true,
+                class: {
+                  select: {
+                    filiereId: true,
+                    cycleId: true,
+                    filiere: { select: { departmentId: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
-    // Sync EVERYONE members with all users
-    const allUsers = await this.prisma.user.findMany({
-      select: { id: true, role: true },
-    });
-    for (const u of allUsers) {
-      await this.prisma.messageGroupMember.upsert({
-        where: { groupId_userId: { groupId: 1, userId: u.id } },
-        update: {},
-        create: {
-          groupId: 1,
-          userId: u.id,
-          canSend: isAdmin(u.role as UserRole),
-        },
-      });
-    }
+    const everyoneGroup = await this.upsertSystemGroup(
+      GroupType.EVERYONE,
+      'Tout le monde',
+      null,
+    );
+    await this.replaceGroupMembers(
+      everyoneGroup.id,
+      users.map((user) => ({
+        userId: user.id,
+        canSend: this.canSendToSystemGroup(
+          user.role as UserRole,
+          GroupType.EVERYONE,
+        ),
+      })),
+    );
 
-    // Sync ADMINS_ONLY members
-    const adminUsers = allUsers.filter((u) => isAdmin(u.role as UserRole));
-    for (const u of adminUsers) {
-      await this.prisma.messageGroupMember.upsert({
-        where: { groupId_userId: { groupId: 2, userId: u.id } },
-        update: {},
-        create: { groupId: 2, userId: u.id, canSend: true },
-      });
-    }
+    const adminGroup = await this.upsertSystemGroup(
+      GroupType.ADMINS_ONLY,
+      'Administrateurs uniquement',
+      null,
+    );
+    await this.replaceGroupMembers(
+      adminGroup.id,
+      users
+        .filter((user) => isAdmin(user.role as UserRole))
+        .map((user) => ({ userId: user.id, canSend: true })),
+    );
 
-    // Auto-groups per department
     const departments = await this.prisma.department.findMany({
       select: { id: true, name: true },
     });
     for (const dept of departments) {
-      const existing = await this.prisma.messageGroup.findFirst({
-        where: { type: GroupType.DEPARTMENT, referenceId: dept.id },
-      });
-      if (!existing) {
-        await this.prisma.messageGroup.create({
-          data: {
-            name: `Département: ${dept.name}`,
-            type: GroupType.DEPARTMENT,
-            referenceId: dept.id,
-          },
-        });
-      }
+      const group = await this.upsertSystemGroup(
+        GroupType.DEPARTMENT,
+        `Département: ${dept.name}`,
+        dept.id,
+      );
+      await this.replaceGroupMembers(
+        group.id,
+        users
+          .filter((user) => this.getUserDepartmentIds(user).has(dept.id))
+          .map((user) => ({
+            userId: user.id,
+            canSend: this.canSendToSystemGroup(
+              user.role as UserRole,
+              GroupType.DEPARTMENT,
+            ),
+          })),
+      );
     }
 
-    // Auto-groups per filière
     const filieres = await this.prisma.filiere.findMany({
       select: { id: true, name: true },
     });
-    for (const f of filieres) {
-      const existing = await this.prisma.messageGroup.findFirst({
-        where: { type: GroupType.FILIERE, referenceId: f.id },
-      });
-      if (!existing) {
-        await this.prisma.messageGroup.create({
-          data: {
-            name: `Filière: ${f.name}`,
-            type: GroupType.FILIERE,
-            referenceId: f.id,
-          },
-        });
-      }
+    for (const filiere of filieres) {
+      const group = await this.upsertSystemGroup(
+        GroupType.FILIERE,
+        `Filière: ${filiere.name}`,
+        filiere.id,
+      );
+      await this.replaceGroupMembers(
+        group.id,
+        users
+          .filter((user) => this.getUserFiliereIds(user).has(filiere.id))
+          .map((user) => ({
+            userId: user.id,
+            canSend: this.canSendToSystemGroup(
+              user.role as UserRole,
+              GroupType.FILIERE,
+            ),
+          })),
+      );
     }
 
-    // Auto-groups per cycle
     const cycles = await this.prisma.cycle.findMany({
       select: { id: true, name: true },
     });
-    for (const c of cycles) {
-      const existing = await this.prisma.messageGroup.findFirst({
-        where: { type: GroupType.CYCLE, referenceId: c.id },
-      });
-      if (!existing) {
-        await this.prisma.messageGroup.create({
-          data: {
-            name: `Cycle: ${c.name}`,
-            type: GroupType.CYCLE,
-            referenceId: c.id,
-          },
-        });
-      }
+    for (const cycle of cycles) {
+      const group = await this.upsertSystemGroup(
+        GroupType.CYCLE,
+        `Cycle: ${cycle.name}`,
+        cycle.id,
+      );
+      await this.replaceGroupMembers(
+        group.id,
+        users
+          .filter((user) => this.getUserCycleIds(user).has(cycle.id))
+          .map((user) => ({
+            userId: user.id,
+            canSend: this.canSendToSystemGroup(
+              user.role as UserRole,
+              GroupType.CYCLE,
+            ),
+          })),
+      );
     }
 
-    // Auto-groups per academic class
     const classes = await this.prisma.academicClass.findMany({
       select: { id: true, name: true },
     });
-    for (const cls of classes) {
-      const existing = await this.prisma.messageGroup.findFirst({
-        where: { type: GroupType.CLASS, referenceId: cls.id },
-      });
-      if (!existing) {
-        await this.prisma.messageGroup.create({
-          data: {
-            name: `Classe: ${cls.name}`,
-            type: GroupType.CLASS,
-            referenceId: cls.id,
-          },
-        });
-      }
+    for (const academicClass of classes) {
+      const group = await this.upsertSystemGroup(
+        GroupType.CLASS,
+        `Classe: ${academicClass.name}`,
+        academicClass.id,
+      );
+      await this.replaceGroupMembers(
+        group.id,
+        users
+          .filter((user) => this.getUserClassIds(user).has(academicClass.id))
+          .map((user) => ({
+            userId: user.id,
+            canSend: this.canSendToSystemGroup(
+              user.role as UserRole,
+              GroupType.CLASS,
+            ),
+          })),
+      );
     }
+  }
+
+  private async ensureSystemGroupsSynced() {
+    const now = Date.now();
+    if (now - this.lastSystemGroupSyncAt < 30_000) return;
+    if (!this.systemGroupSyncPromise) {
+      this.systemGroupSyncPromise = this.seedSystemGroups()
+        .then(() => {
+          this.lastSystemGroupSyncAt = Date.now();
+        })
+        .finally(() => {
+          this.systemGroupSyncPromise = null;
+        });
+    }
+    await this.systemGroupSyncPromise;
+  }
+
+  private async upsertSystemGroup(
+    type: GroupType,
+    name: string,
+    referenceId: number | null,
+  ) {
+    const existing = await this.prisma.messageGroup.findFirst({
+      where: { type, referenceId },
+    });
+
+    if (existing) {
+      return this.prisma.messageGroup.update({
+        where: { id: existing.id },
+        data: { name },
+      });
+    }
+
+    return this.prisma.messageGroup.create({
+      data: { name, type, referenceId },
+    });
+  }
+
+  private async replaceGroupMembers(
+    groupId: number,
+    members: GroupMemberSeed[],
+  ) {
+    const uniqueMembers = Array.from(
+      new Map(members.map((member) => [member.userId, member])).values(),
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.messageGroupMember.deleteMany({ where: { groupId } });
+      if (!uniqueMembers.length) return;
+      await tx.messageGroupMember.createMany({
+        data: uniqueMembers.map((member) => ({ groupId, ...member })),
+        skipDuplicates: true,
+      });
+    });
+  }
+
+  private async withCurrentUserAccess<T extends { id: number }>(
+    groups: T[],
+    currentUser: JwtPayload,
+  ) {
+    if (!groups.length) return [];
+    const adminUser = isAdmin(currentUser.role);
+    const memberships = await this.prisma.messageGroupMember.findMany({
+      where: {
+        userId: currentUser.sub,
+        groupId: { in: groups.map((group) => group.id) },
+      },
+      select: { groupId: true, canSend: true },
+    });
+    const membershipByGroup = new Map(
+      memberships.map((membership) => [membership.groupId, membership]),
+    );
+
+    return groups.map((group) => {
+      const membership = membershipByGroup.get(group.id);
+      return {
+        ...group,
+        isMember: adminUser || Boolean(membership),
+        canSend: adminUser || Boolean(membership?.canSend),
+      };
+    });
+  }
+
+  private canSendToSystemGroup(role: UserRole, type: GroupType) {
+    if (isAdmin(role) || role === UserRole.INSPECTOR) return true;
+    if (role === UserRole.TEACHER) {
+      return (
+        [
+          GroupType.DEPARTMENT,
+          GroupType.FILIERE,
+          GroupType.CYCLE,
+          GroupType.CLASS,
+        ] as GroupType[]
+      ).includes(type);
+    }
+    return false;
+  }
+
+  private getUserDepartmentIds(user: {
+    departments: { departmentId: number }[];
+    studentProfile: {
+      filiere?: { departmentId: number } | null;
+      academicClass?: { filiere?: { departmentId: number } | null } | null;
+    } | null;
+    teacherProfile: {
+      departmentId: number;
+      filiere?: { departmentId: number } | null;
+      taughtClasses: {
+        class: { filiere?: { departmentId: number } | null };
+      }[];
+      taughtCours: {
+        class: { filiere?: { departmentId: number } | null };
+      }[];
+    } | null;
+  }) {
+    const ids = new Set<number>();
+    user.departments.forEach((department) => ids.add(department.departmentId));
+    if (user.studentProfile?.filiere?.departmentId) {
+      ids.add(user.studentProfile.filiere.departmentId);
+    }
+    if (user.studentProfile?.academicClass?.filiere?.departmentId) {
+      ids.add(user.studentProfile.academicClass.filiere.departmentId);
+    }
+    if (user.teacherProfile?.departmentId) {
+      ids.add(user.teacherProfile.departmentId);
+    }
+    if (user.teacherProfile?.filiere?.departmentId) {
+      ids.add(user.teacherProfile.filiere.departmentId);
+    }
+    user.teacherProfile?.taughtClasses.forEach((item) => {
+      if (item.class.filiere?.departmentId)
+        ids.add(item.class.filiere.departmentId);
+    });
+    user.teacherProfile?.taughtCours.forEach((item) => {
+      if (item.class.filiere?.departmentId)
+        ids.add(item.class.filiere.departmentId);
+    });
+    return ids;
+  }
+
+  private getUserFiliereIds(user: {
+    studentProfile: {
+      filiereId: number | null;
+      academicClass?: { filiereId: number | null } | null;
+    } | null;
+    teacherProfile: {
+      filiereId: number | null;
+      taughtClasses: { class: { filiereId: number | null } }[];
+      taughtCours: { class: { filiereId: number | null } }[];
+    } | null;
+  }) {
+    const ids = new Set<number>();
+    if (user.studentProfile?.filiereId) ids.add(user.studentProfile.filiereId);
+    if (user.studentProfile?.academicClass?.filiereId) {
+      ids.add(user.studentProfile.academicClass.filiereId);
+    }
+    if (user.teacherProfile?.filiereId) ids.add(user.teacherProfile.filiereId);
+    user.teacherProfile?.taughtClasses.forEach((item) => {
+      if (item.class.filiereId) ids.add(item.class.filiereId);
+    });
+    user.teacherProfile?.taughtCours.forEach((item) => {
+      if (item.class.filiereId) ids.add(item.class.filiereId);
+    });
+    return ids;
+  }
+
+  private getUserCycleIds(user: {
+    studentProfile: {
+      academicClass?: { cycleId: number | null } | null;
+    } | null;
+    teacherProfile: {
+      taughtClasses: { class: { cycleId: number | null } }[];
+      taughtCours: { class: { cycleId: number | null } }[];
+    } | null;
+  }) {
+    const ids = new Set<number>();
+    if (user.studentProfile?.academicClass?.cycleId) {
+      ids.add(user.studentProfile.academicClass.cycleId);
+    }
+    user.teacherProfile?.taughtClasses.forEach((item) => {
+      if (item.class.cycleId) ids.add(item.class.cycleId);
+    });
+    user.teacherProfile?.taughtCours.forEach((item) => {
+      if (item.class.cycleId) ids.add(item.class.cycleId);
+    });
+    return ids;
+  }
+
+  private getUserClassIds(user: {
+    studentProfile: {
+      classId: number | null;
+      academicClass?: { id: number } | null;
+    } | null;
+    teacherProfile: {
+      taughtClasses: { classId: number }[];
+      taughtCours: { classId: number }[];
+    } | null;
+  }) {
+    const ids = new Set<number>();
+    if (user.studentProfile?.classId) ids.add(user.studentProfile.classId);
+    if (user.studentProfile?.academicClass?.id) {
+      ids.add(user.studentProfile.academicClass.id);
+    }
+    user.teacherProfile?.taughtClasses.forEach((item) => ids.add(item.classId));
+    user.teacherProfile?.taughtCours.forEach((item) => ids.add(item.classId));
+    return ids;
   }
 }

@@ -23,25 +23,9 @@ function getApiBaseUrl() {
 
   if (typeof window === 'undefined') return configured;
 
-  if (window.location.protocol === 'https:') {
-    return '/api';
-  }
-
-  const pageHost = window.location.hostname;
-  const isLocalPage = ['localhost', '127.0.0.1', '::1'].includes(pageHost);
-
-  try {
-    const url = new URL(configured);
-    const pointsToLocalhost = ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
-    if (!isLocalPage && pointsToLocalhost) {
-      url.hostname = pageHost;
-      return url.toString();
-    }
-  } catch {
-    // Keep configured value if it is not an absolute URL.
-  }
-
-  return configured;
+  // Browser requests go through Next.js rewrites so the app stays same-origin
+  // and avoids direct cross-origin calls to the backend during local/dev usage.
+  return '/api';
 }
 
 export const api = axios.create({

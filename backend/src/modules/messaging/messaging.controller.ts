@@ -25,8 +25,14 @@ export class MessagingController {
   // ─── Groups ────────────────────────────────────────────────────────────────
 
   @Get('groups')
-  listGroups(@CurrentUser() user: JwtPayload) {
-    return this.messagingService.listGroups(user);
+  listGroups(
+    @CurrentUser() user: JwtPayload,
+    @Query('scope') scope?: 'mine' | 'all',
+  ) {
+    return this.messagingService.listGroups(
+      user,
+      scope === 'all' ? 'all' : 'mine',
+    );
   }
 
   @Post('groups')

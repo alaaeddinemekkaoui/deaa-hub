@@ -41,9 +41,15 @@ Ce document est le manuel utilisateur en un seul fichier Markdown. Il explique l
 33. [Grades enseignants](#grades-enseignants)
 34. [Types de docs profil](#types-de-docs-profil)
 35. [Journaux d'activite](#journaux-dactivite)
-36. [Bonnes pratiques](#bonnes-pratiques)
-37. [Depannage rapide](#depannage-rapide)
-38. [Idees d'amelioration](#idees-damelioration)
+36. [Absence et presence](#absence-et-presence)
+37. [Documents](#documents)
+38. [Chambres internat](#chambres-internat)
+39. [Affectations internat](#affectations-internat)
+40. [Mes tickets restauration](#mes-tickets-restauration)
+41. [Validation tickets](#validation-tickets)
+42. [Bonnes pratiques](#bonnes-pratiques)
+43. [Depannage rapide](#depannage-rapide)
+44. [Idees d'amelioration](#idees-damelioration)
 
 ---
 
@@ -1003,6 +1009,161 @@ Les journaux d'activite affichent les actions importantes effectuees dans l'appl
 
 ---
 
+## Absence et presence
+
+![Absence et presence](./screenshots/33-attendance.png)
+
+**Lien:** `/attendance`
+
+### Objectif
+
+Cette page sert au pointage de presence par QR code, a la correction manuelle des statuts et a la consultation de l'historique selon le role de l'utilisateur.
+
+### Actions disponibles
+
+- Filtrer par classe, cours et plage de dates pour retrouver une seance.
+- Activer ou reouvrir un QR temporaire pour la seance.
+- Suivre en temps reel les presents, absents et statuts en attente.
+- Corriger manuellement le statut d'un etudiant.
+- Pour les etudiants, scanner un QR et consulter l'historique personnel.
+
+### Points de vigilance
+
+- Le QR doit etre ferme a la fin de la seance.
+- Les corrections manuelles doivent rester tracees et justifiees.
+- Si aucune seance courante n'apparait, utiliser les filtres pour retrouver la seance concernee.
+
+---
+
+## Documents
+
+![Documents](./screenshots/34-documents.png)
+
+**Lien:** `/documents`
+
+### Objectif
+
+Cette page centralise le televersement et la gestion des documents relies aux etudiants et aux enseignants.
+
+### Actions disponibles
+
+- Choisir le type de proprietaire: etudiant ou enseignant.
+- Selectionner la personne concernee.
+- Televerser un document autorise.
+- Renommer ou supprimer un document existant.
+- Exporter la liste si necessaire.
+
+### Bonnes pratiques
+
+- Verifier le bon proprietaire avant televersement.
+- Utiliser des noms de fichiers clairs et homogenes.
+- Nettoyer les anciennes versions pour garder un dossier lisible.
+
+---
+
+## Chambres internat
+
+![Chambres internat](./screenshots/35-internat-rooms.png)
+
+**Lien:** `/internat`
+
+### Objectif
+
+La page Chambres gere l'inventaire de l'internat, la capacite de chaque chambre et l'occupation globale.
+
+### Actions disponibles
+
+- Ajouter une chambre et definir sa capacite.
+- Modifier ou supprimer une chambre.
+- Consulter les indicateurs de places, occupation et etudiants sans chambre.
+- Visualiser les occupants deja affectes.
+- Basculer vers la page d'affectation.
+
+### Points de controle
+
+- Verifier que la capacite saisie correspond a la capacite reelle.
+- Eviter de supprimer une chambre encore utilisee.
+- Surveiller regulierement les etudiants non affectes.
+
+---
+
+## Affectations internat
+
+![Affectations internat](./screenshots/36-internat-assignments.png)
+
+**Lien:** `/internat/affectations`
+
+### Objectif
+
+Cette page permet d'attribuer les etudiants aux chambres et de suivre les observations liees a l'hebergement.
+
+### Utilisation
+
+1. Rechercher l'etudiant.
+2. Selectionner la chambre cible.
+3. Ajouter un commentaire si necessaire.
+4. Enregistrer l'affectation.
+5. Modifier ou retirer l'affectation en cas de changement.
+
+### Points de vigilance
+
+- Verifier les places restantes avant toute affectation.
+- Utiliser les commentaires pour les informations importantes de suivi.
+- Mettre a jour rapidement les changements de chambre pour garder un etat fiable.
+
+---
+
+## Mes tickets restauration
+
+![Mes tickets restauration](./screenshots/37-restauration-tickets.png)
+
+**Lien:** `/restauration/tickets`
+
+### Objectif
+
+Cette page est destinee aux etudiants pour generer et presenter le ticket du jour apres reservation d'un repas.
+
+### Utilisation
+
+- Verifier qu'un repas a bien ete reserve.
+- Generer le ticket du jour si besoin.
+- Afficher le QR code ou le code ticket.
+- Presenter le ticket au restaurant pour validation.
+
+### Points importants
+
+- Sans reservation confirmee, aucun ticket ne peut etre emis.
+- Le ticket est lie a la date du repas.
+- En cas d'anomalie, verifier d'abord la reservation et le solde restauration.
+
+---
+
+## Validation tickets
+
+![Validation tickets](./screenshots/38-restauration-verification.png)
+
+**Lien:** `/restauration/verification`
+
+### Objectif
+
+Cette page est reservee au personnel restauration pour verifier, sortir et consommer les tickets.
+
+### Actions disponibles
+
+- Rechercher un etudiant ou saisir un code ticket.
+- Scanner un QR code ou un code-barres.
+- Previsualiser la validite du ticket avant validation.
+- Generer un ticket du jour pour une reservation existante.
+- Marquer le ticket comme consomme.
+
+### Bonnes pratiques
+
+- Verifier l'identite de l'etudiant en cas de doute.
+- Utiliser la consommation uniquement au moment effectif du service.
+- Choisir le bon repas lorsque plusieurs services sont ouverts.
+
+---
+
 ## Bonnes pratiques
 
 ### Avant de creer une donnee
@@ -1076,4 +1237,4 @@ Les journaux d'activite affichent les actions importantes effectuees dans l'appl
 
 **Document:** Manuel d'utilisation DEAA-Hub  
 **Format:** Markdown unique avec captures d'ecran  
-**Derniere mise a jour:** 2026-04-28
+**Derniere mise a jour:** 2026-05-11

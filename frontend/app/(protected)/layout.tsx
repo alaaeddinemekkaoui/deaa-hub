@@ -17,6 +17,7 @@ const USER_ROLE_BLOCKED = [
 ];
 
 const RESTAURATION_ALLOWED = ['/dashboard', '/restauration', '/restauration/verification'];
+const INTERNAT_ALLOWED = ['/dashboard', '/internat'];
 
 export default function ProtectedLayout({
   children,
@@ -39,9 +40,11 @@ export default function ProtectedLayout({
   }, []);
 
   useEffect(() => {
-    if (window.innerWidth < 768) {
+    if (window.innerWidth >= 768) return;
+    const closeSidebar = window.setTimeout(() => {
       setSidebarOpen(false);
-    }
+    }, 0);
+    return () => window.clearTimeout(closeSidebar);
   }, [pathname]);
 
   useEffect(() => {
@@ -65,6 +68,14 @@ export default function ProtectedLayout({
       !RESTAURATION_ALLOWED.some((allowed) => pathname === allowed || pathname.startsWith(`${allowed}/`))
     ) {
       router.replace('/restauration');
+    }
+
+    if (
+      !loading &&
+      user?.role === 'internat' &&
+      !INTERNAT_ALLOWED.some((allowed) => pathname === allowed || pathname.startsWith(`${allowed}/`))
+    ) {
+      router.replace('/internat');
     }
 
     if (

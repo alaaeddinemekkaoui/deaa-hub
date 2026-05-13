@@ -33,6 +33,7 @@ Ce manuel est organise par lien de navigation. Chaque page contient une capture 
 ## Emploi du temps et salles
 
 - [Emploi du temps](./14-emploi-du-temps.md)
+- [Absence et presence](./33-absence-presence.md)
 - [Gestion des salles](./15-salles.md)
 - [Reservation de salle](./16-reservations-salle.md)
 
@@ -47,11 +48,19 @@ Ce manuel est organise par lien de navigation. Chaque page contient une capture 
 
 - [Messages](./21-messages.md)
 - [Restauration](./22-restauration.md)
+- [Mes tickets restauration](./37-mes-tickets-restauration.md)
+- [Validation tickets](./38-validation-tickets.md)
 - [Demandes administratives](./23-demandes.md)
+
+## Vie residentielle
+
+- [Chambres internat](./35-chambres-internat.md)
+- [Affectations internat](./36-affectations-internat.md)
 
 ## Administration
 
 - [Utilisateurs](./24-utilisateurs.md)
+- [Documents](./34-documents.md)
 - [Statistiques](./25-statistiques.md)
 - [Annees academiques](./26-annees-academiques.md)
 - [Repas restauration](./27-repas-restauration.md)

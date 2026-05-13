@@ -45,6 +45,7 @@ const ROLE_LABELS: Record<string, string> = {
   student:   'Étudiant',
   inspector: 'Inspecteur',
   restauration: 'Restauration',
+  internat: 'Internat',
 };
 
 const DEPT_SCOPED_ROLES = new Set(['user', 'teacher', 'student', 'inspector']);
@@ -352,6 +353,7 @@ export default function UsersPage() {
                   <option value="staff">Personnel</option>
                   <option value="viewer">Spectateur</option>
                   <option value="restauration">Restauration</option>
+                  <option value="internat">Internat</option>
                 </optgroup>
                 <optgroup label="Utilisateurs département">
                   <option value="teacher">Enseignant</option>
@@ -488,6 +490,7 @@ export default function UsersPage() {
                           item.role === 'student'     ? 'bg-amber-100 text-amber-800' :
                           item.role === 'inspector'   ? 'bg-orange-100 text-orange-800' :
                           item.role === 'restauration'? 'bg-lime-100 text-lime-800' :
+                          item.role === 'internat'    ? 'bg-cyan-100 text-cyan-800' :
                                                         'bg-slate-100 text-slate-700'
                         }`}>
                           {ROLE_LABELS[item.role] ?? item.role}

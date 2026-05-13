@@ -37,7 +37,7 @@ export default function DashboardPage() {
       <PageHeader
         eyebrow="Aperçu institutionnel"
         title="Tableau de bord"
-        description="Vue d'ensemble et accès rapide à tous les modules de la plateforme."
+        description="Vue d'ensemble et accès rapide aux principales sections de la plateforme."
         actions={['admin', 'staff'].includes(role) ? (
           <Link href="/statistics" className="btn-outline flex items-center gap-2">
             <BarChart2 size={14} />
@@ -49,9 +49,9 @@ export default function DashboardPage() {
       {/* ── Section navigation ── */}
       <section className="space-y-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Navigation par module</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Navigation rapide</h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            Cliquez sur une carte pour accéder au module correspondant.
+            Cliquez sur une carte pour accéder à la section correspondante.
           </p>
         </div>
 

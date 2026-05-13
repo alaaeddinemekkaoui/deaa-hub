@@ -46,6 +46,7 @@ export type NavGroup = {
 export const ACADEMIC_ROLES = ['admin', 'staff', 'viewer', 'user', 'teacher', 'student', 'inspector'];
 export const ADMIN_ROLES = ['admin', 'staff'];
 export const RESTAURATION_ROLES = ['admin', 'staff', 'restauration', 'student'];
+export const INTERNAT_ROLES = ['admin', 'staff', 'internat'];
 export const STUDENT_ONLY_ROUTES = [
   '/dashboard',
   '/students',
@@ -137,6 +138,14 @@ export const navigation: NavGroup[] = [
       { href: '/restauration', label: 'Restauration', caption: 'Repas, solde et reçus', icon: Utensils },
       { href: '/restauration/tickets', label: 'Mes tickets', caption: 'Ticket quotidien', icon: FileText, roles: ['student'] },
       { href: '/restauration/verification', label: 'Validation tickets', caption: 'Codes et tickets', icon: FileText, roles: ['admin', 'staff', 'restauration'] },
+    ],
+  },
+  {
+    heading: 'Internat',
+    roles: INTERNAT_ROLES,
+    items: [
+      { href: '/internat', label: 'Chambres', caption: 'Creation et capacites', icon: Home },
+      { href: '/internat/affectations', label: 'Affectations', caption: 'Attribution des chambres', icon: Users },
     ],
   },
   {

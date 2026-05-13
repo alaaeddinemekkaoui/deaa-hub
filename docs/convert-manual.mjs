@@ -1,8 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const source = path.resolve('docs/deaa-hub-manuel-utilisation.md');
-const output = path.resolve('docs/deaa-hub-manuel-utilisation.html');
+const htmlOutput = path.resolve('docs/deaa-hub-manuel-utilisation.html');
+const docxOutput = path.resolve('docs/deaa-hub-manuel-utilisation.docx');
+const pdfOutput = path.resolve('docs/deaa-hub-manuel-utilisation.pdf');
 
 function escapeHtml(value) {
   return value
@@ -12,7 +15,12 @@ function escapeHtml(value) {
 }
 
 function inlineMarkdown(value) {
-  return escapeHtml(value)
+  const withoutMarkdownLinks = value
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\[[ xX]\]\s*/g, '');
+
+  return escapeHtml(withoutMarkdownLinks)
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/`([^`]+)`/g, '<code>$1</code>');
 }
@@ -37,7 +45,16 @@ function parseTable(lines, start) {
     index += 1;
   }
 
-  if (rows.length < 2 || !/^\|[\s:.-]+\|$/.test(rows[1])) {
+  if (rows.length < 2) {
+    return null;
+  }
+
+  const separatorCells = rows[1].split('|').slice(1, -1).map((cell) => cell.trim());
+  const isSeparatorRow =
+    separatorCells.length > 0 &&
+    separatorCells.every((cell) => /^:?-{3,}:?$/.test(cell));
+
+  if (!isSeparatorRow) {
     return null;
   }
 
@@ -152,9 +169,8 @@ function markdownToHtml(markdown) {
   return html.join('\n');
 }
 
-const markdown = fs.readFileSync(source, 'utf8');
-const body = markdownToHtml(markdown);
-const html = `<!doctype html>
+function buildHtmlDocument(body) {
+  return `<!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
@@ -243,6 +259,66 @@ const html = `<!doctype html>
 ${body}
 </body>
 </html>`;
+}
 
-fs.writeFileSync(output, html, 'utf8');
-console.log(output);
+function escapePowerShellSingleQuoted(value) {
+  return value.replaceAll("'", "''");
+}
+
+function writeDocxAndPdfFromHtml(htmlPath, docxPath, pdfPath) {
+  const openPath = escapePowerShellSingleQuoted(htmlPath);
+  const saveDocxPath = escapePowerShellSingleQuoted(docxPath);
+  const savePdfPath = escapePowerShellSingleQuoted(pdfPath);
+
+  const script = `
+$ErrorActionPreference = 'Stop'
+$word = $null
+$doc = $null
+try {
+  $word = New-Object -ComObject Word.Application
+  $word.Visible = $false
+  $word.DisplayAlerts = 0
+  $doc = $word.Documents.Open('${openPath}')
+  $doc.Fields.Update() | Out-Null
+  foreach ($inlineShape in @($doc.InlineShapes)) {
+    try {
+      if ($inlineShape.LinkFormat -ne $null) {
+        $inlineShape.LinkFormat.SavePictureWithDocument = $true
+        $inlineShape.LinkFormat.BreakLink()
+      }
+    } catch {}
+  }
+  foreach ($shape in @($doc.Shapes)) {
+    try {
+      if ($shape.LinkFormat -ne $null) {
+        $shape.LinkFormat.SavePictureWithDocument = $true
+        $shape.LinkFormat.BreakLink()
+      }
+    } catch {}
+  }
+  $doc.SaveAs2('${saveDocxPath}', 16)
+  $doc.ExportAsFixedFormat('${savePdfPath}', 17)
+}
+finally {
+  if ($doc -ne $null) { $doc.Close(0) }
+  if ($word -ne $null) { $word.Quit() }
+}
+`.trim();
+
+  execFileSync(
+    'powershell',
+    ['-NoProfile', '-NonInteractive', '-Command', script],
+    { stdio: 'inherit' },
+  );
+}
+
+const markdown = fs.readFileSync(source, 'utf8');
+const body = markdownToHtml(markdown);
+const html = buildHtmlDocument(body);
+
+fs.writeFileSync(htmlOutput, html, 'utf8');
+writeDocxAndPdfFromHtml(htmlOutput, docxOutput, pdfOutput);
+
+console.log(htmlOutput);
+console.log(docxOutput);
+console.log(pdfOutput);

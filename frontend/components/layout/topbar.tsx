@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, Check, Eye, EyeOff, LogOut, Menu, MessageSquare, MoreVertical, Pencil, QrCode, ScanLine, Search, X } from 'lucide-react';
+import { Bell, Check, Eye, EyeOff, LogOut, Menu, MessageSquare, Pencil, QrCode, ScanLine, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import QRCode from 'qrcode';
@@ -256,7 +256,7 @@ function ProfileDrawer({ onClose }: { onClose: () => void }) {
 
           {user?.role === 'student' ? (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
-              Les changements de nom ou d'e-mail seront envoyés à l'administration pour validation.
+              Les changements de nom ou d&apos;e-mail seront envoyés à l&apos;administration pour validation.
               Le mot de passe est modifié immédiatement.
             </p>
           ) : null}
@@ -336,7 +336,7 @@ function ProfileDrawer({ onClose }: { onClose: () => void }) {
                   QR profil
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Affichez votre QR ou scannez un profil pour l'ouvrir.
+                  Affichez votre QR ou scannez un profil pour l&apos;ouvrir.
                 </p>
               </div>
               <QrCode size={18} className="text-emerald-700" />
@@ -450,29 +450,69 @@ function NotificationBell() {
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
-  const fetchCount = useCallback(async () => {
-    try {
-      const res = await api.get<{ count: number }>('/notifications/count');
-      setCount(res.data.count);
-    } catch { /* silent */ }
-  }, []);
+  const countRef = useRef(0);
+  const openRef = useRef(false);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.get<Notification[]>('/notifications', { params: { unreadOnly: false } });
       setItems(res.data);
+      const unreadCount = res.data.filter((item) => !item.read).length;
+      countRef.current = unreadCount;
+      setCount(unreadCount);
     } catch { /* silent */ } finally {
       setLoading(false);
     }
   }, []);
 
-  // Poll count every 30 s
+  const fetchCount = useCallback(async () => {
+    try {
+      const res = await api.get<{ count: number }>('/notifications/count');
+      const nextCount = res.data.count;
+      const previousCount = countRef.current;
+
+      countRef.current = nextCount;
+      setCount(nextCount);
+
+      if (openRef.current || nextCount !== previousCount) {
+        void fetchNotifications();
+      }
+    } catch { /* silent */ }
+  }, [fetchNotifications]);
+
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
+  // Faster refresh with focus / visibility detection
   useEffect(() => {
     void fetchCount();
-    const id = setInterval(() => void fetchCount(), 30_000);
-    return () => clearInterval(id);
+
+    const refresh = () => {
+      void fetchCount();
+    };
+
+    const intervalId = window.setInterval(refresh, 5_000);
+
+    const handleFocus = () => refresh();
+    const handleOnline = () => refresh();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refresh();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('online', handleOnline);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [fetchCount]);
 
   // Close on outside click
@@ -486,15 +526,24 @@ function NotificationBell() {
   }, [open]);
 
   const handleOpen = () => {
-    setOpen((v) => !v);
-    void fetchNotifications();
+    setOpen((current) => {
+      const next = !current;
+      if (next) {
+        void fetchNotifications();
+      }
+      return next;
+    });
   };
 
   const markRead = async (id: number) => {
     try {
       await api.patch(`/notifications/${id}/read`);
       setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-      setCount((c) => Math.max(0, c - 1));
+      setCount((c) => {
+        const next = Math.max(0, c - 1);
+        countRef.current = next;
+        return next;
+      });
     } catch { /* silent */ }
   };
 
@@ -502,6 +551,7 @@ function NotificationBell() {
     try {
       await api.patch('/notifications/mark-all-read');
       setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+      countRef.current = 0;
       setCount(0);
     } catch { /* silent */ }
   };
@@ -509,7 +559,12 @@ function NotificationBell() {
   const clearRead = async () => {
     try {
       await api.delete('/notifications/read');
-      setItems((prev) => prev.filter((n) => !n.read));
+      setItems((prev) => {
+        const next = prev.filter((n) => !n.read);
+        countRef.current = next.length;
+        setCount(next.length);
+        return next;
+      });
     } catch { /* silent */ }
   };
 
@@ -654,9 +709,7 @@ export function Topbar({ sidebarOpen = true, onToggleSidebar }: TopbarProps) {
   const { user, logout } = useAuth();
   const router = useRouter();
   const searchWrapRef = useRef<HTMLDivElement>(null);
-  const modulesMenuRef = useRef<HTMLDivElement>(null);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [modulesMenuOpen, setModulesMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -670,19 +723,12 @@ export function Topbar({ sidebarOpen = true, onToggleSidebar }: TopbarProps) {
     [navigationItems],
   );
 
-  const moduleGroupHref = useCallback((heading: string) => `/modules?group=${encodeURIComponent(heading)}`, []);
-
   const openSearchResult = useCallback((result: SearchResult) => {
     setSearchQuery('');
     setSearchOpen(false);
     setSearchResults([]);
     router.push(result.href);
   }, [router]);
-
-  const toggleModulesMenu = useCallback(() => {
-    setSearchOpen(false);
-    setModulesMenuOpen((current) => !current);
-  }, []);
 
   useEffect(() => {
     if (!searchOpen) return;
@@ -707,30 +753,6 @@ export function Topbar({ sidebarOpen = true, onToggleSidebar }: TopbarProps) {
       document.removeEventListener('mousedown', handleOutside);
     };
   }, [searchOpen]);
-
-  useEffect(() => {
-    if (!modulesMenuOpen) return;
-
-    const handleOutside = (event: MouseEvent) => {
-      if (modulesMenuRef.current && !modulesMenuRef.current.contains(event.target as Node)) {
-        setModulesMenuOpen(false);
-      }
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setModulesMenuOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleOutside);
-    document.addEventListener('keydown', handleEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', handleOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [modulesMenuOpen]);
 
   useEffect(() => {
     const query = normalizeSearchValue(searchQuery);
@@ -972,65 +994,6 @@ export function Topbar({ sidebarOpen = true, onToggleSidebar }: TopbarProps) {
           </div>
 
           <div className="flex min-w-0 items-center justify-end gap-3 text-slate-950">
-            <div ref={modulesMenuRef} className="relative">
-              <button
-                type="button"
-                onClick={toggleModulesMenu}
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-[#1b5e3b]"
-                title="Liste des modules"
-                aria-label="Liste des modules"
-                aria-expanded={modulesMenuOpen}
-                aria-haspopup="menu"
-              >
-                <MoreVertical size={15} />
-              </button>
-
-              {modulesMenuOpen ? (
-                <div className="absolute right-0 top-10 z-50 w-[min(40rem,calc(100vw-1rem))] overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-2xl">
-                  <div className="flex items-center justify-between gap-3 px-2 py-1.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Modules</p>
-                    <Link
-                      href="/modules"
-                      onClick={() => setModulesMenuOpen(false)}
-                      className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800"
-                    >
-                      Tout voir
-                    </Link>
-                  </div>
-                  <div className="max-h-[min(70vh,30rem)] overflow-y-auto pt-1">
-                    <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-4">
-                      {navigationItems.map((group) => (
-                        <Link
-                          key={group.heading}
-                          href={moduleGroupHref(group.heading)}
-                          onClick={() => setModulesMenuOpen(false)}
-                          className="rounded-lg border border-slate-100 bg-white px-2.5 py-2 text-left transition hover:border-emerald-200 hover:bg-emerald-50/50"
-                        >
-                          <span className="min-w-0">
-                            <span
-                              className="block text-[12px] font-semibold leading-4 text-slate-900"
-                              style={{
-                                display: '-webkit-box',
-                                WebkitBoxOrient: 'vertical',
-                                WebkitLineClamp: 2,
-                                overflow: 'hidden',
-                                wordBreak: 'break-word',
-                              }}
-                            >
-                              {group.heading}
-                            </span>
-                            <span className="mt-0.5 block text-[10px] leading-4 text-slate-500">
-                              {group.items.length} module{group.items.length !== 1 ? 's' : ''}
-                            </span>
-                          </span>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
             <NotificationBell />
 
           {/* Clickable user info → opens profile drawer */}

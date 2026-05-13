@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>DEAA-Hub - Manuel d'utilisation complet</title>
+  <style>
+    @page { size: A4; margin: 1.6cm; }
+    body {
+      color: #102033;
+      font-family: Calibri, Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.45;
+    }
+    h1 {
+      color: #0f3d2e;
+      font-size: 24pt;
+      margin: 0 0 14pt;
+      page-break-after: avoid;
+    }
+    h2 {
+      border-bottom: 1px solid #d6e2dc;
+      color: #10543f;
+      font-size: 18pt;
+      margin-top: 24pt;
+      padding-bottom: 4pt;
+      page-break-after: avoid;
+    }
+    h3 {
+      color: #143f6b;
+      font-size: 13.5pt;
+      margin-top: 14pt;
+      page-break-after: avoid;
+    }
+    p, li { margin: 4pt 0; }
+    table {
+      border-collapse: collapse;
+      margin: 10pt 0;
+      width: 100%;
+    }
+    th, td {
+      border: 1px solid #c9d8d1;
+      padding: 6pt;
+      vertical-align: top;
+    }
+    th {
+      background: #eaf3ef;
+      color: #103d2d;
+      font-weight: 700;
+    }
+    figure {
+      margin: 10pt 0 16pt;
+      page-break-inside: avoid;
+    }
+    figcaption {
+      color: #52667a;
+      font-size: 9.5pt;
+      margin-top: 4pt;
+      text-align: center;
+    }
+    img {
+      border: 1px solid #cfdad6;
+      display: block;
+      height: auto;
+      max-width: 100%;
+    }
+    code {
+      background: #eef3f1;
+      border-radius: 3px;
+      font-family: Consolas, monospace;
+      font-size: 10pt;
+      padding: 1pt 3pt;
+    }
+    pre {
+      background: #f2f5f4;
+      border: 1px solid #d6e0dc;
+      padding: 8pt;
+      white-space: pre-wrap;
+    }
+    hr {
+      border: 0;
+      border-top: 1px solid #d6e2dc;
+      margin: 16pt 0;
+    }
+  </style>
+</head>
+<body>
+<h1>DEAA-Hub - Manuel d'utilisation complet</h1>
+<p><strong>Plateforme de gestion academique et administrative - IAV Hassan II</strong></p>
+<p>Ce document est le manuel utilisateur en un seul fichier Markdown. Il explique les principales pages de DEAA-Hub, les actions disponibles, les controles a effectuer et les bonnes pratiques d'utilisation. Les captures d'ecran sont stockees dans le dossier <code>docs/screenshots/</code>.</p>
+<h2>Table des matieres</h2>
+<ol><li>Presentation generale</li><li>Roles et droits d'acces</li><li>Navigation generale</li><li>Connexion</li><li>Tableau de bord</li><li>Etudiants</li><li>Epreuves</li><li>Deliberation</li><li>Laureats</li><li>Transferts</li><li>Professeurs</li><li>Modules et elements</li><li>Ressources cours</li><li>Gestion des classes</li><li>Cours par classe</li><li>Transfert de classe</li><li>Emploi du temps</li><li>Gestion des salles</li><li>Reservation de salle</li><li>Departements</li><li>Filieres</li><li>Options</li><li>Cycles</li><li>Messages</li><li>Restauration</li><li>Demandes administratives</li><li>Utilisateurs</li><li>Statistiques</li><li>Annees academiques</li><li>Repas restauration</li><li>Types de documents</li><li>Roles enseignants</li><li>Grades enseignants</li><li>Types de docs profil</li><li>Journaux d'activite</li><li>Absence et presence</li><li>Documents</li><li>Chambres internat</li><li>Affectations internat</li><li>Mes tickets restauration</li><li>Validation tickets</li><li>Bonnes pratiques</li><li>Depannage rapide</li><li>Idees d'amelioration</li></ol>
+<hr>
+<h2>Presentation generale</h2>
+<p>DEAA-Hub centralise la gestion academique et administrative de la Direction de l'Enseignement et des Affaires Academiques. L'application couvre le suivi des etudiants, enseignants, classes, modules, notes, emplois du temps, salles, documents, workflows, messages et restauration.</p>
+<p>Les objectifs principaux sont:</p>
+<ul><li>Centraliser les donnees academiques.</li><li>Reduire les doublons et les traitements manuels.</li><li>Ameliorer le suivi des dossiers etudiants et enseignants.</li><li>Donner aux responsables une vision rapide de l'activite.</li><li>Tracer les operations sensibles via les journaux d'activite.</li></ul>
+<h2>Roles et droits d'acces</h2>
+<p>Les pages visibles et les actions disponibles dependent du role de l'utilisateur connecte.</p>
+<table><thead><tr><th>Role</th><th>Utilisation typique</th><th>Acces principal</th></tr></thead><tbody><tr><td><code>admin</code></td><td>Administrateur plateforme</td><td>Acces complet, configuration, utilisateurs, journaux</td></tr><tr><td><code>staff</code></td><td>Personnel administratif</td><td>Gestion courante des donnees academiques</td></tr><tr><td><code>viewer</code></td><td>Consultation</td><td>Lecture des donnees autorisees</td></tr><tr><td><code>user</code></td><td>Utilisateur departemental</td><td>Donnees limitees aux departements attribues</td></tr><tr><td><code>teacher</code></td><td>Enseignant</td><td>Consultation et actions pedagogiques autorisees</td></tr><tr><td><code>student</code></td><td>Etudiant</td><td>Donnees personnelles, ressources, restauration selon configuration</td></tr><tr><td><code>inspector</code></td><td>Controle ou inspection</td><td>Consultation par perimetre</td></tr><tr><td><code>restauration</code></td><td>Agent restauration</td><td>Gestion repas, tickets, soldes et transactions</td></tr></tbody></table>
+<p>Point important: les departements attribues a un compte limitent la visibilite sur plusieurs pages, notamment etudiants, classes, filieres, modules, salles et reservations.</p>
+<h2>Navigation generale</h2>
+<p>L'interface est organisee autour de deux zones principales:</p>
+<ul><li><strong>Barre laterale gauche</strong>: acces aux modules par groupe fonctionnel.</li><li><strong>Barre superieure</strong>: informations de session, notifications, profil et deconnexion.</li></ul>
+<p>Les groupes de navigation sont:</p>
+<table><thead><tr><th>Groupe</th><th>Pages principales</th></tr></thead><tbody><tr><td>Accueil</td><td>Tableau de bord</td></tr><tr><td>Etudiants</td><td>Etudiants, Epreuves, Deliberation, Laureats, Transferts</td></tr><tr><td>Enseignants</td><td>Professeurs</td></tr><tr><td>Structure academique</td><td>Modules et elements, Ressources cours</td></tr><tr><td>Classes</td><td>Gestion des classes, Cours par classe, Transfert de classe</td></tr><tr><td>Emploi du temps et salles</td><td>Emploi du temps, Salles, Reservations</td></tr><tr><td>Structure organisationnelle</td><td>Departements, Filieres, Options, Cycles</td></tr><tr><td>Communication et services</td><td>Messages, Restauration, Demandes</td></tr><tr><td>Administration</td><td>Utilisateurs, Statistiques, Parametres, Journaux</td></tr></tbody></table>
+<hr>
+<h2>Connexion</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/01-login.png" alt="Connexion"><figcaption>Connexion</figcaption></figure>
+<p><strong>Lien:</strong> <code>/login</code></p>
+<h3>Objectif</h3>
+<p>La page de connexion permet d'acceder a DEAA-Hub avec un identifiant et un mot de passe.</p>
+<h3>Procedure</h3>
+<ol><li>Saisir le username ou l'adresse email.</li><li>Saisir le mot de passe.</li><li>Cliquer sur <strong>Se connecter</strong>.</li><li>Attendre la redirection vers le tableau de bord.</li></ol>
+<h3>A verifier</h3>
+<ul><li>L'identifiant est correct.</li><li>Le mot de passe correspond au compte.</li><li>Le compte n'a pas ete desactive ou supprime.</li><li>Le backend est disponible si la connexion echoue sans message clair.</li></ul>
+<hr>
+<h2>Tableau de bord</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/02-dashboard.png" alt="Tableau de bord"><figcaption>Tableau de bord</figcaption></figure>
+<p><strong>Lien:</strong> <code>/dashboard</code></p>
+<h3>Objectif</h3>
+<p>Le tableau de bord donne une vue globale de l'activite academique et administrative.</p>
+<h3>Ce que l'on trouve sur cette page</h3>
+<ul><li>Indicateurs globaux: etudiants, enseignants, classes, filieres, departements, documents.</li><li>Graphiques de repartition.</li><li>Activite recente.</li><li>Actions rapides vers les pages les plus utilisees.</li></ul>
+<h3>Utilisation recommandee</h3>
+<ol><li>Ouvrir le tableau de bord au debut de la journee.</li><li>Verifier les indicateurs principaux.</li><li>Consulter l'activite recente pour detecter les changements importants.</li><li>Utiliser les actions rapides pour rejoindre la page souhaitee.</li></ol>
+<h3>Points de controle</h3>
+<ul><li>Si les chiffres semblent incomplets, verifier les filtres de role/departement.</li><li>Les donnees du tableau de bord dependent de la qualite des informations saisies dans les autres modules.</li></ul>
+<hr>
+<h2>Etudiants</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/03-students.png" alt="Etudiants"><figcaption>Etudiants</figcaption></figure>
+<p><strong>Lien:</strong> <code>/students</code></p>
+<h3>Objectif</h3>
+<p>La page Etudiants centralise les dossiers des apprenants.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Rechercher un etudiant par nom, code Massar, CIN, email ou telephone.</li><li>Filtrer par departement, filiere, cycle, option ou classe.</li><li>Ajouter un nouvel etudiant.</li><li>Importer des etudiants depuis un fichier.</li><li>Modifier un dossier existant.</li><li>Ouvrir le profil detaille d'un etudiant.</li><li>Marquer ou suivre le statut de laureat.</li><li>Supprimer un dossier si le role le permet.</li></ul>
+<h3>Donnees importantes</h3>
+<ul><li>Nom et prenom.</li><li>Code Massar.</li><li>CIN.</li><li>Email et telephone.</li><li>Filiere, option, cycle et classe.</li><li>Annee academique.</li><li>Statut academique.</li></ul>
+<h3>Bonnes pratiques</h3>
+<ul><li>Toujours verifier le code Massar et la CIN avant creation.</li><li>Eviter les doublons en utilisant la recherche avant d'ajouter un etudiant.</li><li>Mettre a jour la classe apres les transferts ou passages d'annee.</li></ul>
+<hr>
+<h2>Epreuves</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/04-grades.png" alt="Epreuves"><figcaption>Epreuves</figcaption></figure>
+<p><strong>Lien:</strong> <code>/grades</code></p>
+<h3>Objectif</h3>
+<p>La page Epreuves permet de saisir, consulter et corriger les notes par classe, module et element.</p>
+<h3>Procedure de saisie</h3>
+<ol><li>Choisir le departement, la filiere, l'option et la classe.</li><li>Selectionner le module ou l'element concerne.</li><li>Creer ou ouvrir l'epreuve.</li><li>Saisir les notes.</li><li>Verifier les absences, notes manquantes et valeurs hors bareme.</li><li>Enregistrer.</li></ol>
+<h3>Points de controle</h3>
+<ul><li>La classe selectionnee est correcte.</li><li>Le module correspond bien a l'epreuve.</li><li>Les coefficients et baremes ont ete controles dans la structure academique.</li><li>Les notes sont pretes avant la deliberation.</li></ul>
+<hr>
+<h2>Deliberation</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/05-deliberation.png" alt="Deliberation"><figcaption>Deliberation</figcaption></figure>
+<p><strong>Lien:</strong> <code>/deliberation</code></p>
+<h3>Objectif</h3>
+<p>La page Deliberation consolide les resultats d'une classe et aide a preparer les decisions academiques.</p>
+<h3>Utilisation</h3>
+<ul><li>Selectionner la classe ou le contexte academique.</li><li>Consulter les moyennes et resultats.</li><li>Identifier les notes manquantes ou incoherentes.</li><li>Preparer les decisions.</li><li>Exporter ou imprimer les resultats si l'action est disponible.</li></ul>
+<h3>Avant validation</h3>
+<ul><li>Verifier que toutes les epreuves sont saisies.</li><li>Controler les coefficients des modules et elements.</li><li>Confirmer que les etudiants appartiennent a la bonne classe.</li></ul>
+<hr>
+<h2>Laureats</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/06-laureates.png" alt="Laureats"><figcaption>Laureats</figcaption></figure>
+<p><strong>Lien:</strong> <code>/laureates</code></p>
+<h3>Objectif</h3>
+<p>La page Laureats assure le suivi des diplomes et des anciens etudiants diplomes.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Consulter la liste des laureats.</li><li>Rechercher par nom, filiere ou annee.</li><li>Creer ou modifier un dossier laureat.</li><li>Suivre le statut de remise du diplome.</li><li>Exporter les donnees si l'action est disponible.</li></ul>
+<h3>Bonnes pratiques</h3>
+<ul><li>Renseigner l'annee de graduation avec precision.</li><li>Eviter de creer un laureat sans verifier le dossier etudiant source.</li><li>Mettre a jour le statut du diplome apres remise.</li></ul>
+<hr>
+<h2>Transferts</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/07-transfers.png" alt="Transferts"><figcaption>Transferts</figcaption></figure>
+<p><strong>Lien:</strong> <code>/transfers</code></p>
+<h3>Objectif</h3>
+<p>La page Transferts gere le passage des etudiants d'une classe vers une autre ou vers une nouvelle annee academique.</p>
+<h3>Procedure generale</h3>
+<ol><li>Selectionner la classe source.</li><li>Verifier la liste des etudiants.</li><li>Definir le statut de chaque etudiant.</li><li>Choisir la classe cible.</li><li>Choisir la nouvelle annee academique.</li><li>Valider l'operation.</li></ol>
+<h3>Points de vigilance</h3>
+<ul><li>Une erreur de classe cible impacte les effectifs, notes et statistiques.</li><li>Les transferts doivent etre faits apres verification des resultats.</li><li>Garder une trace de l'operation via les journaux d'activite.</li></ul>
+<hr>
+<h2>Professeurs</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/08-teachers.png" alt="Professeurs"><figcaption>Professeurs</figcaption></figure>
+<p><strong>Lien:</strong> <code>/teachers</code></p>
+<h3>Objectif</h3>
+<p>La page Professeurs gere les enseignants permanents, vacataires et leurs rattachements.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Rechercher un enseignant.</li><li>Filtrer par departement, filiere, role ou grade.</li><li>Ajouter un enseignant.</li><li>Modifier les informations administratives.</li><li>Consulter le profil de l'enseignant.</li><li>Importer ou exporter les donnees si disponible.</li></ul>
+<h3>Informations importantes</h3>
+<ul><li>Nom et prenom.</li><li>CIN.</li><li>Email et telephone.</li><li>Departement et filiere.</li><li>Role enseignant.</li><li>Grade enseignant.</li></ul>
+<h3>Bonnes pratiques</h3>
+<ul><li>Maintenir les roles et grades a jour dans les parametres.</li><li>Verifier les rattachements avant d'affecter des cours.</li><li>Eviter les doublons sur CIN ou email.</li></ul>
+<hr>
+<h2>Modules et elements</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/09-academic-modules-elements.png" alt="Modules et elements"><figcaption>Modules et elements</figcaption></figure>
+<p><strong>Lien:</strong> <code>/academic</code></p>
+<h3>Objectif</h3>
+<p>Cette page definit la structure pedagogique: modules, elements, coefficients, volumes horaires et liens avec les classes.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Creer un module.</li><li>Ajouter des elements de module.</li><li>Definir les types d'enseignement: CM, TD, TP ou autre.</li><li>Gerer les coefficients et volumes horaires.</li><li>Assigner les modules aux classes.</li></ul>
+<h3>Impact dans l'application</h3>
+<p>Les modules et elements alimentent:</p>
+<ul><li>Cours par classe.</li><li>Emploi du temps.</li><li>Epreuves et notes.</li><li>Deliberation.</li><li>Ressources cours.</li></ul>
+<h3>Bonnes pratiques</h3>
+<ul><li>Utiliser des codes de module coherents.</li><li>Controler les coefficients avant la saisie des notes.</li><li>Eviter de supprimer un module deja utilise.</li></ul>
+<hr>
+<h2>Ressources cours</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/10-cours-resources.png" alt="Ressources cours"><figcaption>Ressources cours</figcaption></figure>
+<p><strong>Lien:</strong> <code>/cours-resources</code></p>
+<h3>Objectif</h3>
+<p>La page Ressources cours centralise les supports pedagogiques.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Filtrer les ressources par classe, module ou cours.</li><li>Ajouter un support.</li><li>Modifier les informations d'un fichier.</li><li>Telecharger ou ouvrir un fichier.</li><li>Supprimer une ressource obsolete selon les droits.</li></ul>
+<h3>Types de fichiers typiques</h3>
+<ul><li>PDF de cours.</li><li>Presentations.</li><li>Documents de TD/TP.</li><li>Images ou schemas.</li><li>Supports administratifs de cours.</li></ul>
+<h3>Bonnes pratiques</h3>
+<ul><li>Donner un nom clair aux fichiers.</li><li>Rattacher chaque ressource a la bonne classe et au bon cours.</li><li>Supprimer les versions obsoletes pour eviter la confusion.</li></ul>
+<hr>
+<h2>Gestion des classes</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/11-classes.png" alt="Gestion des classes"><figcaption>Gestion des classes</figcaption></figure>
+<p><strong>Lien:</strong> <code>/classes</code></p>
+<h3>Objectif</h3>
+<p>La page Classes gere les cohortes, groupes et niveaux d'etudes.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Creer une classe.</li><li>Rattacher la classe a une filiere, option, cycle et annee.</li><li>Consulter les effectifs.</li><li>Modifier une classe existante.</li><li>Supprimer une classe inutilisee selon les droits.</li></ul>
+<h3>Points de controle</h3>
+<ul><li>Le nom de la classe est clair.</li><li>L'annee academique est correcte.</li><li>La filiere et l'option sont exactes.</li><li>Les effectifs correspondent aux dossiers etudiants.</li></ul>
+<hr>
+<h2>Cours par classe</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/12-classes-cours.png" alt="Cours par classe"><figcaption>Cours par classe</figcaption></figure>
+<p><strong>Lien:</strong> <code>/classes/cours</code></p>
+<h3>Objectif</h3>
+<p>Cette page affecte les cours et enseignants a une classe.</p>
+<h3>Procedure</h3>
+<ol><li>Choisir une classe.</li><li>Ajouter les elements de modules concernes.</li><li>Assigner les enseignants.</li><li>Verifier la coherence du plan pedagogique.</li><li>Enregistrer les affectations.</li></ol>
+<h3>Impact</h3>
+<p>Les affectations sont reutilisees par:</p>
+<ul><li>Emploi du temps.</li><li>Notes et epreuves.</li><li>Charge pedagogique des enseignants.</li><li>Ressources cours.</li></ul>
+<hr>
+<h2>Transfert de classe</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/13-classes-transfer.png" alt="Transfert de classe"><figcaption>Transfert de classe</figcaption></figure>
+<p><strong>Lien:</strong> <code>/classes/transfer</code></p>
+<h3>Objectif</h3>
+<p>Le transfert de classe sert a cloner ou preparer la structure d'une classe pour une autre annee academique.</p>
+<h3>Utilisation</h3>
+<ul><li>Choisir la classe source.</li><li>Definir la classe ou l'annee cible.</li><li>Selectionner les elements a reprendre.</li><li>Lancer le transfert.</li></ul>
+<h3>Difference avec la page Transferts</h3>
+<table><thead><tr><th>Page</th><th>Usage</th></tr></thead><tbody><tr><td><code>/transfers</code></td><td>Passage ou deplacement des etudiants</td></tr><tr><td><code>/classes/transfer</code></td><td>Reprise de la structure pedagogique d'une classe</td></tr></tbody></table>
+<hr>
+<h2>Emploi du temps</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/14-timetable.png" alt="Emploi du temps"><figcaption>Emploi du temps</figcaption></figure>
+<p><strong>Lien:</strong> <code>/timetable</code></p>
+<h3>Objectif</h3>
+<p>La page Emploi du temps planifie les seances d'enseignement.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Choisir une classe ou une semaine.</li><li>Ajouter une seance.</li><li>Selectionner le cours, l'enseignant, la salle et le creneau.</li><li>Modifier une seance.</li><li>Supprimer une seance.</li><li>Verifier les conflits.</li></ul>
+<h3>Points de vigilance</h3>
+<ul><li>Une salle ne doit pas etre reservee deux fois au meme creneau.</li><li>Un enseignant ne doit pas etre affecte a deux seances simultanees.</li><li>Les cours doivent etre correctement affectes a la classe avant planification.</li></ul>
+<hr>
+<h2>Gestion des salles</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/15-rooms.png" alt="Gestion des salles"><figcaption>Gestion des salles</figcaption></figure>
+<p><strong>Lien:</strong> <code>/rooms</code></p>
+<h3>Objectif</h3>
+<p>La page Salles gere les espaces physiques de l'etablissement.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Ajouter une salle.</li><li>Renseigner la capacite.</li><li>Indiquer les equipements.</li><li>Rattacher la salle a un departement si necessaire.</li><li>Modifier ou supprimer une salle.</li></ul>
+<h3>Exemples d'equipements</h3>
+<ul><li>Projecteur.</li><li>Tableau.</li><li>Ordinateurs.</li><li>Materiel de laboratoire.</li><li>Connexion internet.</li></ul>
+<hr>
+<h2>Reservation de salle</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/16-room-reservations.png" alt="Reservation de salle"><figcaption>Reservation de salle</figcaption></figure>
+<p><strong>Lien:</strong> <code>/room-reservations</code></p>
+<h3>Objectif</h3>
+<p>Cette page gere les demandes de reservation et l'occupation des salles.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Creer une reservation.</li><li>Consulter les reservations existantes.</li><li>Approuver une demande.</li><li>Rejeter une demande avec motif.</li><li>Annuler une reservation.</li></ul>
+<h3>Statuts courants</h3>
+<table><thead><tr><th>Statut</th><th>Signification</th></tr></thead><tbody><tr><td>En attente</td><td>La demande attend une validation</td></tr><tr><td>Approuvee</td><td>La reservation est confirmee</td></tr><tr><td>Rejetee</td><td>La demande est refusee</td></tr><tr><td>Annulee</td><td>La reservation n'est plus active</td></tr></tbody></table>
+<hr>
+<h2>Departements</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/17-departments.png" alt="Departements"><figcaption>Departements</figcaption></figure>
+<p><strong>Lien:</strong> <code>/departments</code></p>
+<h3>Objectif</h3>
+<p>La page Departements gere les structures internes de l'etablissement.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Creer un departement.</li><li>Modifier le nom ou le code.</li><li>Consulter les filieres rattachees.</li><li>Supprimer un departement inutilise.</li></ul>
+<h3>Impact</h3>
+<p>Les departements influencent:</p>
+<ul><li>Les droits d'acces.</li><li>Les filtres de donnees.</li><li>Les filieres.</li><li>Les salles.</li><li>Les tableaux de bord par perimetre.</li></ul>
+<hr>
+<h2>Filieres</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/18-filieres.png" alt="Filieres"><figcaption>Filieres</figcaption></figure>
+<p><strong>Lien:</strong> <code>/filieres</code></p>
+<h3>Objectif</h3>
+<p>La page Filieres gere les programmes de formation.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Ajouter une filiere.</li><li>Rattacher une filiere a un departement.</li><li>Modifier son nom, code ou description.</li><li>Suivre les classes et options associees.</li></ul>
+<h3>Bonnes pratiques</h3>
+<ul><li>Utiliser un code unique par filiere.</li><li>Rattacher chaque filiere au bon departement.</li><li>Eviter de modifier une filiere sans mesurer l'impact sur les classes et statistiques.</li></ul>
+<hr>
+<h2>Options</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/19-structure-options.png" alt="Options"><figcaption>Options</figcaption></figure>
+<p><strong>Lien:</strong> <code>/structure</code></p>
+<h3>Objectif</h3>
+<p>La page Options gere les specialites ou parcours rattaches aux filieres.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Creer une option.</li><li>Lier l'option a une filiere.</li><li>Modifier une option.</li><li>Supprimer une option inutilisee.</li></ul>
+<h3>Hierarchie academique</h3>
+<pre><code class="language-txt">Departement
+  -&gt; Filiere
+     -&gt; Option
+        -&gt; Classe
+           -&gt; Etudiant</code></pre>
+<hr>
+<h2>Cycles</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/20-cycles.png" alt="Cycles"><figcaption>Cycles</figcaption></figure>
+<p><strong>Lien:</strong> <code>/cycles</code></p>
+<h3>Objectif</h3>
+<p>La page Cycles gere les grands niveaux de formation.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Creer un cycle.</li><li>Modifier son nom ou son code.</li><li>Supprimer un cycle inutilise.</li></ul>
+<h3>Exemples</h3>
+<ul><li>Cycle preparatoire.</li><li>Cycle ingenieur.</li><li>Cycle veterinaire.</li><li>Master ou formation specialisee selon configuration.</li></ul>
+<hr>
+<h2>Messages</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/21-messages.png" alt="Messages"><figcaption>Messages</figcaption></figure>
+<p><strong>Lien:</strong> <code>/messages</code></p>
+<h3>Objectif</h3>
+<p>La page Messages permet les conversations internes et la communication par groupes.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Consulter la boite de reception.</li><li>Ouvrir une conversation.</li><li>Envoyer un message.</li><li>Creer ou administrer un groupe selon les droits.</li><li>Gerer les membres et permissions d'envoi si disponible.</li></ul>
+<h3>Bonnes pratiques</h3>
+<ul><li>Utiliser les groupes pour les communications recurrentes.</li><li>Eviter de diffuser des informations sensibles a un groupe trop large.</li><li>Verifier les destinataires avant envoi.</li></ul>
+<hr>
+<h2>Restauration</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/22-restauration.png" alt="Restauration"><figcaption>Restauration</figcaption></figure>
+<p><strong>Lien:</strong> <code>/restauration</code></p>
+<h3>Objectif</h3>
+<p>La page Restauration gere les repas, soldes, reservations, tickets et transactions.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Rechercher un etudiant.</li><li>Consulter le solde restauration.</li><li>Crediter ou ajuster un solde selon les droits.</li><li>Reserver un ou plusieurs repas.</li><li>Emettre ou consulter un ticket.</li><li>Suivre les transactions.</li><li>Acceder a la verification des tickets.</li></ul>
+<h3>Points de controle</h3>
+<ul><li>Verifier l'identite de l'etudiant avant modification du solde.</li><li>Controler les montants avant validation.</li><li>Garder les tickets et transactions traces.</li></ul>
+<hr>
+<h2>Demandes administratives</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/23-workflows.png" alt="Demandes administratives"><figcaption>Demandes administratives</figcaption></figure>
+<p><strong>Lien:</strong> <code>/workflows</code></p>
+<h3>Objectif</h3>
+<p>La page Demandes suit les workflows administratifs et les demandes de documents.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Creer une demande.</li><li>Assigner un responsable.</li><li>Lier la demande a un etudiant ou a un dossier.</li><li>Suivre le statut.</li><li>Ajouter les informations necessaires.</li><li>Cloturer la demande.</li></ul>
+<h3>Statuts possibles</h3>
+<p>Les statuts peuvent varier selon la configuration, mais suivent generalement:</p>
+<ul><li>Nouveau.</li><li>En cours.</li><li>En attente.</li><li>Termine.</li><li>Annule.</li></ul>
+<hr>
+<h2>Utilisateurs</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/24-users.png" alt="Utilisateurs"><figcaption>Utilisateurs</figcaption></figure>
+<p><strong>Lien:</strong> <code>/users</code></p>
+<h3>Objectif</h3>
+<p>La page Utilisateurs gere les comptes, roles et perimetres d'acces.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Creer un compte utilisateur.</li><li>Attribuer un role.</li><li>Assigner un ou plusieurs departements.</li><li>Modifier les informations du compte.</li><li>Reinitialiser ou changer un mot de passe si disponible.</li><li>Supprimer ou desactiver un compte selon les droits.</li></ul>
+<h3>Bonnes pratiques de securite</h3>
+<ul><li>Donner uniquement les droits necessaires.</li><li>Limiter les comptes admin aux responsables habilites.</li><li>Retirer l'acces des utilisateurs qui quittent le service.</li><li>Verifier les departements attribues.</li></ul>
+<hr>
+<h2>Statistiques</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/25-statistics.png" alt="Statistiques"><figcaption>Statistiques</figcaption></figure>
+<p><strong>Lien:</strong> <code>/statistics</code></p>
+<h3>Objectif</h3>
+<p>La page Statistiques permet de consulter les donnees consolidees et d'exporter des rapports.</p>
+<h3>Utilisation</h3>
+<ul><li>Choisir une categorie de donnees.</li><li>Appliquer les filtres disponibles.</li><li>Consulter les indicateurs.</li><li>Exporter les donnees au format propose.</li></ul>
+<h3>Bonnes pratiques</h3>
+<ul><li>Verifier les filtres avant export.</li><li>Nommer les fichiers exportes avec une date.</li><li>Utiliser les exports pour les reunions, audits et rapports de direction.</li></ul>
+<hr>
+<h2>Annees academiques</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/26-settings-academic-years.png" alt="Annees academiques"><figcaption>Annees academiques</figcaption></figure>
+<p><strong>Lien:</strong> <code>/settings/academic-years</code></p>
+<h3>Objectif</h3>
+<p>Cette page configure les annees academiques disponibles dans l'application.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Ajouter une annee academique.</li><li>Modifier un libelle.</li><li>Definir une annee active si l'interface le permet.</li><li>Supprimer une annee inutilisee.</li></ul>
+<h3>Bonnes pratiques</h3>
+<ul><li>Utiliser un format stable, par exemple <code>2025/2026</code>.</li><li>Eviter de supprimer une annee deja utilisee.</li><li>Verifier l'annee active avant les inscriptions ou transferts.</li></ul>
+<hr>
+<h2>Repas restauration</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/27-settings-restauration.png" alt="Repas restauration"><figcaption>Repas restauration</figcaption></figure>
+<p><strong>Lien:</strong> <code>/settings/restauration</code></p>
+<h3>Objectif</h3>
+<p>Cette page configure les repas, prix et disponibilites de la restauration.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Ajouter un repas.</li><li>Definir le prix.</li><li>Activer ou desactiver un repas.</li><li>Modifier les informations d'un repas existant.</li></ul>
+<h3>Points de controle</h3>
+<ul><li>Verifier les prix avant ouverture des reservations.</li><li>Desactiver les repas indisponibles.</li><li>Controler les modifications avant les periodes de forte activite.</li></ul>
+<hr>
+<h2>Types de documents</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/28-settings-document-types.png" alt="Types de documents"><figcaption>Types de documents</figcaption></figure>
+<p><strong>Lien:</strong> <code>/settings/document-types</code></p>
+<h3>Objectif</h3>
+<p>Cette page configure les categories de documents administratifs.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Creer un type de document.</li><li>Modifier le libelle.</li><li>Supprimer un type inutilise.</li><li>Utiliser les types dans les demandes et dossiers.</li></ul>
+<h3>Exemples</h3>
+<ul><li>Attestation de scolarite.</li><li>Releve de notes.</li><li>Diplome.</li><li>Certificat administratif.</li></ul>
+<hr>
+<h2>Roles enseignants</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/29-settings-teacher-roles.png" alt="Roles enseignants"><figcaption>Roles enseignants</figcaption></figure>
+<p><strong>Lien:</strong> <code>/settings/teacher-roles</code></p>
+<h3>Objectif</h3>
+<p>Cette page gere les fonctions ou responsabilites attribuees aux enseignants.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Ajouter un role enseignant.</li><li>Modifier le libelle.</li><li>Supprimer un role inutilise.</li><li>Utiliser le role dans les fiches professeurs.</li></ul>
+<h3>Exemples</h3>
+<ul><li>Enseignant.</li><li>Coordinateur.</li><li>Chef de filiere.</li><li>Chef de departement.</li><li>Vacataire.</li></ul>
+<hr>
+<h2>Grades enseignants</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/30-settings-teacher-grades.png" alt="Grades enseignants"><figcaption>Grades enseignants</figcaption></figure>
+<p><strong>Lien:</strong> <code>/settings/teacher-grades</code></p>
+<h3>Objectif</h3>
+<p>Cette page configure les grades academiques des enseignants.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Ajouter un grade.</li><li>Modifier le libelle.</li><li>Supprimer un grade inutilise.</li><li>Affecter le grade depuis la fiche professeur.</li></ul>
+<h3>Exemples</h3>
+<ul><li>Professeur habilite.</li><li>Maitre assistant.</li><li>Assistant.</li><li>Doctorant.</li><li>Vacataire.</li></ul>
+<hr>
+<h2>Types de docs profil</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/31-settings-profile-document-types.png" alt="Types de docs profil"><figcaption>Types de docs profil</figcaption></figure>
+<p><strong>Lien:</strong> <code>/settings/profile-document-types</code></p>
+<h3>Objectif</h3>
+<p>Cette page configure les documents attendus dans les profils etudiants ou enseignants.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Ajouter un type de document de profil.</li><li>Indiquer s'il est obligatoire lorsque l'interface le propose.</li><li>Modifier un type.</li><li>Supprimer un type inutilise.</li><li>Utiliser ces types pour suivre les pieces manquantes.</li></ul>
+<h3>Exemples</h3>
+<ul><li>CIN.</li><li>Photo.</li><li>Acte de naissance.</li><li>Diplome.</li><li>Certificat medical.</li></ul>
+<hr>
+<h2>Journaux d'activite</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/32-activity-logs.png" alt="Journaux d'activite"><figcaption>Journaux d'activite</figcaption></figure>
+<p><strong>Lien:</strong> <code>/activity-logs</code></p>
+<h3>Objectif</h3>
+<p>Les journaux d'activite affichent les actions importantes effectuees dans l'application.</p>
+<h3>Utilisation</h3>
+<ul><li>Consulter les actions recentes.</li><li>Identifier l'utilisateur responsable d'une action.</li><li>Verifier les creations, modifications et suppressions.</li><li>Rechercher les operations sensibles si les filtres sont disponibles.</li></ul>
+<h3>Bonnes pratiques</h3>
+<ul><li>Restreindre l'acces aux administrateurs et responsables habilites.</li><li>Consulter les journaux apres une operation critique.</li><li>Utiliser les journaux pour les audits internes.</li></ul>
+<hr>
+<h2>Absence et presence</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/33-attendance.png" alt="Absence et presence"><figcaption>Absence et presence</figcaption></figure>
+<p><strong>Lien:</strong> <code>/attendance</code></p>
+<h3>Objectif</h3>
+<p>Cette page sert au pointage de presence par QR code, a la correction manuelle des statuts et a la consultation de l'historique selon le role de l'utilisateur.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Filtrer par classe, cours et plage de dates pour retrouver une seance.</li><li>Activer ou reouvrir un QR temporaire pour la seance.</li><li>Suivre en temps reel les presents, absents et statuts en attente.</li><li>Corriger manuellement le statut d'un etudiant.</li><li>Pour les etudiants, scanner un QR et consulter l'historique personnel.</li></ul>
+<h3>Points de vigilance</h3>
+<ul><li>Le QR doit etre ferme a la fin de la seance.</li><li>Les corrections manuelles doivent rester tracees et justifiees.</li><li>Si aucune seance courante n'apparait, utiliser les filtres pour retrouver la seance concernee.</li></ul>
+<hr>
+<h2>Documents</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/34-documents.png" alt="Documents"><figcaption>Documents</figcaption></figure>
+<p><strong>Lien:</strong> <code>/documents</code></p>
+<h3>Objectif</h3>
+<p>Cette page centralise le televersement et la gestion des documents relies aux etudiants et aux enseignants.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Choisir le type de proprietaire: etudiant ou enseignant.</li><li>Selectionner la personne concernee.</li><li>Televerser un document autorise.</li><li>Renommer ou supprimer un document existant.</li><li>Exporter la liste si necessaire.</li></ul>
+<h3>Bonnes pratiques</h3>
+<ul><li>Verifier le bon proprietaire avant televersement.</li><li>Utiliser des noms de fichiers clairs et homogenes.</li><li>Nettoyer les anciennes versions pour garder un dossier lisible.</li></ul>
+<hr>
+<h2>Chambres internat</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/35-internat-rooms.png" alt="Chambres internat"><figcaption>Chambres internat</figcaption></figure>
+<p><strong>Lien:</strong> <code>/internat</code></p>
+<h3>Objectif</h3>
+<p>La page Chambres gere l'inventaire de l'internat, la capacite de chaque chambre et l'occupation globale.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Ajouter une chambre et definir sa capacite.</li><li>Modifier ou supprimer une chambre.</li><li>Consulter les indicateurs de places, occupation et etudiants sans chambre.</li><li>Visualiser les occupants deja affectes.</li><li>Basculer vers la page d'affectation.</li></ul>
+<h3>Points de controle</h3>
+<ul><li>Verifier que la capacite saisie correspond a la capacite reelle.</li><li>Eviter de supprimer une chambre encore utilisee.</li><li>Surveiller regulierement les etudiants non affectes.</li></ul>
+<hr>
+<h2>Affectations internat</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/36-internat-assignments.png" alt="Affectations internat"><figcaption>Affectations internat</figcaption></figure>
+<p><strong>Lien:</strong> <code>/internat/affectations</code></p>
+<h3>Objectif</h3>
+<p>Cette page permet d'attribuer les etudiants aux chambres et de suivre les observations liees a l'hebergement.</p>
+<h3>Utilisation</h3>
+<ol><li>Rechercher l'etudiant.</li><li>Selectionner la chambre cible.</li><li>Ajouter un commentaire si necessaire.</li><li>Enregistrer l'affectation.</li><li>Modifier ou retirer l'affectation en cas de changement.</li></ol>
+<h3>Points de vigilance</h3>
+<ul><li>Verifier les places restantes avant toute affectation.</li><li>Utiliser les commentaires pour les informations importantes de suivi.</li><li>Mettre a jour rapidement les changements de chambre pour garder un etat fiable.</li></ul>
+<hr>
+<h2>Mes tickets restauration</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/37-restauration-tickets.png" alt="Mes tickets restauration"><figcaption>Mes tickets restauration</figcaption></figure>
+<p><strong>Lien:</strong> <code>/restauration/tickets</code></p>
+<h3>Objectif</h3>
+<p>Cette page est destinee aux etudiants pour generer et presenter le ticket du jour apres reservation d'un repas.</p>
+<h3>Utilisation</h3>
+<ul><li>Verifier qu'un repas a bien ete reserve.</li><li>Generer le ticket du jour si besoin.</li><li>Afficher le QR code ou le code ticket.</li><li>Presenter le ticket au restaurant pour validation.</li></ul>
+<h3>Points importants</h3>
+<ul><li>Sans reservation confirmee, aucun ticket ne peut etre emis.</li><li>Le ticket est lie a la date du repas.</li><li>En cas d'anomalie, verifier d'abord la reservation et le solde restauration.</li></ul>
+<hr>
+<h2>Validation tickets</h2>
+<figure><img src="file:///C:/Users/user/Desktop/deaa-hub/docs/screenshots/38-restauration-verification.png" alt="Validation tickets"><figcaption>Validation tickets</figcaption></figure>
+<p><strong>Lien:</strong> <code>/restauration/verification</code></p>
+<h3>Objectif</h3>
+<p>Cette page est reservee au personnel restauration pour verifier, sortir et consommer les tickets.</p>
+<h3>Actions disponibles</h3>
+<ul><li>Rechercher un etudiant ou saisir un code ticket.</li><li>Scanner un QR code ou un code-barres.</li><li>Previsualiser la validite du ticket avant validation.</li><li>Generer un ticket du jour pour une reservation existante.</li><li>Marquer le ticket comme consomme.</li></ul>
+<h3>Bonnes pratiques</h3>
+<ul><li>Verifier l'identite de l'etudiant en cas de doute.</li><li>Utiliser la consommation uniquement au moment effectif du service.</li><li>Choisir le bon repas lorsque plusieurs services sont ouverts.</li></ul>
+<hr>
+<h2>Bonnes pratiques</h2>
+<h3>Avant de creer une donnee</h3>
+<ul><li>Rechercher d'abord pour eviter les doublons.</li><li>Verifier les informations obligatoires.</li><li>Respecter les formats utilises par l'etablissement.</li></ul>
+<h3>Avant de supprimer</h3>
+<ul><li>Verifier si la donnee est utilisee ailleurs.</li><li>Preferer la desactivation quand l'historique doit etre conserve.</li><li>Controler les impacts sur statistiques, notes, classes et reservations.</li></ul>
+<h3>Pour les imports</h3>
+<ul><li>Utiliser un fichier propre et structure.</li><li>Verifier les colonnes avant import.</li><li>Corriger les erreurs ligne par ligne quand un rapport est fourni.</li><li>Faire un controle apres import.</li></ul>
+<h3>Pour les exports</h3>
+<ul><li>Appliquer les bons filtres.</li><li>Nommer le fichier avec la date.</li><li>Ne pas diffuser les donnees personnelles a des personnes non autorisees.</li></ul>
+<hr>
+<h2>Depannage rapide</h2>
+<table><thead><tr><th>Probleme</th><th>Verification recommandee</th></tr></thead><tbody><tr><td>Connexion impossible</td><td>Verifier identifiant, mot de passe et disponibilite du backend</td></tr><tr><td>Menu incomplet</td><td>Verifier le role utilisateur et les departements attribues</td></tr><tr><td>Donnees manquantes</td><td>Verifier les filtres actifs et le perimetre departement</td></tr><tr><td>Impossible de supprimer</td><td>La donnee est peut-etre utilisee ailleurs ou le role ne le permet pas</td></tr><tr><td>Notes non visibles en deliberation</td><td>Verifier la classe, le module, l'epreuve et les coefficients</td></tr><tr><td>Reservation refusee</td><td>Verifier conflit de salle, creneau ou droits d'approbation</td></tr><tr><td>Export incomplet</td><td>Verifier filtres, role et selection de champs</td></tr></tbody></table>
+<hr>
+<h2>Idees d'amelioration</h2>
+<h3>Priorite haute</h3>
+<ul><li>Ajouter une recherche globale dans la barre superieure pour trouver rapidement etudiants, enseignants, classes, documents et demandes.</li><li>Ajouter des notifications temps reel pour les reservations de salle, demandes administratives, messages et actions de restauration.</li><li>Ajouter un centre d'aide integre avec liens vers ce manuel et une aide contextuelle par page.</li><li>Ajouter une validation plus visible des conflits: salle deja reservee, enseignant occupe, notes manquantes, classe sans modules.</li><li>Ajouter des tableaux de bord par role: direction, staff, enseignant, etudiant, restauration.</li></ul>
+<h3>Priorite moyenne</h3>
+<ul><li>Ajouter un workflow complet de documents manquants avec relances et statuts.</li><li>Ajouter des exports PDF officiels: releves de notes, attestations, listes de classe, recus restauration.</li><li>Ajouter un calendrier unifie combinant emploi du temps, reservations et evenements academiques.</li><li>Ajouter un systeme d'import avec previsualisation, detection d'erreurs et rapport ligne par ligne.</li><li>Ajouter des modeles de messages pour les communications repetitives.</li></ul>
+<h3>Priorite future</h3>
+<ul><li>Ajouter une application mobile ou une vue mobile etudiante pour notes, emploi du temps, ressources et restauration.</li><li>Ajouter des statistiques avancees: progression par cohorte, taux de reussite, occupation des salles, charge enseignant.</li><li>Ajouter une gestion fine des permissions par action, pas seulement par role.</li><li>Ajouter une piste d'audit exportable pour les operations critiques.</li><li>Ajouter un mode multilingue FR/AR/EN si l'application doit etre utilisee par plusieurs publics.</li></ul>
+<hr>
+<p><strong>Document:</strong> Manuel d'utilisation DEAA-Hub <strong>Format:</strong> Markdown unique avec captures d'ecran <strong>Derniere mise a jour:</strong> 2026-05-11</p>
+</body>
+</html>

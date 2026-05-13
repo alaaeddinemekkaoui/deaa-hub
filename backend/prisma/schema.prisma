@@ -110,6 +110,7 @@ model Student {
   mealReservations MealReservation[]
   mealTransactions MealTransaction[]
   mealWallet       MealWallet?
+  internatAssignment InternatAssignment?
   observations     StudentObservation[]
   workflows        WorkflowTask[]
   attendances      AttendanceRecord[]
@@ -458,6 +459,28 @@ model Room {
   sessions     TimetableSession[]
 
   @@index([departmentId])
+}
+
+model InternatRoom {
+  id          Int                  @id @default(autoincrement())
+  name        String               @unique
+  capacity    Int
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  assignments InternatAssignment[]
+}
+
+model InternatAssignment {
+  id        Int         @id @default(autoincrement())
+  studentId Int         @unique
+  roomId    Int
+  comment   String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  room      InternatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  student   Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
 }
 
 model RoomReservation {
@@ -856,6 +879,7 @@ enum UserRole {
   student
   inspector
   restauration
+  internat
 }
 
 enum ReservationStatus {

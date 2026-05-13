@@ -21,6 +21,7 @@ const ROUTE_TO_ENDPOINT: Record<string, string> = {
   '/filieres':    '/filieres/import',
   '/classes':     '/classes/import',
   '/rooms':       '/rooms/import',
+  '/internat':    '/internat/rooms/import',
   '/laureates':   '/laureates/import',
 };
 
@@ -31,6 +32,7 @@ const ROUTE_COLUMNS: Record<string, string> = {
   '/filieres':    'code, name, departmentId — (optional: filiereType)',
   '/classes':     'name, year — (optional: filiereId, classType)',
   '/rooms':       'name — (optional: capacity, availability)',
+  '/internat':    'name — (optional: capacity)',
   '/laureates':   'studentId, graduationYear — (optional: diplomaStatus: retrieved | not_retrieved)',
 };
 
