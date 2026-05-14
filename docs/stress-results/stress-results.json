@@ -1,0 +1,169 @@
+{
+  "generatedAt": "2026-05-13T11:07:55.416Z",
+  "apiBaseUrl": "http://127.0.0.1:5000/api",
+  "frontendBaseUrl": "http://127.0.0.1:3000",
+  "config": {
+    "stages": [
+      5,
+      10,
+      25,
+      50
+    ],
+    "durationSeconds": 12,
+    "timeoutMs": 15000
+  },
+  "stages": [
+    {
+      "concurrency": 5,
+      "durationSeconds": 12,
+      "apiSummary": {
+        "name": "api-authenticated-get",
+        "concurrency": 5,
+        "durationSeconds": 12.01,
+        "requests": 4592,
+        "ok": 4592,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 382.27,
+        "p50": 12,
+        "p95": 20,
+        "p99": 26,
+        "max": 411,
+        "statuses": {
+          "200": 4592
+        }
+      },
+      "frontendSummary": {
+        "name": "frontend-pages",
+        "concurrency": 5,
+        "durationSeconds": 12,
+        "requests": 13411,
+        "ok": 13411,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 1117.29,
+        "p50": 4,
+        "p95": 8,
+        "p99": 14,
+        "max": 43,
+        "statuses": {
+          "200": 13411
+        }
+      }
+    },
+    {
+      "concurrency": 10,
+      "durationSeconds": 12,
+      "apiSummary": {
+        "name": "api-authenticated-get",
+        "concurrency": 10,
+        "durationSeconds": 12.02,
+        "requests": 4572,
+        "ok": 4572,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 380.3,
+        "p50": 25,
+        "p95": 42,
+        "p99": 54,
+        "max": 103,
+        "statuses": {
+          "200": 4572
+        }
+      },
+      "frontendSummary": {
+        "name": "frontend-pages",
+        "concurrency": 10,
+        "durationSeconds": 12,
+        "requests": 17659,
+        "ok": 17659,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 1471.29,
+        "p50": 6,
+        "p95": 10,
+        "p99": 15,
+        "max": 22,
+        "statuses": {
+          "200": 17659
+        }
+      }
+    },
+    {
+      "concurrency": 25,
+      "durationSeconds": 12,
+      "apiSummary": {
+        "name": "api-authenticated-get",
+        "concurrency": 25,
+        "durationSeconds": 12.05,
+        "requests": 5560,
+        "ok": 5560,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 461.56,
+        "p50": 54,
+        "p95": 75,
+        "p99": 89,
+        "max": 111,
+        "statuses": {
+          "200": 5560
+        }
+      },
+      "frontendSummary": {
+        "name": "frontend-pages",
+        "concurrency": 25,
+        "durationSeconds": 12.01,
+        "requests": 17559,
+        "ok": 17559,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 1461.56,
+        "p50": 15,
+        "p95": 29,
+        "p99": 42,
+        "max": 87,
+        "statuses": {
+          "200": 17559
+        }
+      }
+    },
+    {
+      "concurrency": 50,
+      "durationSeconds": 12,
+      "apiSummary": {
+        "name": "api-authenticated-get",
+        "concurrency": 50,
+        "durationSeconds": 12.07,
+        "requests": 6019,
+        "ok": 6019,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 498.61,
+        "p50": 99,
+        "p95": 133,
+        "p99": 156,
+        "max": 195,
+        "statuses": {
+          "200": 6019
+        }
+      },
+      "frontendSummary": {
+        "name": "frontend-pages",
+        "concurrency": 50,
+        "durationSeconds": 12.04,
+        "requests": 18508,
+        "ok": 18508,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 1537.77,
+        "p50": 30,
+        "p95": 47,
+        "p99": 54,
+        "max": 66,
+        "statuses": {
+          "200": 18508
+        }
+      }
+    }
+  ]
+}

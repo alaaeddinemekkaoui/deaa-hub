@@ -9,6 +9,7 @@ import { api, PaginatedResponse } from '@/services/api';
 
 type ExportDataButtonProps = {
   label?: string;
+  filters?: Record<string, unknown>;
 };
 
 const EXPORTABLE_ROUTES = new Set([
@@ -44,6 +45,36 @@ const routeToFileBase = (pathname: string) => {
   return pathname.replace(/^\//, '').replace(/\//g, '-') || 'export';
 };
 
+const EXPORT_FIELDS: Record<string, Array<{ key: string; label: string }>> = {
+  '/students': [
+    { key: 'fullName', label: 'Nom complet' },
+    { key: 'email', label: 'Email' },
+    { key: 'telephone', label: 'Téléphone' },
+    { key: 'sex', label: 'Sexe' },
+    { key: 'cin', label: 'CIN' },
+    { key: 'codeMassar', label: 'Code Massar' },
+    { key: 'codeEtudiant', label: 'Code étudiant' },
+    { key: 'filiere.name', label: 'Filière' },
+    { key: 'academicClass.name', label: 'Classe' },
+    { key: 'anneeAcademique', label: 'Année académique' },
+    { key: 'dateNaissance', label: 'Date naissance' },
+    { key: 'dateInscription', label: 'Date inscription' },
+  ],
+  '/teachers': [
+    { key: 'firstName', label: 'Prénom' },
+    { key: 'lastName', label: 'Nom' },
+    { key: 'email', label: 'Email' },
+    { key: 'phoneNumber', label: 'Téléphone' },
+    { key: 'sex', label: 'Sexe' },
+    { key: 'cin', label: 'CIN' },
+    { key: 'department.name', label: 'Département' },
+    { key: 'filiere.name', label: 'Filière' },
+    { key: 'role.name', label: 'Rôle' },
+    { key: 'grade.name', label: 'Grade' },
+    { key: 'dateInscription', label: 'Date inscription' },
+  ],
+};
+
 async function fetchPaginatedRows(
   endpoint: string,
   params: Record<string, unknown> = {},
@@ -76,7 +107,10 @@ async function fetchPaginatedRows(
   return rows;
 }
 
-async function fetchExportRows(pathname: string): Promise<Array<Record<string, unknown>>> {
+async function fetchExportRows(
+  pathname: string,
+  params: Record<string, unknown> = {},
+): Promise<Array<Record<string, unknown>>> {
   switch (pathname) {
     case '/activity-logs': {
       const response = await api.get<Array<Record<string, unknown>>>('/activity-logs');
@@ -114,11 +148,12 @@ async function fetchExportRows(pathname: string): Promise<Array<Record<string, u
       return response.data;
     }
     case '/students':
-      return fetchPaginatedRows('/students');
+      return fetchPaginatedRows('/students', params);
     case '/teachers':
       return fetchPaginatedRows('/teachers', {
         sortBy: 'lastName',
         sortOrder: 'asc',
+        ...params,
       });
     case '/users': {
       const response = await api.get<Array<Record<string, unknown>>>('/users');
@@ -133,10 +168,15 @@ async function fetchExportRows(pathname: string): Promise<Array<Record<string, u
   }
 }
 
-export function ExportDataButton({ label = 'Export' }: ExportDataButtonProps) {
+export function ExportDataButton({ label = 'Export', filters = {} }: ExportDataButtonProps) {
   const pathname = usePathname();
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat>('csv');
+  const [scope, setScope] = useState<'filtered' | 'all'>('filtered');
+  const fieldOptions = EXPORT_FIELDS[pathname] ?? [];
+  const [selectedFieldKeys, setSelectedFieldKeys] = useState<string[]>(
+    fieldOptions.map((field) => field.key),
+  );
   const [isExporting, setIsExporting] = useState(false);
   const isExportSupported = useMemo(
     () => EXPORTABLE_ROUTES.has(pathname),
@@ -147,6 +187,20 @@ export function ExportDataButton({ label = 'Export' }: ExportDataButtonProps) {
     return null;
   }
 
+  const activeFilters = Object.fromEntries(
+    Object.entries(filters).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+  );
+  const hasFilters = Object.keys(activeFilters).length > 0;
+  const selectedColumns = fieldOptions.filter((field) => selectedFieldKeys.includes(field.key));
+
+  const toggleField = (key: string) => {
+    setSelectedFieldKeys((current) =>
+      current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key],
+    );
+  };
+
   const handleExport = async () => {
     if (isExporting) {
       return;
@@ -154,7 +208,7 @@ export function ExportDataButton({ label = 'Export' }: ExportDataButtonProps) {
 
     setIsExporting(true);
     try {
-      const rows = await fetchExportRows(pathname);
+      const rows = await fetchExportRows(pathname, scope === 'filtered' ? activeFilters : {});
       if (!rows.length) {
         return;
       }
@@ -162,7 +216,8 @@ export function ExportDataButton({ label = 'Export' }: ExportDataButtonProps) {
       exportRecords({
         rows,
         format: exportFormat,
-        fileName: `${routeToFileBase(pathname)}-${buildTimeStamp()}`,
+        fileName: `${routeToFileBase(pathname)}-${scope}-${buildTimeStamp()}`,
+        columns: selectedColumns.length ? selectedColumns : undefined,
       });
 
       setIsExportModalOpen(false);
@@ -185,7 +240,7 @@ export function ExportDataButton({ label = 'Export' }: ExportDataButtonProps) {
       <ModalShell
         open={isExportModalOpen}
         title="Export data"
-        description="Choose your export format. The file includes all records for this section."
+        description="Choose the scope, file type and fields to include."
         onClose={() => setIsExportModalOpen(false)}
         footer={
           <>
@@ -193,7 +248,7 @@ export function ExportDataButton({ label = 'Export' }: ExportDataButtonProps) {
               className="btn-primary"
               type="button"
               onClick={handleExport}
-              disabled={isExporting}
+              disabled={isExporting || (fieldOptions.length > 0 && selectedColumns.length === 0)}
             >
               {isExporting ? 'Exporting...' : 'Export now'}
             </button>
@@ -207,6 +262,37 @@ export function ExportDataButton({ label = 'Export' }: ExportDataButtonProps) {
           </>
         }
       >
+        <div className="space-y-5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            className={`rounded-2xl border px-4 py-4 text-left transition ${
+              scope === 'filtered'
+                ? 'border-emerald-300 bg-emerald-50'
+                : 'border-slate-200 bg-white hover:border-emerald-200'
+            }`}
+            onClick={() => setScope('filtered')}
+            disabled={!hasFilters}
+          >
+            <p className="font-medium text-slate-900">Filtres appliqués</p>
+            <p className="text-sm text-slate-500">
+              {hasFilters ? 'Exporte seulement la vue filtrée.' : 'Aucun filtre actif pour cette vue.'}
+            </p>
+          </button>
+          <button
+            type="button"
+            className={`rounded-2xl border px-4 py-4 text-left transition ${
+              scope === 'all'
+                ? 'border-emerald-300 bg-emerald-50'
+                : 'border-slate-200 bg-white hover:border-emerald-200'
+            }`}
+            onClick={() => setScope('all')}
+          >
+            <p className="font-medium text-slate-900">Toutes les données</p>
+            <p className="text-sm text-slate-500">Ignore les filtres et exporte toute la section.</p>
+          </button>
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-2">
           <button
             type="button"
@@ -239,6 +325,43 @@ export function ExportDataButton({ label = 'Export' }: ExportDataButtonProps) {
             <p className="font-medium text-slate-900">Excel</p>
             <p className="text-sm text-slate-500">Downloads as .xlsx for richer table handling.</p>
           </button>
+        </div>
+
+        {fieldOptions.length > 0 ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium text-slate-900">Champs à exporter</p>
+              <div className="flex gap-2">
+                <button
+                  className="btn-outline px-3 py-1 text-xs"
+                  type="button"
+                  onClick={() => setSelectedFieldKeys(fieldOptions.map((field) => field.key))}
+                >
+                  Tout
+                </button>
+                <button
+                  className="btn-outline px-3 py-1 text-xs"
+                  type="button"
+                  onClick={() => setSelectedFieldKeys([])}
+                >
+                  Aucun
+                </button>
+              </div>
+            </div>
+            <div className="grid max-h-72 gap-2 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+              {fieldOptions.map((field) => (
+                <label key={field.key} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={selectedFieldKeys.includes(field.key)}
+                    onChange={() => toggleField(field.key)}
+                  />
+                  {field.label}
+                </label>
+              ))}
+            </div>
+          </div>
+        ) : null}
         </div>
       </ModalShell>
     </>

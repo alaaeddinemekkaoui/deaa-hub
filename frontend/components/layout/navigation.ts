@@ -167,13 +167,7 @@ export const navigation: NavGroup[] = [
     heading: 'Paramètres',
     roles: ADMIN_ROLES,
     items: [
-      { href: '/settings/academic-years', label: 'Années académiques', caption: 'Gérer les années académiques', icon: Settings },
-      { href: '/settings/restauration', label: 'Repas restauration', caption: 'Prix et repas actifs', icon: Utensils },
-      { href: '/settings/document-types', label: 'Types de documents', caption: 'Catégories de documents admin', icon: FileStack },
-      { href: '/settings/teacher-roles', label: 'Rôles enseignants', caption: 'Fonctions : permanent, vacataire', icon: Users },
-      { href: '/settings/teacher-grades', label: 'Grades enseignants', caption: 'PH, PA, assistant, doctorant', icon: GraduationCap },
-      { href: '/settings/profile-document-types', label: 'Types de docs profil', caption: 'CIN, photo, acte de naissance…', icon: FileStack },
-      { href: '/activity-logs', label: 'Journaux', caption: "Historique d'activité", icon: Activity },
+      { href: '/settings', label: 'Paramètres', caption: 'Centre de configuration', icon: Settings },
     ],
   },
 ];

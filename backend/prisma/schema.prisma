@@ -159,6 +159,7 @@ model Teacher {
   id              Int                @id @default(autoincrement())
   firstName       String
   lastName        String
+  sex             Sex                @default(male)
   cin             String?            @unique
   email           String?            @unique
   phoneNumber     String?
@@ -186,6 +187,7 @@ model Teacher {
 
   @@index([departmentId])
   @@index([filiereId])
+  @@index([sex])
   @@index([roleId])
   @@index([gradeId])
   @@index([lastName, firstName])
@@ -231,6 +233,7 @@ model AcademicClass {
   id                           Int                            @id @default(autoincrement())
   name                         String
   year                         Int
+  academicYear                 String?
   semestre                     String?
   filiereId                    Int?
   classType                    String?
@@ -254,8 +257,9 @@ model AcademicClass {
   teachers                     TeacherClass[]
   sessions                     TimetableSession[]
 
-  @@unique([name, year, semestre])
+  @@unique([name, year, semestre, academicYear])
   @@index([year])
+  @@index([academicYear])
   @@index([semestre])
   @@index([filiereId])
   @@index([optionId])
@@ -316,6 +320,10 @@ model StudentGrade {
   score           Float
   maxScore        Float          @default(20)
   academicYear    String
+  publicationStatus String       @default("draft")
+  publishedAt     DateTime?
+  reopenedAt      DateTime?
+  lockedAt        DateTime?
   comment         String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -331,6 +339,7 @@ model StudentGrade {
   @@index([moduleId])
   @@index([elementModuleId])
   @@index([academicYear])
+  @@index([publicationStatus])
   @@index([subject])
   @@index([studentId, academicYear], map: "idx_grade_student_year")
   @@index([classId, academicYear, semester], map: "idx_grade_class_year_sem")

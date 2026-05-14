@@ -30,6 +30,15 @@ export class UpdateClassDto {
 
   @IsOptional()
   @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @ValidateIf((_, value) => value !== null && value !== '')
+  @IsString()
+  @MaxLength(20)
+  academicYear?: string | null;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toUpperCase() : value,
   )
   @ValidateIf((_, value) => value !== null && value !== '')

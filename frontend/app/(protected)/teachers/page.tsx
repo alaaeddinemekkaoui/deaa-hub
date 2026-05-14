@@ -41,6 +41,7 @@ type Teacher = {
   id: number;
   firstName: string;
   lastName: string;
+  sex: 'male' | 'female';
   cin?: string | null;
   dateInscription?: string | null;
   email?: string | null;
@@ -75,6 +76,7 @@ export default function TeachersPage() {
   const [grades, setGrades] = useState<TeacherGrade[]>([]);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [sex, setSex] = useState<'male' | 'female'>('male');
   const [cin, setCin] = useState('');
   const [dateInscription, setDateInscription] = useState('');
   const [email, setEmail] = useState('');
@@ -89,6 +91,7 @@ export default function TeachersPage() {
   const [filterFiliereId, setFilterFiliereId] = useState('');
   const [filterRoleId, setFilterRoleId] = useState('');
   const [filterGradeId, setFilterGradeId] = useState('');
+  const [filterSex, setFilterSex] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [page, setPage] = useState(1);
@@ -166,6 +169,7 @@ export default function TeachersPage() {
     setEditingId(null);
     setFirstName('');
     setLastName('');
+    setSex('male');
     setCin('');
     setDateInscription('');
     setEmail('');
@@ -196,6 +200,7 @@ export default function TeachersPage() {
     setEditingId(teacher.id);
     setFirstName(teacher.firstName);
     setLastName(teacher.lastName);
+    setSex(teacher.sex ?? 'male');
     setCin(teacher.cin ?? '');
     setDateInscription(teacher.dateInscription ? teacher.dateInscription.slice(0, 10) : '');
     setEmail(teacher.email ?? '');
@@ -243,6 +248,7 @@ export default function TeachersPage() {
             filiereId: filterFiliereId || undefined,
             roleId: filterRoleId || undefined,
             gradeId: filterGradeId || undefined,
+            sex: filterSex || undefined,
             sortBy,
             sortOrder,
           },
@@ -262,6 +268,7 @@ export default function TeachersPage() {
     filterDepartmentId,
     filterFiliereId,
     filterGradeId,
+    filterSex,
     filterRoleId,
     page,
     query,
@@ -319,6 +326,7 @@ export default function TeachersPage() {
       const payload: Record<string, unknown> = {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        sex,
         cin: cin.trim() || null,
         dateInscription: dateInscription || null,
         departmentId: Number(departmentId),
@@ -420,7 +428,16 @@ export default function TeachersPage() {
 
       <section className="flex justify-end gap-2">
         <ImportDataButton onSuccess={() => setRefreshKey((k) => k + 1)} />
-        <ExportDataButton />
+        <ExportDataButton
+          filters={{
+            search: query || undefined,
+            departmentId: filterDepartmentId || undefined,
+            filiereId: filterFiliereId || undefined,
+            roleId: filterRoleId || undefined,
+            gradeId: filterGradeId || undefined,
+            sex: filterSex || undefined,
+          }}
+        />
         <button className="btn-primary" type="button" onClick={openCreateModal}>
           Ajouter un enseignant
         </button>
@@ -490,6 +507,7 @@ export default function TeachersPage() {
                     setFilterFiliereId('');
                     setFilterRoleId('');
                     setFilterGradeId('');
+                    setFilterSex('');
                     setSortBy('lastName');
                     setSortOrder('asc');
                     setPage(1);
@@ -548,6 +566,15 @@ export default function TeachersPage() {
                     {item.name}
                   </option>
                 ))}
+              </select>
+              <select
+                className="input xl:max-w-44"
+                value={filterSex}
+                onChange={(event) => setFilterSex(event.target.value)}
+              >
+                <option value="">Tous les sexes</option>
+                <option value="male">Homme</option>
+                <option value="female">Femme</option>
               </select>
               <select
                 className="input xl:max-w-52"
@@ -637,6 +664,12 @@ export default function TeachersPage() {
                           <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Type</p>
                           <p className="mt-1 font-medium text-slate-900">{permanent ? 'Permanent' : 'Vacataire'}</p>
                         </div>
+                        <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Sexe</p>
+                          <p className="mt-1 font-medium text-slate-900">{item.sex === 'female' ? 'Femme' : 'Homme'}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3">
                         <div className="rounded-2xl bg-slate-50 px-3 py-3">
                           <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Contact</p>
                           <p className="mt-1 truncate font-medium text-slate-900">{item.email ?? 'Sans email'}</p>
@@ -765,6 +798,17 @@ export default function TeachersPage() {
               onChange={(event) => setEmail(event.target.value)}
               placeholder="teacher@iav.ac.ma"
             />
+          </div>
+          <div className="field-stack">
+            <label className="field-label">Sexe</label>
+            <select
+              className="input"
+              value={sex}
+              onChange={(event) => setSex(event.target.value as 'male' | 'female')}
+            >
+              <option value="male">Homme</option>
+              <option value="female">Femme</option>
+            </select>
           </div>
           <div className="field-stack">
             <label className="field-label">CIN</label>

@@ -1,14 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Camera } from 'lucide-react';
-import { api, getApiErrorMessage } from '@/services/api';
+import { api, fetchRef, getApiErrorMessage } from '@/services/api';
+import {
+  AcademicYearSelect,
+  AcademicYearOption,
+  getDefaultAcademicYear,
+  sortAcademicYearsCurrentFirst,
+} from '@/components/academic/academic-year-select';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
 import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/auth-context';
+import { StudentReleve } from '@/components/grades/student-releve';
 
 type StudentClassHistory = {
   id: number;
@@ -31,7 +38,14 @@ type DocumentItem = {
   id: number;
   name: string;
   mimeType: string;
+  category?: string | null;
   createdAt: string;
+};
+
+type ProfileDocumentType = {
+  id: number;
+  name: string;
+  description?: string | null;
 };
 
 type GradeItem = {
@@ -43,6 +57,9 @@ type GradeItem = {
   maxScore: number;
   academicYear: string;
   comment?: string | null;
+  publicationStatus?: 'draft' | 'published' | 'modified_after_publication';
+  module?: { id: number; name: string; semestre?: string | null } | null;
+  elementModule?: { id: number; name: string; type?: string | null; ponderation?: number | null } | null;
   teacher?: { id: number; firstName: string; lastName: string } | null;
   academicClass?: { id: number; name: string; year: number } | null;
 };
@@ -81,14 +98,18 @@ export default function StudentProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [profileDocumentTypes, setProfileDocumentTypes] = useState<ProfileDocumentType[]>([]);
   const [grades, setGrades] = useState<GradeItem[]>([]);
+  const [academicYears, setAcademicYears] = useState<AcademicYearOption[]>([]);
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState('');
   const [obsModalOpen, setObsModalOpen] = useState(false);
   const [obsText, setObsText] = useState('');
   const [savingObs, setSavingObs] = useState(false);
   const [expandedObsId, setExpandedObsId] = useState<number | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadCategory, setUploadCategory] = useState('');
   const [uploadingFile, setUploadingFile] = useState(false);
-  const [expandedGradeYear, setExpandedGradeYear] = useState<string | null>(null);
+  const [profileSection, setProfileSection] = useState<'overview' | 'notes'>('overview');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -96,6 +117,11 @@ export default function StudentProfilePage() {
   const profileId = Number(params.id);
   const isStudentOwner = user?.role === 'student' && user.studentProfile?.id === profileId;
   const canUseDirectAdminActions = Boolean(user && user.role !== 'student');
+  const canUploadDocuments = canUseDirectAdminActions || isStudentOwner;
+  const canDeleteDocuments = user?.role === 'admin' || user?.role === 'staff';
+  const visibleGrades = selectedAcademicYear
+    ? grades.filter((grade) => grade.academicYear === selectedAcademicYear)
+    : grades;
 
   const setPhotoObjectUrl = useCallback((url: string | null) => {
     if (photoObjectUrlRef.current) {
@@ -113,23 +139,6 @@ export default function StudentProfilePage() {
       setPhotoObjectUrl(null);
     }
   }, [setPhotoObjectUrl]);
-
-  const gradesByYear = useMemo(() => {
-    const map: Record<string, GradeItem[]> = {};
-    for (const g of grades) {
-      const key = g.academicYear || 'Sans année';
-      (map[key] ??= []).push(g);
-    }
-    return Object.entries(map).sort(([a], [b]) => b.localeCompare(a));
-  }, [grades]);
-
-  // Auto-expand the most recent year
-  useEffect(() => {
-    if (gradesByYear.length > 0 && expandedGradeYear === null) {
-      setExpandedGradeYear(gradesByYear[0][0]);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gradesByYear]);
 
   const getSortedHistory = (history: StudentClassHistory[] = []) =>
     [...history].sort(
@@ -186,19 +195,26 @@ export default function StudentProfilePage() {
       try {
         setLoading(true);
         setError(null);
-        const [profileRes, obsRes, docsRes, gradesRes] = await Promise.all([
+        const [profileRes, obsRes, docsRes, gradesRes, yearsRes, profileDocTypesRes] = await Promise.all([
           api.get<StudentProfile>(`/students/${id}`),
           api.get<Observation[]>(`/students/${id}/observations`),
           api.get<DocumentItem[]>(`/documents/student/${id}`),
-          isStudentOwner
+          isStudentOwner || user.role === 'student'
             ? api.get<StudentGradesMeResponse>('/grades/me')
             : api.get<GradeItem[]>(`/grades/student/${id}`),
+          fetchRef<AcademicYearOption[]>('/academic-years'),
+          fetchRef<ProfileDocumentType[]>('/profile-document-types'),
         ]);
         if (isCancelled) return;
+        const sortedYears = sortAcademicYearsCurrentFirst(yearsRes);
+        const defaultYear = getDefaultAcademicYear(sortedYears);
+        setAcademicYears(sortedYears);
+        setSelectedAcademicYear((value) => value || defaultYear || profileRes.data.anneeAcademique);
         setStudent(profileRes.data);
         setObservations(Array.isArray(obsRes.data) ? obsRes.data : []);
         setDocuments(Array.isArray(docsRes.data) ? docsRes.data : []);
-        if (isStudentOwner) {
+        setProfileDocumentTypes(Array.isArray(profileDocTypesRes) ? profileDocTypesRes : []);
+        if (isStudentOwner || user.role === 'student') {
           const data = gradesRes.data as StudentGradesMeResponse;
           setGrades([
             ...(data.currentGrades ?? []),
@@ -278,17 +294,23 @@ export default function StudentProfilePage() {
 
   const handleUploadDocument = async () => {
     if (!student || !uploadFile) return;
+    if (!uploadCategory) {
+      toast.error('Choisissez le type de document.');
+      return;
+    }
 
     setUploadingFile(true);
     try {
       const formData = new FormData();
       formData.append('studentId', String(student.id));
+      formData.append('category', uploadCategory);
       formData.append('file', uploadFile);
       const response = await api.post<DocumentItem>('/documents/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setDocuments((prev) => [response.data, ...prev]);
       setUploadFile(null);
+      setUploadCategory('');
       toast.success('Document étudiant téléversé');
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Échec du téléversement'));
@@ -328,6 +350,27 @@ export default function StudentProfilePage() {
 
       {!loading && !error && student ? (
         <>
+        <section className="surface-card space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={profileSection === 'overview' ? 'btn-primary' : 'btn-outline'}
+              onClick={() => setProfileSection('overview')}
+            >
+              Profil
+            </button>
+            <button
+              type="button"
+              className={profileSection === 'notes' ? 'btn-primary' : 'btn-outline'}
+              onClick={() => setProfileSection('notes')}
+            >
+              Notes
+            </button>
+          </div>
+        </section>
+
+        {profileSection === 'overview' && (
+          <>
         <section className="surface-card space-y-4">
           <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center">
             <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-white text-xl font-semibold text-slate-400 shadow-sm">
@@ -496,7 +539,10 @@ export default function StudentProfilePage() {
             )}
           </div>
         </section>
+          </>
+        )}
 
+        {profileSection === 'overview' && (
         <section className="surface-card space-y-4">
           <div className="panel-header">
             <div>
@@ -566,94 +612,36 @@ export default function StudentProfilePage() {
             </div>
           )}
         </section>
+        )}
 
+        {profileSection === 'notes' && (
         <section className="surface-card space-y-4">
           <div className="panel-header">
             <div>
               <h2 className="panel-title">Notes</h2>
               <p className="panel-copy">{grades.length} note{grades.length !== 1 ? 's' : ''} enregistrée{grades.length !== 1 ? 's' : ''}</p>
             </div>
+            <AcademicYearSelect
+              className="min-w-64"
+              value={selectedAcademicYear}
+              years={academicYears}
+              onChange={setSelectedAcademicYear}
+              label="Année académique"
+            />
             <Link className="btn-outline" href="/grades">
               Ouvrir les épreuves
             </Link>
           </div>
 
-          {grades.length === 0 ? (
-            <p className="text-sm text-slate-400">Aucune note enregistrée pour cet étudiant.</p>
+          {visibleGrades.length === 0 ? (
+            <p className="text-sm text-slate-400">Aucune note enregistrée pour cette année académique.</p>
           ) : (
-            <div className="space-y-3">
-              {gradesByYear.map(([year, yearGrades]) => {
-                const avg = yearGrades.reduce((s, g) => s + g.score / g.maxScore, 0) / yearGrades.length * 20;
-                const passCount = yearGrades.filter(g => g.score / g.maxScore >= 0.5).length;
-                const className = yearGrades[0]?.academicClass?.name;
-                const isOpen = expandedGradeYear === year;
-                return (
-                  <div key={year} className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-                    <button
-                      type="button"
-                      className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-slate-50 transition-colors"
-                      onClick={() => setExpandedGradeYear(isOpen ? null : year)}
-                    >
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <span className="font-semibold text-slate-900">{year}</span>
-                        {className && (
-                          <span className="text-xs rounded-full bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5">{className}</span>
-                        )}
-                        <span className="text-sm text-slate-500">{yearGrades.length} matière{yearGrades.length !== 1 ? 's' : ''}</span>
-                      </div>
-                      <div className="flex items-center gap-4 text-sm">
-                        <span className={`font-semibold ${avg >= 10 ? 'text-emerald-600' : 'text-red-500'}`}>
-                          Moy. {avg.toFixed(1)}/20
-                        </span>
-                        <span className="text-slate-400 text-xs">{passCount}/{yearGrades.length} validées</span>
-                        <span className="text-slate-400">{isOpen ? '▲' : '▼'}</span>
-                      </div>
-                    </button>
-                    {isOpen && (
-                      <div className="border-t border-slate-100">
-                        <div className="table-scroll">
-                          <table className="table-base">
-                            <thead>
-                              <tr>
-                                <th>Matière</th>
-                                <th>Note</th>
-                                <th>Semestre</th>
-                                <th>Type</th>
-                                <th>Enseignant</th>
-                                <th>Classe</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {yearGrades.map((grade) => (
-                                <tr key={grade.id}>
-                                  <td className="font-medium text-slate-900">{grade.subject}</td>
-                                  <td>
-                                    <span className={`font-semibold ${grade.score / grade.maxScore >= 0.5 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                      {grade.score}/{grade.maxScore}
-                                    </span>
-                                  </td>
-                                  <td>{grade.semester ?? '—'}</td>
-                                  <td>{grade.assessmentType ?? '—'}</td>
-                                  <td>
-                                    {grade.teacher
-                                      ? `${grade.teacher.firstName} ${grade.teacher.lastName}`
-                                      : '—'}
-                                  </td>
-                                  <td>{grade.academicClass?.name ?? '—'}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            <StudentReleve student={student} grades={visibleGrades} />
           )}
         </section>
+        )}
 
+        {profileSection === 'overview' && (
         <section className="surface-card space-y-4">
           <div className="panel-header">
             <div>
@@ -662,8 +650,23 @@ export default function StudentProfilePage() {
             </div>
           </div>
 
-          {canUseDirectAdminActions ? (
-            <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+          {canUploadDocuments ? (
+            <div className="grid gap-3 md:grid-cols-[minmax(180px,260px)_1fr_auto]">
+              <div className="field-stack">
+                <label className="field-label">Type de document</label>
+                <select
+                  className="input"
+                  value={uploadCategory}
+                  onChange={(e) => setUploadCategory(e.target.value)}
+                >
+                  <option value="">Sélectionner un type</option>
+                  {profileDocumentTypes.map((type) => (
+                    <option key={type.id} value={type.name}>
+                      {type.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="field-stack">
                 <label className="field-label">Téléverser un document</label>
                 <input
@@ -678,7 +681,7 @@ export default function StudentProfilePage() {
                   className="btn-primary"
                   type="button"
                   onClick={() => void handleUploadDocument()}
-                  disabled={!uploadFile || uploadingFile}
+                  disabled={!uploadFile || !uploadCategory || uploadingFile}
                 >
                   {uploadingFile ? 'Téléversement...' : 'Téléverser'}
                 </button>
@@ -696,6 +699,7 @@ export default function StudentProfilePage() {
                     <tr>
                       <th>Nom</th>
                       <th>Type</th>
+                      <th>Catégorie</th>
                       <th>Date</th>
                       <th>Actions</th>
                     </tr>
@@ -705,9 +709,10 @@ export default function StudentProfilePage() {
                       <tr key={doc.id}>
                         <td className="font-medium text-slate-900">{doc.name}</td>
                         <td>{doc.mimeType}</td>
+                        <td>{doc.category ? <span className="status-chip status-chip--muted">{doc.category}</span> : '—'}</td>
                         <td>{new Date(doc.createdAt).toLocaleDateString('fr-FR')}</td>
                         <td>
-                          {canUseDirectAdminActions ? (
+                          {canDeleteDocuments ? (
                             <button
                               type="button"
                               className="btn-outline text-xs"
@@ -729,6 +734,7 @@ export default function StudentProfilePage() {
             </div>
           )}
         </section>
+        )}
         </>
       ) : null}
 

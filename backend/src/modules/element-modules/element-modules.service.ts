@@ -115,7 +115,7 @@ export class ElementModulesService {
         sessionDurationMinutes: dto.sessionDurationMinutes ?? null,
         type: dto.type ?? 'CM',
         ponderation: dto.ponderation ?? 1,
-        coefficient: dto.coefficient ?? 1,
+        coefficient: 1,
         // classId kept nullable; class context comes from ModuleClass
         classId: null,
       },
@@ -181,9 +181,7 @@ export class ElementModulesService {
         ...(dto.ponderation !== undefined
           ? { ponderation: dto.ponderation }
           : {}),
-        ...(dto.coefficient !== undefined
-          ? { coefficient: dto.coefficient }
-          : {}),
+        ...(dto.ponderation !== undefined ? { coefficient: 1 } : {}),
       },
     });
   }

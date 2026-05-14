@@ -85,7 +85,6 @@ export default function AcademicPage() {
   const [elVolume, setElVolume] = useState('');
   const [elSessionDuration, setElSessionDuration] = useState('90');
   const [elPonderation, setElPonderation] = useState('1');
-  const [elCoefficient, setElCoefficient] = useState('1');
   const [elModuleId, setElModuleId] = useState('');
   const [savingEl, setSavingEl] = useState(false);
 
@@ -230,7 +229,7 @@ export default function AcademicPage() {
   // ── Element CRUD ──
   const openCreateEl = () => {
     setEditingElId(null); setElName(''); setElType('CM'); setElVolume(''); setElSessionDuration('90');
-    setElPonderation('1'); setElCoefficient('1');
+    setElPonderation('1');
     setElModuleId(String(selectedModule?.id ?? ''));
     setElModal(true);
   };
@@ -238,7 +237,7 @@ export default function AcademicPage() {
     setEditingElId(el.id); setElName(el.name); setElType(el.type);
     setElVolume(String(el.volumeHoraire ?? '')); setElPonderation(String(el.ponderation ?? 1));
     setElSessionDuration(String(el.sessionDurationMinutes ?? 90));
-    setElCoefficient(String(el.coefficient ?? 1)); setElModuleId(String(el.moduleId));
+    setElModuleId(String(el.moduleId));
     setElModal(true);
   };
   const saveEl = async () => {
@@ -251,7 +250,7 @@ export default function AcademicPage() {
         volumeHoraire: elVolume ? Number(elVolume) : null,
         sessionDurationMinutes: elSessionDuration ? Number(elSessionDuration) : null,
         ponderation: elPonderation ? Number(elPonderation) : 1,
-        coefficient: elCoefficient ? Number(elCoefficient) : 1,
+        coefficient: 1,
         moduleId: Number(elModuleId),
       };
       if (editingElId) await api.patch(`/element-modules/${editingElId}`, data);
@@ -394,7 +393,6 @@ export default function AcademicPage() {
                       {el.volumeHoraire ? `${el.volumeHoraire}h` : 'Volume non défini'}
                       {' • '}Séance {formatDuration(el.sessionDurationMinutes)}
                       {' • '}Pond. {el.ponderation ?? 1}
-                      {' • '}Coefficient {el.coefficient ?? 1}
                       {' • '}{el._count?.sessions ?? 0} session{(el._count?.sessions ?? 0) !== 1 ? 's' : ''}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1">
@@ -430,7 +428,7 @@ export default function AcademicPage() {
         }
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3">
             <div className="field-stack col-span-2">
               <label className="field-label">Nom du module <span className="text-red-500">*</span></label>
               <input className="input" value={modName} onChange={(e) => setModName(e.target.value)} placeholder="ex. Mathématiques, Power Skills" />
@@ -562,18 +560,6 @@ export default function AcademicPage() {
                 step="0.01"
                 value={elPonderation}
                 onChange={(e) => setElPonderation(e.target.value)}
-                placeholder="ex. 1"
-              />
-            </div>
-            <div className="field-stack">
-              <label className="field-label">Coefficient</label>
-              <input
-                className="input"
-                type="number"
-                min={0}
-                step="0.01"
-                value={elCoefficient}
-                onChange={(e) => setElCoefficient(e.target.value)}
                 placeholder="ex. 1"
               />
             </div>

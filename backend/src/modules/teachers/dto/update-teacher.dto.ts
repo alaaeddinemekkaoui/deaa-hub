@@ -2,12 +2,14 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsEmail,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
   MaxLength,
   Min,
 } from 'class-validator';
+import { Sex } from '@prisma/client';
 
 export class UpdateTeacherDto {
   @IsOptional()
@@ -19,6 +21,10 @@ export class UpdateTeacherDto {
   @IsString()
   @MaxLength(80)
   lastName?: string;
+
+  @IsOptional()
+  @IsEnum(Sex)
+  sex?: Sex;
 
   @IsOptional()
   @IsString()

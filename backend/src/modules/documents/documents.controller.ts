@@ -89,8 +89,9 @@ export class DocumentsController {
   upload(
     @Body() dto: CreateDocumentDto,
     @UploadedFile() file?: Express.Multer.File,
+    @CurrentUser() user?: JwtPayload,
   ) {
-    return this.documentsService.create(dto, file);
+    return this.documentsService.create(dto, file, user);
   }
 
   @Get('student/:studentId')
@@ -103,9 +104,12 @@ export class DocumentsController {
   }
 
   @Get('teacher/:teacherId')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
-  findByTeacher(@Param('teacherId', ParseIntPipe) teacherId: number) {
-    return this.documentsService.findByTeacher(teacherId);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
+  findByTeacher(
+    @Param('teacherId', ParseIntPipe) teacherId: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.documentsService.findByTeacherForUser(teacherId, user);
   }
 
   @Get('student/:studentId/missing')

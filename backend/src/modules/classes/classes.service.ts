@@ -34,6 +34,7 @@ export class ClassesService {
       filiereId,
       departmentId,
       year,
+      academicYear,
       semestre,
       cycleId,
       optionId,
@@ -53,6 +54,7 @@ export class ClassesService {
     }
 
     if (typeof year === 'number') filters.push({ year });
+    if (academicYear) filters.push({ academicYear });
     if (semestre) filters.push({ semestre });
     if (filiereId) filters.push({ filiereId });
     if (departmentId) filters.push({ filiere: { is: { departmentId } } });
@@ -75,6 +77,7 @@ export class ClassesService {
       filiereId: filiereId ?? null,
       departmentId: departmentId ?? null,
       year: year ?? null,
+      academicYear: academicYear ?? null,
       semestre: semestre ?? null,
       cycleId: cycleId ?? null,
       optionId: optionId ?? null,
@@ -170,28 +173,59 @@ export class ClassesService {
     if (dto.filiereId) await this.ensureFiliereExists(dto.filiereId);
     if (dto.cycleId) await this.ensureCycleExists(dto.cycleId);
     if (dto.optionId) await this.ensureOptionExists(dto.optionId);
+    if (dto.academicYear) await this.ensureAcademicYearExists(dto.academicYear);
 
     const departmentId = dto.filiereId
       ? await this.getDepartmentIdFromFiliereId(dto.filiereId)
       : null;
     this.ensureCanManageDepartment(departmentId, currentUser);
 
+    const academicYear =
+      dto.academicYear ?? (await this.getCurrentAcademicYearLabel());
+
     await this.ensureClassIdentityAvailable(
       dto.name,
       dto.year,
+      academicYear,
       dto.semestre ?? null,
     );
 
-    const created = await this.prisma.academicClass.create({
-      data: {
+    const classData = {
         name: dto.name,
         year: dto.year,
+        academicYear,
         semestre: dto.semestre ?? null,
         classType: dto.classType ?? null,
         cycleId: dto.cycleId ?? null,
         optionId: dto.optionId ?? null,
         filiereId: dto.filiereId ?? null,
-      },
+      };
+
+    if (dto.createNextSemestre && dto.semestre !== 'S1') {
+      throw new BadRequestException(
+        'La création automatique du semestre suivant est disponible uniquement depuis S1.',
+      );
+    }
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const primary = await tx.academicClass.create({ data: classData });
+
+      if (dto.createNextSemestre && dto.semestre === 'S1') {
+        await this.ensureClassIdentityAvailable(
+          dto.name,
+          dto.year,
+          academicYear,
+          'S2',
+        );
+        await tx.academicClass.create({
+          data: {
+            ...classData,
+            semestre: 'S2',
+          },
+        });
+      }
+
+      return primary;
     });
     this.listCache.invalidate();
     return created;
@@ -200,7 +234,7 @@ export class ClassesService {
   async update(id: number, dto: UpdateClassDto, currentUser?: JwtPayload) {
     const existing = await this.prisma.academicClass.findUnique({
       where: { id },
-      select: { id: true, name: true, year: true, semestre: true, filiereId: true },
+      select: { id: true, name: true, year: true, academicYear: true, semestre: true, filiereId: true },
     });
 
     if (!existing) throw new NotFoundException(`Class ${id} not found`);
@@ -211,6 +245,7 @@ export class ClassesService {
       await this.ensureCycleExists(dto.cycleId);
     if (typeof dto.optionId === 'number')
       await this.ensureOptionExists(dto.optionId);
+    if (dto.academicYear) await this.ensureAcademicYearExists(dto.academicYear);
 
     const nextFiliereId =
       dto.filiereId !== undefined ? dto.filiereId : existing.filiereId;
@@ -221,15 +256,22 @@ export class ClassesService {
 
     const nextName = dto.name ?? existing.name;
     const nextYear = dto.year ?? existing.year;
+    const nextAcademicYear =
+      dto.academicYear !== undefined
+        ? (dto.academicYear ?? null)
+        : existing.academicYear;
     const nextSemestre =
       dto.semestre !== undefined ? (dto.semestre ?? null) : existing.semestre;
-    await this.ensureClassIdentityAvailable(nextName, nextYear, nextSemestre, id);
+    await this.ensureClassIdentityAvailable(nextName, nextYear, nextAcademicYear, nextSemestre, id);
 
     const updated = await this.prisma.academicClass.update({
       where: { id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.year !== undefined ? { year: dto.year } : {}),
+        ...(dto.academicYear !== undefined
+          ? { academicYear: dto.academicYear ?? null }
+          : {}),
         ...(dto.semestre !== undefined
           ? { semestre: dto.semestre ?? null }
           : {}),
@@ -292,52 +334,133 @@ export class ClassesService {
    * The source class is left untouched. Each class remains fully independent.
    */
   async transfer(id: number, dto: TransferClassDto, currentUser?: JwtPayload) {
-    if (id === dto.targetClassId) {
+    const transferMode =
+      dto.transferMode ?? (dto.createTargetClass ? 'duplicate' : 'existing');
+    const targetClassId = dto.destinationClassId ?? dto.targetClassId;
+    const destinationAcademicYear =
+      dto.destinationAcademicYear ?? dto.academicYear;
+    const destinationSemestre = dto.destinationSemestre ?? dto.targetSemestre;
+
+    if (transferMode === 'existing' && !targetClassId) {
+      throw new BadRequestException('Target class is required');
+    }
+
+    if (targetClassId && id === targetClassId) {
       throw new BadRequestException(
         'Source and target class cannot be the same',
       );
     }
 
-    const [source, target] = await Promise.all([
-      this.prisma.academicClass.findUnique({
-        where: { id },
-        include: {
-          modules: {
-            include: {
-              module: { include: { elements: true } },
-            },
+    const source = await this.prisma.academicClass.findUnique({
+      where: { id },
+      include: {
+        modules: {
+          include: {
+            module: { include: { elements: true } },
           },
-          teachers: true,
         },
-      }),
-      this.prisma.academicClass.findUnique({
-        where: { id: dto.targetClassId },
-        select: { id: true, name: true, year: true },
-      }),
-    ]);
+        teachers: true,
+      },
+    });
 
     if (!source) throw new NotFoundException(`Source class ${id} not found`);
+    if (dto.sourceAcademicYear && source.academicYear !== dto.sourceAcademicYear) {
+      throw new BadRequestException(
+        "La classe source ne correspond pas à l'année académique sélectionnée.",
+      );
+    }
+    if (destinationAcademicYear) {
+      await this.ensureAcademicYearExists(destinationAcademicYear);
+    }
+
+    let target = targetClassId
+      ? await this.prisma.academicClass.findUnique({
+          where: { id: targetClassId },
+          select: { id: true, name: true, year: true, academicYear: true },
+        })
+      : null;
+
+    if (transferMode === 'duplicate') {
+      const targetSemestre = destinationSemestre ?? null;
+      const targetAcademicYear =
+        destinationAcademicYear ?? source.academicYear ?? (await this.getCurrentAcademicYearLabel());
+
+      if (
+        source.academicYear === targetAcademicYear &&
+        (source.semestre ?? null) === targetSemestre
+      ) {
+        throw new BadRequestException(
+          'La destination doit être différente de la classe, année et semestre source.',
+        );
+      }
+
+      await this.ensureClassIdentityAvailable(
+        source.name,
+        source.year,
+        targetAcademicYear,
+        targetSemestre,
+      );
+
+      target = await this.prisma.academicClass.create({
+        data: {
+          name: source.name,
+          year: source.year,
+          academicYear: targetAcademicYear,
+          semestre: targetSemestre,
+          classType: source.classType,
+          cycleId: source.cycleId,
+          optionId: source.optionId,
+          filiereId: source.filiereId,
+        },
+        select: { id: true, name: true, year: true, academicYear: true },
+      });
+    }
+
     if (!target)
       throw new NotFoundException(
-        `Target class ${dto.targetClassId} not found`,
+        `Target class ${targetClassId} not found`,
       );
+
+    if (
+      transferMode === 'existing' &&
+      source.id === target.id &&
+      source.academicYear === destinationAcademicYear &&
+      (source.semestre ?? null) === (destinationSemestre ?? null)
+    ) {
+      throw new BadRequestException(
+        'Impossible de copier vers la même classe, année et semestre.',
+      );
+    }
 
     const [sourceDepartmentId, targetDepartmentId] = await Promise.all([
       this.getDepartmentIdFromClassId(source.id),
       this.getDepartmentIdFromClassId(target.id),
     ]);
+
     this.ensureCanManageDepartment(sourceDepartmentId, currentUser);
     this.ensureCanManageDepartment(targetDepartmentId, currentUser);
 
-    return this.prisma.$transaction(async (tx) => {
-      // Clone each module + its elements, then assign to the target class
-      for (const mc of source.modules) {
+    const targetId = target.id;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Clone each module + its elements, then assign to the target class.
+      const sourceModules = dto.sourceSemestre
+        ? source.modules.filter((mc) => mc.module.semestre === dto.sourceSemestre)
+        : source.modules;
+
+      if (sourceModules.length === 0) {
+        throw new BadRequestException(
+          'Aucun module ne correspond au semestre source sélectionné.',
+        );
+      }
+
+      for (const mc of sourceModules) {
         const srcModule = mc.module;
 
         const newModule = await tx.module.create({
           data: {
             name: srcModule.name,
-            semestre: srcModule.semestre,
+            semestre: destinationSemestre ?? srcModule.semestre,
             filiereId: srcModule.filiereId,
             optionId: srcModule.optionId,
           },
@@ -351,35 +474,32 @@ export class ClassesService {
               volumeHoraire: el.volumeHoraire,
               type: el.type,
               ponderation: el.ponderation,
-              coefficient: el.coefficient,
+              coefficient: 1,
               sessionDurationMinutes: el.sessionDurationMinutes,
             },
           });
         }
 
-        // Assign cloned module to target class
         await tx.moduleClass.create({
-          data: { moduleId: newModule.id, classId: target.id },
+          data: { moduleId: newModule.id, classId: targetId },
         });
       }
 
-      // Copy teacher assignments (skip duplicates)
       for (const tc of source.teachers) {
         const exists = await tx.teacherClass.findUnique({
           where: {
-            teacherId_classId: { teacherId: tc.teacherId, classId: target.id },
+            teacherId_classId: { teacherId: tc.teacherId, classId: targetId },
           },
         });
         if (!exists) {
           await tx.teacherClass.create({
-            data: { teacherId: tc.teacherId, classId: target.id },
+            data: { teacherId: tc.teacherId, classId: targetId },
           });
         }
       }
 
-      // Return the updated target class plus metadata
       const updatedTarget = await tx.academicClass.findUnique({
-        where: { id: target.id },
+        where: { id: targetId },
         include: {
           filiere: {
             include: { department: { select: { id: true, name: true } } },
@@ -391,9 +511,13 @@ export class ClassesService {
       });
       return {
         ...updatedTarget,
-        academicYear: dto.academicYear ?? null,
+        academicYear: destinationAcademicYear ?? updatedTarget?.academicYear ?? null,
       };
     });
+
+    this.listCache.invalidate();
+    return result;
+
   }
 
   private async ensureFiliereExists(id: number) {
@@ -420,9 +544,34 @@ export class ClassesService {
     if (!o) throw new NotFoundException(`Option ${id} not found`);
   }
 
+  private async ensureAcademicYearExists(label: string) {
+    const academicYear = await this.prisma.academicYear.findUnique({
+      where: { label },
+      select: { id: true },
+    });
+    if (!academicYear) {
+      throw new NotFoundException(`Academic year ${label} not found`);
+    }
+  }
+
+  private async getCurrentAcademicYearLabel(): Promise<string | null> {
+    const current = await this.prisma.academicYear.findFirst({
+      where: { isCurrent: true },
+      select: { label: true },
+    });
+    if (current) return current.label;
+
+    const latest = await this.prisma.academicYear.findFirst({
+      orderBy: { label: 'desc' },
+      select: { label: true },
+    });
+    return latest?.label ?? null;
+  }
+
   private async ensureClassIdentityAvailable(
     name: string,
     year: number,
+    academicYear?: string | null,
     semestre?: string | null,
     excludeId?: number,
   ) {
@@ -430,6 +579,7 @@ export class ClassesService {
       where: {
         name: { equals: name, mode: 'insensitive' },
         year,
+        academicYear: academicYear ?? null,
         semestre: semestre ?? null,
         ...(excludeId ? { id: { not: excludeId } } : {}),
       },

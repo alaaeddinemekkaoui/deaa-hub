@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>DEAA-Hub 3000 User Peak Simulation</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 32px; color: #0f172a; line-height: 1.5; }
+    h1 { margin-bottom: 4px; }
+    .note { color: #475569; max-width: 900px; }
+    table { border-collapse: collapse; margin: 20px 0; width: 100%; max-width: 980px; }
+    th, td { border: 1px solid #cbd5e1; padding: 10px 12px; text-align: left; }
+    th { background: #f1f5f9; }
+    .risk, .critical { color: #b91c1c; font-weight: 700; }
+    .watch { color: #a16207; font-weight: 700; }
+    .good { color: #047857; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>DEAA-Hub Peak Simulation</h1>
+  <p class="note">This report is designed for non-technical presentation. It estimates 3000 online users as about 150 active requests at the same moment, using a 1:20 active-user model. It is a planning simulation based on measured tests, not a destructive full 3000-browser production test.</p>
+  <img src="peak-3000-simulation.svg" alt="Peak simulation graph" width="980">
+  <table>
+    <thead><tr><th>Area</th><th>Projected P50</th><th>Projected P95</th><th>Projected RPS</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>API</td><td>115 ms</td><td>9663 ms</td><td>50.35</td><td class="critical">critical</td></tr>
+      <tr><td>Frontend</td><td>3918 ms</td><td>5264 ms</td><td>41.89</td><td class="critical">critical</td></tr>
+    </tbody>
+  </table>
+  <p class="note">Recommendation: before an official 3000-user live load test, use a maintenance window, confirm Vercel/Neon limits, and run a ramp test with monitoring enabled.</p>
+</body>
+</html>

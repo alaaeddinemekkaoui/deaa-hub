@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520">
+  <rect width="100%" height="100%" fill="#ffffff" />
+  <text x="76" y="26" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#102033">DEAA-Hub Stress Test: P95 Latency by Concurrency</text>
+  <text x="76" y="506" font-family="Arial, sans-serif" font-size="12" fill="#64748b">Concurrency</text>
+  <text x="18" y="246" transform="rotate(-90 18 246)" font-family="Arial, sans-serif" font-size="12" fill="#64748b">P95 latency (ms)</text>
+  <g font-family="Arial, sans-serif">
+<line x1="76" y1="448" x2="944" y2="448" stroke="#d8e2dc" />
+<text x="64" y="452" text-anchor="end" font-size="12" fill="#405064">0</text>
+<line x1="76" y1="367.2" x2="944" y2="367.2" stroke="#d8e2dc" />
+<text x="64" y="371.2" text-anchor="end" font-size="12" fill="#405064">800</text>
+<line x1="76" y1="286.4" x2="944" y2="286.4" stroke="#d8e2dc" />
+<text x="64" y="290.4" text-anchor="end" font-size="12" fill="#405064">1600</text>
+<line x1="76" y1="205.60000000000002" x2="944" y2="205.60000000000002" stroke="#d8e2dc" />
+<text x="64" y="209.60000000000002" text-anchor="end" font-size="12" fill="#405064">2400</text>
+<line x1="76" y1="124.79999999999995" x2="944" y2="124.79999999999995" stroke="#d8e2dc" />
+<text x="64" y="128.79999999999995" text-anchor="end" font-size="12" fill="#405064">3200</text>
+<line x1="76" y1="44" x2="944" y2="44" stroke="#d8e2dc" />
+<text x="64" y="48" text-anchor="end" font-size="12" fill="#405064">4000</text>
+    <line x1="76" y1="44" x2="76" y2="448" stroke="#8391a1" />
+    <line x1="76" y1="448" x2="944" y2="448" stroke="#8391a1" />
+<text x="76" y="484" text-anchor="middle" font-size="13" fill="#102033">5</text>
+<text x="293" y="484" text-anchor="middle" font-size="13" fill="#102033">10</text>
+<text x="510" y="484" text-anchor="middle" font-size="13" fill="#102033">15</text>
+<text x="727" y="484" text-anchor="middle" font-size="13" fill="#102033">25</text>
+<text x="944" y="484" text-anchor="middle" font-size="13" fill="#102033">50</text>
+<polyline fill="none" stroke="#0f6b4f" stroke-width="3" points="76,138.637 293,314.27599999999995 510,342.96 727,316.39700000000005 944,147.52499999999998" />
+<circle cx="76" cy="138.637" r="5" fill="#0f6b4f" />
+<circle cx="293" cy="314.27599999999995" r="5" fill="#0f6b4f" />
+<circle cx="510" cy="342.96" r="5" fill="#0f6b4f" />
+<circle cx="727" cy="316.39700000000005" r="5" fill="#0f6b4f" />
+<circle cx="944" cy="147.52499999999998" r="5" fill="#0f6b4f" />
+<polyline fill="none" stroke="#1d4ed8" stroke-width="3" points="76,426.992 293,407.903 510,357.706 727,362.251 944,273.068" />
+<circle cx="76" cy="426.992" r="5" fill="#1d4ed8" />
+<circle cx="293" cy="407.903" r="5" fill="#1d4ed8" />
+<circle cx="510" cy="357.706" r="5" fill="#1d4ed8" />
+<circle cx="727" cy="362.251" r="5" fill="#1d4ed8" />
+<circle cx="944" cy="273.068" r="5" fill="#1d4ed8" />
+    <rect x="730" y="54" width="190" height="64" rx="6" fill="#f8fafc" stroke="#d8e2dc" />
+    <line x1="748" y1="78" x2="782" y2="78" stroke="#0f6b4f" stroke-width="3" />
+    <text x="792" y="82" font-size="13" fill="#102033">API P95</text>
+    <line x1="748" y1="100" x2="782" y2="100" stroke="#1d4ed8" stroke-width="3" />
+    <text x="792" y="104" font-size="13" fill="#102033">Frontend P95</text>
+  </g>
+</svg>

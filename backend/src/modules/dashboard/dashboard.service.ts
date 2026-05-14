@@ -41,8 +41,8 @@ type DashboardOverview = {
 export class DashboardService {
   private readonly overviewCache = new TtlCache<DashboardOverview>({
     key: 'dashboard:overview',
-    ttlMs: 30 * 1000,
-    staleTtlMs: 2 * 60 * 1000,
+    ttlMs: 2 * 60 * 1000,
+    staleTtlMs: 10 * 60 * 1000,
   });
 
   constructor(private readonly prisma: PrismaService) {}

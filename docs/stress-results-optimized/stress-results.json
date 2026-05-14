@@ -1,0 +1,208 @@
+{
+  "generatedAt": "2026-05-13T10:41:15.060Z",
+  "apiBaseUrl": "http://127.0.0.1:5000/api",
+  "frontendBaseUrl": "http://127.0.0.1:3001",
+  "config": {
+    "stages": [
+      5,
+      10,
+      15,
+      25,
+      50
+    ],
+    "durationSeconds": 8,
+    "timeoutMs": 10000
+  },
+  "stages": [
+    {
+      "concurrency": 5,
+      "durationSeconds": 8,
+      "apiSummary": {
+        "name": "api-authenticated-get",
+        "concurrency": 5,
+        "durationSeconds": 9.3,
+        "requests": 64,
+        "ok": 64,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 6.88,
+        "p50": 300,
+        "p95": 3063,
+        "p99": 5017,
+        "max": 5017,
+        "statuses": {
+          "200": 64
+        }
+      },
+      "frontendSummary": {
+        "name": "frontend-pages",
+        "concurrency": 5,
+        "durationSeconds": 8.01,
+        "requests": 276,
+        "ok": 276,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 34.44,
+        "p50": 141,
+        "p95": 208,
+        "p99": 240,
+        "max": 254,
+        "statuses": {
+          "200": 276
+        }
+      }
+    },
+    {
+      "concurrency": 10,
+      "durationSeconds": 8,
+      "apiSummary": {
+        "name": "api-authenticated-get",
+        "concurrency": 10,
+        "durationSeconds": 9.41,
+        "requests": 319,
+        "ok": 319,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 33.9,
+        "p50": 17,
+        "p95": 1324,
+        "p99": 1862,
+        "max": 2014,
+        "statuses": {
+          "200": 319
+        }
+      },
+      "frontendSummary": {
+        "name": "frontend-pages",
+        "concurrency": 10,
+        "durationSeconds": 8.06,
+        "requests": 264,
+        "ok": 264,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 32.76,
+        "p50": 301,
+        "p95": 397,
+        "p99": 435,
+        "max": 464,
+        "statuses": {
+          "200": 264
+        }
+      }
+    },
+    {
+      "concurrency": 15,
+      "durationSeconds": 8,
+      "apiSummary": {
+        "name": "api-authenticated-get",
+        "concurrency": 15,
+        "durationSeconds": 8.66,
+        "requests": 532,
+        "ok": 532,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 61.46,
+        "p50": 19,
+        "p95": 1040,
+        "p99": 1710,
+        "max": 2443,
+        "statuses": {
+          "200": 532
+        }
+      },
+      "frontendSummary": {
+        "name": "frontend-pages",
+        "concurrency": 15,
+        "durationSeconds": 8.26,
+        "requests": 251,
+        "ok": 251,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 30.39,
+        "p50": 453,
+        "p95": 894,
+        "p99": 1054,
+        "max": 1063,
+        "statuses": {
+          "200": 251
+        }
+      }
+    },
+    {
+      "concurrency": 25,
+      "durationSeconds": 8,
+      "apiSummary": {
+        "name": "api-authenticated-get",
+        "concurrency": 25,
+        "durationSeconds": 8.83,
+        "requests": 624,
+        "ok": 624,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 70.67,
+        "p50": 25,
+        "p95": 1303,
+        "p99": 1745,
+        "max": 2404,
+        "statuses": {
+          "200": 624
+        }
+      },
+      "frontendSummary": {
+        "name": "frontend-pages",
+        "concurrency": 25,
+        "durationSeconds": 8.16,
+        "requests": 289,
+        "ok": 289,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 35.44,
+        "p50": 718,
+        "p95": 849,
+        "p99": 880,
+        "max": 908,
+        "statuses": {
+          "200": 289
+        }
+      }
+    },
+    {
+      "concurrency": 50,
+      "durationSeconds": 8,
+      "apiSummary": {
+        "name": "api-authenticated-get",
+        "concurrency": 50,
+        "durationSeconds": 10.17,
+        "requests": 512,
+        "ok": 512,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 50.35,
+        "p50": 43,
+        "p95": 2975,
+        "p99": 3705,
+        "max": 4507,
+        "statuses": {
+          "200": 512
+        }
+      },
+      "frontendSummary": {
+        "name": "frontend-pages",
+        "concurrency": 50,
+        "durationSeconds": 8.17,
+        "requests": 300,
+        "ok": 300,
+        "failed": 0,
+        "errorRate": 0,
+        "rps": 36.73,
+        "p50": 1358,
+        "p95": 1732,
+        "p99": 1836,
+        "max": 1940,
+        "statuses": {
+          "200": 300
+        }
+      }
+    }
+  ]
+}

@@ -79,7 +79,11 @@ export class DocumentsService {
     });
   }
 
-  async create(dto: CreateDocumentDto, file?: Express.Multer.File) {
+  async create(
+    dto: CreateDocumentDto,
+    file?: Express.Multer.File,
+    currentUser?: JwtPayload,
+  ) {
     if (!file) {
       throw new BadRequestException('File is required');
     }
@@ -95,11 +99,14 @@ export class DocumentsService {
     if (dto.studentId) {
       const student = await this.prisma.student.findUnique({
         where: { id: dto.studentId },
-        select: { id: true, codeMassar: true },
+        select: { id: true, codeMassar: true, userId: true },
       });
 
       if (!student) {
         throw new NotFoundException('Student not found');
+      }
+      if (currentUser?.role === UserRole.STUDENT && student.userId !== currentUser.sub) {
+        throw new ForbiddenException('Vous pouvez téléverser uniquement vos propres documents.');
       }
 
       const studentDir = join(
@@ -127,11 +134,14 @@ export class DocumentsService {
 
     const teacher = await this.prisma.teacher.findUnique({
       where: { id: dto.teacherId },
-      select: { id: true, firstName: true, lastName: true, cin: true },
+      select: { id: true, firstName: true, lastName: true, cin: true, userId: true },
     });
 
     if (!teacher) {
       throw new NotFoundException('Teacher not found');
+    }
+    if (currentUser?.role === UserRole.TEACHER && teacher.userId !== currentUser.sub) {
+      throw new ForbiddenException('Vous pouvez téléverser uniquement vos propres documents.');
     }
 
     const teacherFolder = teacher.cin
@@ -190,6 +200,20 @@ export class DocumentsService {
       where: { teacherId },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async findByTeacherForUser(teacherId: number, user: JwtPayload) {
+    if (user.role === UserRole.TEACHER) {
+      const teacher = await this.prisma.teacher.findUnique({
+        where: { id: teacherId },
+        select: { userId: true },
+      });
+      if (!teacher || teacher.userId !== user.sub) {
+        throw new ForbiddenException('Vous ne pouvez consulter que vos propres documents');
+      }
+    }
+
+    return this.findByTeacher(teacherId);
   }
 
   update(

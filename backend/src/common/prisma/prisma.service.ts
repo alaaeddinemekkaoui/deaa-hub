@@ -12,9 +12,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     const hasParams = rawUrl.includes('?');
     // Per-worker pool: keep small so total = workers × limit stays under pg max_connections.
     // Default pg max_connections=100; with 12 workers, 7 each = 84 — safe headroom.
+    const configuredLimit = Number(process.env.DB_CONNECTION_LIMIT ?? 0);
     const workerCount =
       parseInt(process.env.WORKERS ?? '0', 10) || require('os').cpus().length;
-    const perWorkerLimit = Math.max(3, Math.floor(80 / workerCount));
+    const perWorkerLimit =
+      configuredLimit > 0 ? configuredLimit : Math.max(3, Math.floor(80 / workerCount));
     const needsPool = !rawUrl.includes('connection_limit');
     const pooledUrl = needsPool
       ? `${rawUrl}${hasParams ? '&' : '?'}connection_limit=${perWorkerLimit}&pool_timeout=20`

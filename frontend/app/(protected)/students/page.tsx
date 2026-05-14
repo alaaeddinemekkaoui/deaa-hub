@@ -54,6 +54,7 @@ type Student = {
 
 type Filiere = { id: number; name: string; departmentId?: number };
 type AcademicClass = { id: number; name: string; year: number; filiereId?: number | null };
+type AcademicYear = { id: number; label: string; isCurrent: boolean };
 
 export default function StudentsPage() {
   const { user } = useAuth();
@@ -62,6 +63,7 @@ export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [filieres, setFilieres] = useState<Filiere[]>([]);
   const [classes, setClasses] = useState<AcademicClass[]>([]);
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -124,12 +126,16 @@ export default function StudentsPage() {
   useEffect(() => {
     const loadRef = async () => {
       try {
-        const [filieresData, classesData] = await Promise.all([
+        const [filieresData, classesData, yearsData] = await Promise.all([
           fetchRef<PaginatedResponse<Filiere>>('/filieres?page=1&limit=1000&sortBy=name&sortOrder=asc'),
           fetchRef<PaginatedResponse<AcademicClass>>('/classes?page=1&limit=1000&sortBy=name&sortOrder=asc'),
+          fetchRef<AcademicYear[]>('/academic-years'),
         ]);
         setFilieres(filieresData.data);
         setClasses(classesData.data);
+        setAcademicYears(yearsData);
+        const currentAcademicYear = yearsData.find((item) => item.isCurrent) ?? yearsData[0];
+        if (currentAcademicYear) setAnneeAcademique(currentAcademicYear.label);
         if (filieresData.data.length > 0) setFiliereId(String(filieresData.data[0].id));
         if (classesData.data.length > 0) setClassId(String(classesData.data[0].id));
       } catch {
@@ -174,7 +180,7 @@ export default function StudentsPage() {
     setFiliereId('');
     setClassId('');
     setBacType('');
-    setAnneeAcademique('2025/2026');
+    setAnneeAcademique((academicYears.find((item) => item.isCurrent) ?? academicYears[0])?.label ?? '');
     setDateInscription(new Date().toISOString().split('T')[0]);
     setIsLaureate(false);
     setGraduationYear(String(new Date().getFullYear()));
@@ -378,7 +384,7 @@ export default function StudentsPage() {
 
       <section className="flex justify-end gap-2">
         <ImportDataButton onSuccess={() => setRefreshKey((k) => k + 1)} />
-        <ExportDataButton />
+        <ExportDataButton filters={{ search: query || undefined }} />
         {studentsWithoutAccount > 0 && (
           <button
             className="btn-outline flex items-center gap-1.5"
@@ -598,7 +604,14 @@ export default function StudentsPage() {
           </div>
           <div className="field-stack">
             <label className="field-label">Année académique</label>
-            <input className="input" value={anneeAcademique} onChange={(event) => setAnneeAcademique(event.target.value)} />
+            <select className="input" value={anneeAcademique} onChange={(event) => setAnneeAcademique(event.target.value)}>
+              <option value="">Sélectionner une année académique</option>
+              {academicYears.map((item) => (
+                <option key={item.id} value={item.label}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="field-stack">
             <label className="field-label">Date d&apos;inscription</label>

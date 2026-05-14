@@ -23,7 +23,7 @@ export class AcademicYearsService {
   async findAll() {
     return this.listCache.getOrLoad(async () =>
       this.prisma.academicYear.findMany({
-        orderBy: { label: 'desc' },
+        orderBy: [{ isCurrent: 'desc' }, { label: 'desc' }],
       }),
     );
   }

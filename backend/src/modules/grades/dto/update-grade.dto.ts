@@ -3,6 +3,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -46,6 +47,7 @@ export class UpdateGradeDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(20)
   score?: number;
 
   @IsOptional()

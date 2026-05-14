@@ -26,6 +26,7 @@ import { CreateGradeDto } from './dto/create-grade.dto';
 import { UpdateGradeDto } from './dto/update-grade.dto';
 import { BulkUpsertGradesDto } from './dto/bulk-upsert-grades.dto';
 import { ImportGradesDto } from './dto/import-grades.dto';
+import { PublishGradesDto } from './dto/publish-grades.dto';
 
 @Controller('grades')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -33,23 +34,29 @@ export class GradesController {
   constructor(private readonly gradesService: GradesService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
-  findAll(@Query() query: GradeQueryDto) {
-    return this.gradesService.findAll(query);
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
+  findAll(@Query() query: GradeQueryDto, @CurrentUser() currentUser: JwtPayload) {
+    return this.gradesService.findAll(query, currentUser);
   }
 
   @Get('deliberation/class/:classId')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   getDeliberation(
     @Param('classId', ParseIntPipe) classId: number,
     @Query('academicYear') academicYear?: string,
     @Query('semester') semester?: string,
+    @Query('publicationStatus') publicationStatus?: string,
   ) {
-    return this.gradesService.getDeliberation(classId, academicYear, semester);
+    return this.gradesService.getDeliberation(
+      classId,
+      academicYear,
+      semester,
+      publicationStatus,
+    );
   }
 
   @Get('student/:studentId')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   findByStudent(@Param('studentId', ParseIntPipe) studentId: number) {
     return this.gradesService.findByStudent(studentId);
   }
@@ -61,13 +68,13 @@ export class GradesController {
   }
 
   @Get('teacher/:teacherId')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   findByTeacher(@Param('teacherId', ParseIntPipe) teacherId: number) {
     return this.gradesService.findByTeacher(teacherId);
   }
 
   @Post('bulk-upsert')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   bulkUpsert(
     @Body() dto: BulkUpsertGradesDto,
     @CurrentUser() currentUser: JwtPayload,
@@ -75,8 +82,26 @@ export class GradesController {
     return this.gradesService.bulkUpsert(dto, currentUser);
   }
 
+  @Post('publish')
+  @Roles(UserRole.ADMIN, UserRole.INSPECTOR)
+  publish(@Body() dto: PublishGradesDto, @CurrentUser() currentUser: JwtPayload) {
+    return this.gradesService.publish(dto, currentUser);
+  }
+
+  @Post('unpublish')
+  @Roles(UserRole.ADMIN, UserRole.INSPECTOR)
+  unpublish(@Body() dto: PublishGradesDto, @CurrentUser() currentUser: JwtPayload) {
+    return this.gradesService.unpublish(dto, currentUser);
+  }
+
+  @Post('reopen')
+  @Roles(UserRole.ADMIN, UserRole.INSPECTOR)
+  reopen(@Body() dto: PublishGradesDto, @CurrentUser() currentUser: JwtPayload) {
+    return this.gradesService.reopen(dto, currentUser);
+  }
+
   @Post('import')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -92,13 +117,13 @@ export class GradesController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   create(@Body() dto: CreateGradeDto, @CurrentUser() currentUser: JwtPayload) {
     return this.gradesService.create(dto, currentUser);
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateGradeDto,
@@ -108,7 +133,7 @@ export class GradesController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   remove(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() currentUser: JwtPayload,

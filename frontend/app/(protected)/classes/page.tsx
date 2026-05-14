@@ -20,6 +20,12 @@ import {
   Users,
 } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
+import {
+  AcademicYearSelect,
+  getDefaultAcademicYear,
+  sortAcademicYearsCurrentFirst,
+} from '@/components/academic/academic-year-select';
+import { SemesterSelect } from '@/components/academic/semester-select';
 import { ExportDataButton } from '@/components/admin/export-data-button';
 import { ImportDataButton } from '@/components/admin/import-data-button';
 import { MetricCard } from '@/components/admin/metric-card';
@@ -32,6 +38,7 @@ type AcademicClass = {
   id: number;
   name: string;
   year: number;
+  academicYear?: string | null;
   semestre?: string | null;
   classType?: string | null;
   cycleId?: number | null;
@@ -53,6 +60,7 @@ type Filiere = { id: number; name: string; departmentId?: number };
 type Department = { id: number; name: string };
 type AcademicOption = { id: number; name: string; filiereId: number };
 type Cycle = { id: number; name: string; code?: string | null };
+type AcademicYear = { id: number; label: string; isCurrent: boolean };
 type Student = {
   id: number;
   fullName: string;
@@ -94,7 +102,6 @@ const CLASS_PAGE_SIZE = 50;
 const ROSTER_PAGE_SIZE = 50;
 const GRADE_PAGE_SIZE = 50;
 const CURRENT_YEAR = new Date().getFullYear();
-const SEMESTERS = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'];
 
 const initialMeta = (limit: number): PageMeta => ({
   page: 0,
@@ -136,10 +143,13 @@ function ClassesPageInner() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [options, setOptions] = useState<AcademicOption[]>([]);
   const [cycles, setCycles] = useState<Cycle[]>([]);
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
 
   const [name, setName] = useState('');
   const [year, setYear] = useState(String(CURRENT_YEAR));
+  const [academicYear, setAcademicYear] = useState('');
   const [semestre, setSemestre] = useState('');
+  const [createNextSemestre, setCreateNextSemestre] = useState(false);
   const [classType, setClassType] = useState('');
   const [cycleId, setCycleId] = useState('');
   const [optionId, setOptionId] = useState('');
@@ -149,6 +159,7 @@ function ClassesPageInner() {
   const [filterDepartmentId, setFilterDepartmentId] = useState('');
   const [filterFiliereId, setFilterFiliereId] = useState('');
   const [filterYear, setFilterYear] = useState('');
+  const [filterAcademicYear, setFilterAcademicYear] = useState('');
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
 
@@ -224,7 +235,10 @@ function ClassesPageInner() {
     setEditingId(null);
     setName('');
     setYear(String(CURRENT_YEAR));
+    const currentAcademicYear = academicYears.find((item) => item.isCurrent) ?? academicYears[0];
+    setAcademicYear(currentAcademicYear?.label ?? `${CURRENT_YEAR}/${CURRENT_YEAR + 1}`);
     setSemestre('');
+    setCreateNextSemestre(false);
     setClassType('');
     setCycleId('');
     setOptionId('');
@@ -253,7 +267,7 @@ function ClassesPageInner() {
   useEffect(() => {
     const loadRef = async () => {
       try {
-        const [filieresData, depsData, optsData, cyclesData] = await Promise.all([
+        const [filieresData, depsData, optsData, cyclesData, yearsData] = await Promise.all([
           fetchRef<PaginatedResponse<Filiere>>(
             '/filieres?page=1&limit=100&sortBy=name&sortOrder=asc',
           ),
@@ -264,11 +278,19 @@ function ClassesPageInner() {
             '/options?page=1&limit=200&sortBy=name&sortOrder=asc',
           ),
           fetchRef<Cycle[]>('/cycles'),
+          fetchRef<AcademicYear[]>('/academic-years'),
         ]);
         setFilieres(filieresData.data);
         setDepartments(depsData.data);
         setOptions(optsData.data);
         setCycles(Array.isArray(cyclesData) ? cyclesData : []);
+        const sortedYears = sortAcademicYearsCurrentFirst(yearsData);
+        setAcademicYears(sortedYears);
+        const currentAcademicYear = getDefaultAcademicYear(sortedYears);
+        if (currentAcademicYear) {
+          setAcademicYear(currentAcademicYear);
+          setFilterAcademicYear((value) => value || currentAcademicYear);
+        }
       } catch {
         // Reference dropdowns are helpful but not required to render the class list.
       }
@@ -291,6 +313,7 @@ function ClassesPageInner() {
               departmentId: filterDepartmentId || undefined,
               filiereId: filterFiliereId || undefined,
               year: filterYear || undefined,
+              academicYear: filterAcademicYear || undefined,
               sortBy,
               sortOrder,
             },
@@ -316,6 +339,7 @@ function ClassesPageInner() {
   }, [
     filterDepartmentId,
     filterFiliereId,
+    filterAcademicYear,
     filterYear,
     page,
     query,
@@ -623,12 +647,18 @@ function ClassesPageInner() {
       toast.error("L'année est requise");
       return;
     }
+    if (!academicYear) {
+      toast.error("Choisissez une année académique.");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
         name: name.trim(),
         year: Number(year),
+        academicYear,
         semestre: semestre || null,
+        createNextSemestre: !editingId && semestre === 'S1' ? createNextSemestre : false,
         classType: classType.trim() || null,
         cycleId: cycleId ? Number(cycleId) : null,
         optionId: optionId ? Number(optionId) : null,
@@ -793,6 +823,7 @@ function ClassesPageInner() {
                     setFilterDepartmentId('');
                     setFilterFiliereId('');
                     setFilterYear('');
+                    setFilterAcademicYear('');
                     setSortBy('name');
                     setSortOrder('asc');
                     resetClassList();
@@ -803,6 +834,16 @@ function ClassesPageInner() {
               </div>
             </div>
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+              <AcademicYearSelect
+                className="xl:max-w-64"
+                value={filterAcademicYear}
+                years={academicYears}
+                includeAllOption
+                onChange={(value) => {
+                  setFilterAcademicYear(value);
+                  resetClassList();
+                }}
+              />
               <select
                 className="input xl:max-w-48"
                 value={filterYear}
@@ -894,7 +935,9 @@ function ClassesPageInner() {
             setEditingId(item.id);
             setName(item.name);
             setYear(String(item.year));
+            setAcademicYear(item.academicYear ?? '');
             setSemestre(item.semestre ?? '');
+            setCreateNextSemestre(false);
             setClassType(item.classType ?? '');
             setCycleId(String(item.cycleId ?? ''));
             setOptionId(String(item.optionId ?? ''));
@@ -916,6 +959,7 @@ function ClassesPageInner() {
         saving={saving}
         name={name}
         year={year}
+        academicYear={academicYear}
         semestre={semestre}
         classType={classType}
         cycleId={cycleId}
@@ -923,6 +967,7 @@ function ClassesPageInner() {
         filiereId={filiereId}
         optionId={optionId}
         cycles={cycles}
+        academicYears={academicYears}
         departments={departments}
         filieres={filieresByDepartment}
         options={optionsByFiliere}
@@ -930,7 +975,10 @@ function ClassesPageInner() {
         onSubmit={onSubmit}
         onNameChange={setName}
         onYearChange={setYear}
+        onAcademicYearChange={setAcademicYear}
         onSemestreChange={setSemestre}
+        createNextSemestre={createNextSemestre}
+        onCreateNextSemestreChange={setCreateNextSemestre}
         onClassTypeChange={setClassType}
         onCycleChange={setCycleId}
         onDepartmentChange={setDepartmentId}
@@ -1020,6 +1068,7 @@ function ClassesTable({
             <thead>
               <tr>
                 <th>Classe</th>
+                <th>Année académique</th>
                 <th>Année</th>
                 <th>Semestre</th>
                 <th>Filière</th>
@@ -1128,6 +1177,9 @@ function ClassTableRows({
           </button>
         </td>
         <td>
+          <span className="status-chip status-chip--muted">{item.academicYear ?? '—'}</span>
+        </td>
+        <td>
           <span className="status-chip status-chip--ok">{item.year}</span>
         </td>
         <td>{item.semestre ? <span className="status-chip status-chip--muted">{item.semestre}</span> : '-'}</td>
@@ -1186,7 +1238,7 @@ function ClassTableRows({
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={10}>
+          <td colSpan={11}>
             <ClassRosterPanel
               classId={item.id}
               roster={roster}
@@ -1408,6 +1460,7 @@ type ClassFormModalProps = {
   saving: boolean;
   name: string;
   year: string;
+  academicYear: string;
   semestre: string;
   classType: string;
   cycleId: string;
@@ -1415,6 +1468,7 @@ type ClassFormModalProps = {
   filiereId: string;
   optionId: string;
   cycles: Cycle[];
+  academicYears: AcademicYear[];
   departments: Department[];
   filieres: Filiere[];
   options: AcademicOption[];
@@ -1422,7 +1476,10 @@ type ClassFormModalProps = {
   onSubmit: () => Promise<void>;
   onNameChange: (value: string) => void;
   onYearChange: (value: string) => void;
+  onAcademicYearChange: (value: string) => void;
   onSemestreChange: (value: string) => void;
+  createNextSemestre: boolean;
+  onCreateNextSemestreChange: (value: boolean) => void;
   onClassTypeChange: (value: string) => void;
   onCycleChange: (value: string) => void;
   onDepartmentChange: (value: string) => void;
@@ -1436,6 +1493,7 @@ function ClassFormModal({
   saving,
   name,
   year,
+  academicYear,
   semestre,
   classType,
   cycleId,
@@ -1443,6 +1501,7 @@ function ClassFormModal({
   filiereId,
   optionId,
   cycles,
+  academicYears,
   departments,
   filieres,
   options,
@@ -1450,7 +1509,10 @@ function ClassFormModal({
   onSubmit,
   onNameChange,
   onYearChange,
+  onAcademicYearChange,
   onSemestreChange,
+  createNextSemestre,
+  onCreateNextSemestreChange,
   onClassTypeChange,
   onCycleChange,
   onDepartmentChange,
@@ -1491,9 +1553,15 @@ function ClassFormModal({
             placeholder="ex. GI-1, APESA-2"
           />
         </div>
+        <AcademicYearSelect
+          value={academicYear}
+          years={academicYears}
+          onChange={onAcademicYearChange}
+          required
+        />
         <div className="field-stack">
           <label className="field-label">
-            Année académique <span className="text-red-500">*</span>
+            Année de classe <span className="text-red-500">*</span>
           </label>
           <input
             className="input"
@@ -1505,21 +1573,17 @@ function ClassFormModal({
             placeholder="ex. 2026"
           />
         </div>
-        <div className="field-stack">
-          <label className="field-label">Semestre</label>
-          <select
-            className="input"
-            value={semestre}
-            onChange={(event) => onSemestreChange(event.target.value)}
-          >
-            <option value="">— Aucun semestre —</option>
-            {SEMESTERS.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </div>
+        <SemesterSelect value={semestre} onChange={onSemestreChange} />
+        {!editing && semestre === 'S1' ? (
+          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={createNextSemestre}
+              onChange={(event) => onCreateNextSemestreChange(event.target.checked)}
+            />
+            Créer automatiquement le semestre suivant
+          </label>
+        ) : null}
         <div className="field-stack">
           <label className="field-label">Type de classe</label>
           <input

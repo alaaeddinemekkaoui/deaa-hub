@@ -15,6 +15,9 @@ import { UpdateGradeDto } from './dto/update-grade.dto';
 import { GradeQueryDto } from './dto/grade-query.dto';
 import { BulkUpsertGradesDto } from './dto/bulk-upsert-grades.dto';
 import { ImportGradesDto } from './dto/import-grades.dto';
+import { PublishGradesDto } from './dto/publish-grades.dto';
+
+type GradePublicationStatus = 'draft' | 'published' | 'modified_after_publication';
 
 type GradeContext = {
   student?: {
@@ -55,6 +58,9 @@ type ElementGradeSummary = {
   score: number;
   maxScore: number;
   assessmentType: string | null;
+  publicationStatus: GradePublicationStatus;
+  publishedAt: Date | null;
+  lockedAt: Date | null;
 };
 
 type StudentGradeView = Prisma.StudentGradeGetPayload<{
@@ -90,7 +96,7 @@ export class GradesService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: GradeQueryDto) {
+  async findAll(query: GradeQueryDto, currentUser?: JwtPayload) {
     const filters: Prisma.StudentGradeWhereInput[] = [];
 
     if (query.search) {
@@ -138,8 +144,14 @@ export class GradesService {
     if (query.semester) {
       filters.push({ semester: query.semester });
     }
-    if (query.assessmentType) {
+        if (query.assessmentType) {
       filters.push({ assessmentType: query.assessmentType });
+    }
+    if (query.publicationStatus) {
+      filters.push({ publicationStatus: query.publicationStatus });
+    }
+    if (currentUser?.role === UserRole.TEACHER) {
+      filters.push(await this.teacherGradeScopeWhere(currentUser));
     }
 
     const where: Prisma.StudentGradeWhereInput =
@@ -157,6 +169,10 @@ export class GradesService {
       academicYear: query.academicYear ?? null,
       semester: query.semester ?? null,
       assessmentType: query.assessmentType ?? null,
+      publicationStatus: query.publicationStatus ?? null,
+      currentUserRole: currentUser?.role ?? null,
+      currentUserSub:
+        currentUser?.role === UserRole.TEACHER ? currentUser.sub : null,
     });
 
     return this.listCache.getOrLoad(cacheKey, async () => {
@@ -254,7 +270,16 @@ export class GradesService {
       student.anneeAcademique ??
       null;
 
-    const grades = (await this.findByStudent(student.id)) as StudentGradeView[];
+    const grades = (await this.prisma.studentGrade.findMany({
+      where: { studentId: student.id, publicationStatus: { in: ['published', 'modified_after_publication'] } },
+      include: {
+        teacher: { select: { id: true, firstName: true, lastName: true } },
+        academicClass: { select: { id: true, name: true, year: true } },
+        module: { select: { id: true, name: true, semestre: true } },
+        elementModule: { select: { id: true, name: true, type: true } },
+      },
+      orderBy: [{ academicYear: 'desc' }, { createdAt: 'desc' }],
+    })) as StudentGradeView[];
     const currentGrades = currentAcademicYear
       ? grades.filter((grade) => grade.academicYear === currentAcademicYear)
       : [];
@@ -299,6 +324,7 @@ export class GradesService {
   }
 
   async create(dto: CreateGradeDto, currentUser?: JwtPayload) {
+    this.ensureValidScores([{ studentId: dto.studentId, score: dto.score }], dto.maxScore ?? 20);
     const context = await this.resolveContext({
       studentId: dto.studentId,
       classId: dto.classId,
@@ -306,6 +332,8 @@ export class GradesService {
       elementModuleId: dto.elementModuleId,
       currentUser,
     });
+    await this.ensureTeacherCanEditGrade(context, currentUser);
+    const currentTeacherId = await this.getCurrentTeacherId(currentUser);
 
     if (dto.teacherId) {
       await this.ensureTeacherExists(dto.teacherId);
@@ -314,7 +342,7 @@ export class GradesService {
     const created = await this.prisma.studentGrade.create({
       data: {
         studentId: dto.studentId,
-        teacherId: dto.teacherId ?? null,
+        teacherId: currentTeacherId ?? dto.teacherId ?? null,
         classId: context.resolvedClassId,
         moduleId: context.resolvedModuleId,
         elementModuleId: context.resolvedElementModuleId,
@@ -386,6 +414,17 @@ export class GradesService {
     if (!existing) {
       throw new NotFoundException(`Grade ${id} not found`);
     }
+    if (existing.lockedAt) {
+      throw new ForbiddenException(
+        'Cette note est publiée et verrouillée. Un administrateur doit la rouvrir avant modification.',
+      );
+    }
+    if (dto.score !== undefined) {
+      this.ensureValidScores(
+        [{ studentId: existing.student.id, score: dto.score }],
+        dto.maxScore ?? existing.maxScore,
+      );
+    }
 
     const nextStudentId = dto.studentId ?? existing.student.id;
     const nextClassId =
@@ -404,11 +443,14 @@ export class GradesService {
       elementModuleId: nextElementModuleId,
       currentUser,
     });
+    await this.ensureTeacherCanEditGrade(context, currentUser);
+    const currentTeacherId = await this.getCurrentTeacherId(currentUser);
 
     const teacherId =
-      dto.teacherId !== undefined
+      currentTeacherId ??
+      (dto.teacherId !== undefined
         ? (dto.teacherId ?? null)
-        : existing.teacherId;
+        : existing.teacherId);
     if (teacherId) {
       await this.ensureTeacherExists(teacherId);
     }
@@ -417,7 +459,9 @@ export class GradesService {
       where: { id },
       data: {
         ...(dto.studentId !== undefined ? { studentId: nextStudentId } : {}),
-        ...(dto.teacherId !== undefined ? { teacherId } : {}),
+        ...(dto.teacherId !== undefined || currentTeacherId
+          ? { teacherId }
+          : {}),
         ...(dto.classId !== undefined
           ? { classId: context.resolvedClassId }
           : nextClassId !== existing.classId
@@ -453,6 +497,16 @@ export class GradesService {
           : {}),
         ...(dto.score !== undefined ? { score: dto.score } : {}),
         ...(dto.maxScore !== undefined ? { maxScore: dto.maxScore } : {}),
+        ...(dto.score !== undefined || dto.maxScore !== undefined
+          ? {
+              publicationStatus:
+                existing.publishedAt ||
+                existing.publicationStatus === 'published' ||
+                existing.publicationStatus === 'modified_after_publication'
+                  ? 'modified_after_publication'
+                  : 'draft',
+            }
+          : {}),
         ...(dto.academicYear !== undefined
           ? { academicYear: dto.academicYear.trim() }
           : {}),
@@ -497,6 +551,8 @@ export class GradesService {
       elementModuleId: dto.elementModuleId,
       currentUser,
     });
+    await this.ensureTeacherCanEditGrade(context, currentUser);
+    const currentTeacherId = await this.getCurrentTeacherId(currentUser);
 
     const subject = this.resolveSubject(dto.subject, context);
     const normalizedAssessmentType = this.normalizeNullableString(
@@ -504,6 +560,7 @@ export class GradesService {
     );
     const normalizedSemester = this.normalizeNullableString(dto.semester);
     const normalizedAcademicYear = dto.academicYear.trim();
+    this.ensureValidScores(dto.grades, dto.maxScore ?? 20);
     const studentIds = Array.from(
       new Set(dto.grades.map((entry) => entry.studentId)),
     );
@@ -532,11 +589,29 @@ export class GradesService {
         assessmentType: normalizedAssessmentType,
         academicYear: normalizedAcademicYear,
       },
-      select: { id: true, studentId: true },
+      select: {
+        id: true,
+        studentId: true,
+        publicationStatus: true,
+        publishedAt: true,
+      },
     });
 
+    const lockedExisting = await this.prisma.studentGrade.findMany({
+      where: {
+        id: { in: existingByStudent.map((item) => item.id) },
+        lockedAt: { not: null },
+      },
+      select: { studentId: true },
+    });
+    if (lockedExisting.length > 0) {
+      throw new ForbiddenException(
+        'Certaines notes sont publiées et verrouillées. Un administrateur doit les rouvrir avant modification.',
+      );
+    }
+
     const existingByStudentMap = new Map(
-      existingByStudent.map((item) => [item.studentId, item.id]),
+      existingByStudent.map((item) => [item.studentId, item]),
     );
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -544,11 +619,19 @@ export class GradesService {
       let updated = 0;
 
       for (const entry of dto.grades) {
-        const existingId =
-          entry.id ?? existingByStudentMap.get(entry.studentId);
+        const existing = entry.id
+          ? existingByStudent.find((item) => item.id === entry.id)
+          : existingByStudentMap.get(entry.studentId);
+        const existingId = entry.id ?? existing?.id;
+        const nextStatus: GradePublicationStatus =
+          existing?.publishedAt ||
+          existing?.publicationStatus === 'published' ||
+          existing?.publicationStatus === 'modified_after_publication'
+            ? 'modified_after_publication'
+            : 'draft';
         const payload = {
           studentId: entry.studentId,
-          teacherId: dto.teacherId ?? null,
+          teacherId: currentTeacherId ?? dto.teacherId ?? null,
           classId: dto.classId,
           moduleId: context.resolvedModuleId,
           elementModuleId: context.resolvedElementModuleId,
@@ -558,6 +641,8 @@ export class GradesService {
           score: entry.score,
           maxScore: dto.maxScore ?? 20,
           academicYear: normalizedAcademicYear,
+          publicationStatus: nextStatus,
+          lockedAt: null,
           comment: this.normalizeNullableString(entry.comment),
         };
 
@@ -709,6 +794,7 @@ export class GradesService {
     classId: number,
     academicYear?: string,
     semester?: string,
+    publicationStatus?: string,
   ) {
     const [academicClass, moduleAssignments, students, grades] =
       await Promise.all([
@@ -737,7 +823,6 @@ export class GradesService {
                     type: true,
                     volumeHoraire: true,
                     ponderation: true,
-                    coefficient: true,
                   },
                   orderBy: { name: 'asc' },
                 },
@@ -761,6 +846,7 @@ export class GradesService {
             classId,
             ...(academicYear ? { academicYear } : {}),
             ...(semester ? { semester } : {}),
+            ...(publicationStatus ? { publicationStatus } : {}),
           },
           select: {
             studentId: true,
@@ -771,6 +857,9 @@ export class GradesService {
             assessmentType: true,
             academicYear: true,
             semester: true,
+            publicationStatus: true,
+            publishedAt: true,
+            lockedAt: true,
           },
         }),
       ]);
@@ -801,6 +890,9 @@ export class GradesService {
           score: grade.score,
           maxScore: grade.maxScore,
           assessmentType: grade.assessmentType,
+          publicationStatus: grade.publicationStatus as GradePublicationStatus,
+          publishedAt: grade.publishedAt,
+          lockedAt: grade.lockedAt,
         });
       }
     }
@@ -829,7 +921,7 @@ export class GradesService {
           for (const el of mod.elements) {
             const grade = studentGradeMap.get(el.id);
             if (!grade) continue;
-            const weight = el.ponderation * el.coefficient;
+            const weight = el.ponderation;
             if (weight <= 0) continue;
             weightedSum += (grade.score / grade.maxScore) * 20 * weight;
             totalWeight += weight;
@@ -880,7 +972,66 @@ export class GradesService {
       students: studentsWithGrades,
       academicYear: academicYear ?? null,
       semester: semester ?? null,
+      publicationSummary: this.summarizePublication(grades),
     };
+  }
+
+  async publish(dto: PublishGradesDto, currentUser?: JwtPayload) {
+    const where = await this.gradeScopeWhere(dto, currentUser);
+    const now = new Date();
+    const result = await this.prisma.studentGrade.updateMany({
+      where,
+      data: {
+        publicationStatus: 'published',
+        publishedAt: now,
+        lockedAt: now,
+      },
+    });
+    this.invalidateGradeCaches();
+    return { published: result.count };
+  }
+
+  async reopen(dto: PublishGradesDto, currentUser?: JwtPayload) {
+    if (
+      currentUser?.role !== UserRole.ADMIN &&
+      currentUser?.role !== UserRole.INSPECTOR
+    ) {
+      throw new ForbiddenException(
+        'Only an administrator or inspector can reopen published notes.',
+      );
+    }
+    const where = await this.gradeScopeWhere(dto, currentUser);
+    const result = await this.prisma.studentGrade.updateMany({
+      where,
+      data: {
+        lockedAt: null,
+        reopenedAt: new Date(),
+      },
+    });
+    this.invalidateGradeCaches();
+    return { reopened: result.count };
+  }
+
+  async unpublish(dto: PublishGradesDto, currentUser?: JwtPayload) {
+    if (
+      currentUser?.role !== UserRole.ADMIN &&
+      currentUser?.role !== UserRole.INSPECTOR
+    ) {
+      throw new ForbiddenException(
+        'Only an administrator or inspector can hide published notes.',
+      );
+    }
+    const where = await this.gradeScopeWhere(dto, currentUser);
+    const result = await this.prisma.studentGrade.updateMany({
+      where,
+      data: {
+        publicationStatus: 'draft',
+        lockedAt: null,
+        reopenedAt: new Date(),
+      },
+    });
+    this.invalidateGradeCaches();
+    return { unpublished: result.count };
   }
 
   async remove(id: number, currentUser?: JwtPayload) {
@@ -912,6 +1063,11 @@ export class GradesService {
     if (!existing) {
       throw new NotFoundException(`Grade ${id} not found`);
     }
+    if (existing.lockedAt) {
+      throw new ForbiddenException(
+        'Cette note est publiée et verrouillée. Un administrateur doit la rouvrir avant suppression.',
+      );
+    }
 
     const departmentId =
       existing.academicClass?.filiere?.departmentId ??
@@ -921,6 +1077,14 @@ export class GradesService {
       existing.student.filiere?.departmentId;
 
     this.ensureCanManageDepartment(departmentId, currentUser);
+    if (currentUser?.role === UserRole.TEACHER) {
+      const teacherId = await this.getCurrentTeacherId(currentUser);
+      if (!teacherId || existing.teacherId !== teacherId) {
+        throw new ForbiddenException(
+          'Vous pouvez supprimer uniquement les notes des cours que vous enseignez.',
+        );
+      }
+    }
 
     const deleted = await this.prisma.studentGrade.delete({ where: { id } });
     this.invalidateGradeCaches(existing.studentId);
@@ -1191,6 +1355,163 @@ export class GradesService {
         'You can only manage grades in your own department',
       );
     }
+  }
+
+  private async getCurrentTeacherId(currentUser?: JwtPayload) {
+    if (currentUser?.role !== UserRole.TEACHER) return null;
+    const teacher = await this.prisma.teacher.findUnique({
+      where: { userId: currentUser.sub },
+      select: { id: true },
+    });
+    if (!teacher) {
+      throw new ForbiddenException('Aucun profil enseignant lié à ce compte.');
+    }
+    return teacher.id;
+  }
+
+  private async teacherGradeScopeWhere(
+    currentUser: JwtPayload,
+  ): Promise<Prisma.StudentGradeWhereInput> {
+    const teacherId = await this.getCurrentTeacherId(currentUser);
+    const assignments = await this.prisma.coursClass.findMany({
+      where: { teacherId },
+      select: {
+        classId: true,
+        cours: {
+          select: {
+            elementModuleId: true,
+            elementModule: { select: { moduleId: true } },
+          },
+        },
+      },
+    });
+
+    if (assignments.length === 0) {
+      return { id: -1 };
+    }
+
+    return {
+      OR: [
+        { teacherId },
+        ...assignments.map((assignment) => ({
+          classId: assignment.classId,
+          ...(assignment.cours.elementModuleId
+            ? { elementModuleId: assignment.cours.elementModuleId }
+            : {}),
+          ...(assignment.cours.elementModule?.moduleId
+            ? { moduleId: assignment.cours.elementModule.moduleId }
+            : {}),
+        })),
+      ],
+    };
+  }
+
+  private async ensureTeacherCanEditGrade(
+    context: GradeContext,
+    currentUser?: JwtPayload,
+  ) {
+    if (currentUser?.role !== UserRole.TEACHER) return;
+    const teacherId = await this.getCurrentTeacherId(currentUser);
+    if (!context.resolvedClassId) {
+      throw new BadRequestException('La classe est obligatoire pour un enseignant.');
+    }
+
+    const assignment = await this.prisma.coursClass.findFirst({
+      where: {
+        teacherId,
+        classId: context.resolvedClassId,
+        ...(context.resolvedElementModuleId || context.resolvedModuleId
+          ? {
+              cours: {
+                ...(context.resolvedElementModuleId
+                  ? { elementModuleId: context.resolvedElementModuleId }
+                  : {}),
+                ...(context.resolvedModuleId
+                  ? {
+                      elementModule: {
+                        moduleId: context.resolvedModuleId,
+                      },
+                    }
+                  : {}),
+              },
+            }
+          : {}),
+      },
+      select: { id: true },
+    });
+
+    if (!assignment) {
+      throw new ForbiddenException(
+        'Vous pouvez saisir les notes uniquement pour les cours que vous enseignez.',
+      );
+    }
+  }
+
+  private ensureValidScores(
+    grades: Array<{ studentId: number; score: number }>,
+    maxScore: number,
+  ) {
+    if (!Number.isFinite(maxScore) || maxScore <= 0 || maxScore > 20) {
+      throw new BadRequestException('Le barème doit être compris entre 1 et 20.');
+    }
+    const invalid = grades.find(
+      (grade) =>
+        !Number.isFinite(grade.score) ||
+        grade.score < 0 ||
+        grade.score > maxScore,
+    );
+    if (invalid) {
+      throw new BadRequestException(
+        `La note de l'étudiant ${invalid.studentId} doit être comprise entre 0 et ${maxScore}.`,
+      );
+    }
+  }
+
+  private summarizePublication(
+    grades: Array<{ publicationStatus: string; lockedAt: Date | null }>,
+  ) {
+    const summary = {
+      draft: 0,
+      published: 0,
+      modified_after_publication: 0,
+      locked: 0,
+      total: grades.length,
+    };
+    for (const grade of grades) {
+      if (grade.publicationStatus === 'published') summary.published += 1;
+      else if (grade.publicationStatus === 'modified_after_publication') {
+        summary.modified_after_publication += 1;
+      } else summary.draft += 1;
+      if (grade.lockedAt) summary.locked += 1;
+    }
+    return summary;
+  }
+
+  private async gradeScopeWhere(
+    dto: PublishGradesDto,
+    currentUser?: JwtPayload,
+  ): Promise<Prisma.StudentGradeWhereInput> {
+    const context = await this.resolveContext({
+      classId: dto.classId,
+      moduleId: dto.moduleId,
+      elementModuleId: dto.elementModuleId,
+      currentUser,
+    });
+    const academicYear = dto.academicYear.trim();
+    if (!academicYear) {
+      throw new BadRequestException('Choisissez une année académique.');
+    }
+    return {
+      classId: dto.classId,
+      academicYear,
+      ...(dto.moduleId ? { moduleId: context.resolvedModuleId } : {}),
+      ...(dto.elementModuleId
+        ? { elementModuleId: context.resolvedElementModuleId }
+        : {}),
+      ...(dto.semester
+        ? { semester: this.normalizeNullableString(dto.semester) }
+        : {}),
+    };
   }
 
   private async ensureTeacherExists(id: number) {

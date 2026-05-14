@@ -1,0 +1,19 @@
+{
+  "peakUsers": 3000,
+  "usersPerActiveRequest": 20,
+  "activeConcurrency": 150,
+  "apiProjection": {
+    "activeConcurrency": 150,
+    "p50": 115,
+    "p95": 9663,
+    "rps": 50.35,
+    "status": "critical"
+  },
+  "frontendProjection": {
+    "activeConcurrency": 150,
+    "p50": 3918,
+    "p95": 5264,
+    "rps": 41.89,
+    "status": "critical"
+  }
+}

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<stressTest generatedAt="2026-05-13T11:07:55.416Z" apiBaseUrl="http://127.0.0.1:5000/api" frontendBaseUrl="http://127.0.0.1:3000" graph="stress-results.svg">
+  <configuration stages="5,10,25,50" durationSeconds="12" timeoutMs="15000" />
+  <results>
+    <stage concurrency="5" durationSeconds="12">
+      <target name="api-authenticated-get" requests="4592" ok="4592" failed="0" errorRate="0" rps="382.27" p50Ms="12" p95Ms="20" p99Ms="26" maxMs="411">
+        <status code="200" count="4592" />
+      </target>
+      <target name="frontend-pages" requests="13411" ok="13411" failed="0" errorRate="0" rps="1117.29" p50Ms="4" p95Ms="8" p99Ms="14" maxMs="43">
+        <status code="200" count="13411" />
+      </target>
+    </stage>
+    <stage concurrency="10" durationSeconds="12">
+      <target name="api-authenticated-get" requests="4572" ok="4572" failed="0" errorRate="0" rps="380.3" p50Ms="25" p95Ms="42" p99Ms="54" maxMs="103">
+        <status code="200" count="4572" />
+      </target>
+      <target name="frontend-pages" requests="17659" ok="17659" failed="0" errorRate="0" rps="1471.29" p50Ms="6" p95Ms="10" p99Ms="15" maxMs="22">
+        <status code="200" count="17659" />
+      </target>
+    </stage>
+    <stage concurrency="25" durationSeconds="12">
+      <target name="api-authenticated-get" requests="5560" ok="5560" failed="0" errorRate="0" rps="461.56" p50Ms="54" p95Ms="75" p99Ms="89" maxMs="111">
+        <status code="200" count="5560" />
+      </target>
+      <target name="frontend-pages" requests="17559" ok="17559" failed="0" errorRate="0" rps="1461.56" p50Ms="15" p95Ms="29" p99Ms="42" maxMs="87">
+        <status code="200" count="17559" />
+      </target>
+    </stage>
+    <stage concurrency="50" durationSeconds="12">
+      <target name="api-authenticated-get" requests="6019" ok="6019" failed="0" errorRate="0" rps="498.61" p50Ms="99" p95Ms="133" p99Ms="156" maxMs="195">
+        <status code="200" count="6019" />
+      </target>
+      <target name="frontend-pages" requests="18508" ok="18508" failed="0" errorRate="0" rps="1537.77" p50Ms="30" p95Ms="47" p99Ms="54" maxMs="66">
+        <status code="200" count="18508" />
+      </target>
+    </stage>
+  </results>
+</stressTest>

@@ -8,12 +8,17 @@ import {
   FileText,
   GraduationCap,
   Layers,
+  Lock,
+  Send,
   Save,
   Upload,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
+import {
+  AcademicYearSelect,
+  sortAcademicYearsCurrentFirst,
+} from '@/components/academic/academic-year-select';
+import { SemesterSelect } from '@/components/academic/semester-select';
 import { MetricCard } from '@/components/admin/metric-card';
 import { PageHeader } from '@/components/admin/page-header';
 import { useAuth } from '@/features/auth/auth-context';
@@ -24,10 +29,12 @@ import {
   PaginatedResponse,
 } from '@/services/api';
 import { toast } from 'sonner';
+import { StudentReleve } from '@/components/grades/student-releve';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type AcademicYear = { id: number; label: string; isCurrent: boolean };
+type PublicationStatus = 'draft' | 'published' | 'modified_after_publication';
 type Department = { id: number; name: string };
 type Filiere = { id: number; name: string; departmentId: number };
 type AcademicOption = { id: number; name: string; filiereId: number };
@@ -36,6 +43,7 @@ type AcademicClass = {
   id: number;
   name: string;
   year: number;
+  academicYear?: string | null;
   filiereId?: number | null;
   optionId?: number | null;
   filiere?: {
@@ -75,6 +83,9 @@ type GradeRow = {
   id: number;
   score: number;
   comment?: string | null;
+  publicationStatus?: PublicationStatus;
+  publishedAt?: string | null;
+  lockedAt?: string | null;
   student: { id: number };
 };
 
@@ -82,6 +93,8 @@ type GradeInput = {
   id?: number;
   score: string;
   comment: string;
+  publicationStatus?: PublicationStatus;
+  lockedAt?: string | null;
 };
 
 type StudentGradeView = {
@@ -91,11 +104,35 @@ type StudentGradeView = {
   academicYear: string;
   semester?: string | null;
   comment?: string | null;
+  publicationStatus?: PublicationStatus;
+  publishedAt?: string | null;
   module?: { id: number; name: string; semestre?: string | null } | null;
   elementModule?: { id: number; name: string; type: 'CM' | 'TD' | 'TP' } | null;
   teacher?: { id: number; firstName: string; lastName: string } | null;
   academicClass?: { id: number; name: string; year: number } | null;
 };
+
+const publicationLabels: Record<PublicationStatus, string> = {
+  draft: 'Brouillon',
+  published: 'Publié',
+  modified_after_publication: 'Modifié après publication',
+};
+
+function publicationChip(status?: PublicationStatus, lockedAt?: string | null) {
+  const normalized = status ?? 'draft';
+  const color =
+    normalized === 'published'
+      ? 'status-chip status-chip--ok'
+      : normalized === 'modified_after_publication'
+        ? 'status-chip status-chip--warning'
+        : 'status-chip status-chip--muted';
+  return (
+    <span className={color}>
+      {publicationLabels[normalized]}
+      {lockedAt ? ' · verrouillé' : ''}
+    </span>
+  );
+}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -103,12 +140,12 @@ export default function EpreuvesPage() {
   const { user } = useAuth();
   const isStudent = user?.role === 'student';
   const canEdit = !isStudent && user?.role !== 'viewer';
+  const canManagePublication = user?.role === 'admin' || user?.role === 'inspector';
   const restrictedToOwnDepartments =
     user?.role === 'user' || user?.role === 'viewer';
   const [myGrades, setMyGrades] = useState<StudentGradeView[]>([]);
   const [currentAcademicYear, setCurrentAcademicYear] = useState<string | null>(null);
   const [gradeHistory, setGradeHistory] = useState<Array<{ year: string; grades: StudentGradeView[] }>>([]);
-  const [openHistoryYears, setOpenHistoryYears] = useState<string[]>([]);
   const [myStudent, setMyStudent] = useState<{
     id: number;
     fullName: string;
@@ -146,6 +183,10 @@ export default function EpreuvesPage() {
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [loadingGrades, setLoadingGrades] = useState(false);
   const [savingGrades, setSavingGrades] = useState(false);
+  const [publishingGrades, setPublishingGrades] = useState(false);
+  const [unpublishingGrades, setUnpublishingGrades] = useState(false);
+  const [reopeningGrades, setReopeningGrades] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [importingGrades, setImportingGrades] = useState(false);
   const [exportingReleve, setExportingReleve] = useState(false);
 
@@ -177,9 +218,10 @@ export default function EpreuvesPage() {
       if (departmentId && String(cDeptId ?? '') !== departmentId) return false;
       if (filiereId && String(c.filiereId ?? '') !== filiereId) return false;
       if (optionId && String(c.optionId ?? '') !== optionId) return false;
+      if (academicYear && c.academicYear && c.academicYear !== academicYear) return false;
       return true;
     });
-  }, [classes, departmentId, filiereId, optionId]);
+  }, [academicYear, classes, departmentId, filiereId, optionId]);
 
   const selectedClass = useMemo(
     () => visibleClasses.find((c) => String(c.id) === classId) ?? null,
@@ -213,20 +255,24 @@ export default function EpreuvesPage() {
     [gradeInputs],
   );
 
-  const groupedStudentGrades = useMemo(() => {
-    return myGrades.reduce<Record<string, StudentGradeView[]>>((acc, grade) => {
-      const key = [grade.academicYear, grade.semester].filter(Boolean).join(' · ');
-      const bucket = key || 'Résultats';
-      acc[bucket] = acc[bucket] ?? [];
-      acc[bucket].push(grade);
-      return acc;
-    }, {});
-  }, [myGrades]);
+  const publicationCounts = useMemo(() => {
+    return Object.values(gradeInputs).reduce(
+      (acc, item) => {
+        const status = item.publicationStatus ?? 'draft';
+        acc[status] += item.score.trim() ? 1 : 0;
+        if (item.lockedAt) acc.locked += 1;
+        return acc;
+      },
+      { draft: 0, published: 0, modified_after_publication: 0, locked: 0 },
+    );
+  }, [gradeInputs]);
+
+  const notesLocked = publicationCounts.locked > 0;
 
   const simpleAverage = useMemo(
     () =>
       myGrades.length
-        ? `${(myGrades.reduce((sum, item) => sum + (item.score / item.maxScore) * 20, 0) / myGrades.length).toFixed(2)}/20`
+        ? `${(myGrades.reduce((sum, item) => sum + (item.score / item.maxScore) * 20, 0) / myGrades.length).toFixed(2)}`
         : '-',
     [myGrades],
   );
@@ -253,7 +299,7 @@ export default function EpreuvesPage() {
             '/classes?page=1&limit=500&sortBy=name&sortOrder=asc',
           ),
         ]);
-        const years: AcademicYear[] = Array.isArray(yearsRes) ? yearsRes : [];
+        const years: AcademicYear[] = sortAcademicYearsCurrentFirst(Array.isArray(yearsRes) ? yearsRes : []);
         setAcademicYears(years);
         // Auto-select current year
         const current = years.find((y) => y.isCurrent) ?? years[0];
@@ -272,6 +318,17 @@ export default function EpreuvesPage() {
   }, [isStudent]);
 
   useEffect(() => {
+    setClassId('');
+    setModuleId('');
+    setElementModuleId('');
+    setSemester('');
+    setStudents([]);
+    setModules([]);
+    setElementModules([]);
+    setGradeInputs({});
+  }, [academicYear]);
+
+  useEffect(() => {
     if (!isStudent) return;
     const loadMine = async () => {
       try {
@@ -286,7 +343,6 @@ export default function EpreuvesPage() {
         setCurrentAcademicYear(res.data.currentAcademicYear);
         setMyGrades(res.data.currentGrades ?? []);
         setGradeHistory(res.data.historyByYear ?? []);
-        setOpenHistoryYears([]);
       } catch (error) {
         toast.error(getApiErrorMessage(error, 'Impossible de charger vos notes.'));
       } finally {
@@ -433,6 +489,8 @@ export default function EpreuvesPage() {
               id: existing?.id,
               score: existing ? String(existing.score) : '',
               comment: existing?.comment ?? '',
+              publicationStatus: existing?.publicationStatus ?? 'draft',
+              lockedAt: existing?.lockedAt ?? null,
             };
             return acc;
           }, {}),
@@ -480,6 +538,10 @@ export default function EpreuvesPage() {
       toast.error('Chaque note doit être un nombre valide.');
       return;
     }
+    if (grades.some((g) => g.score < 0 || g.score > 20)) {
+      toast.error('Chaque note doit être comprise entre 0 et 20.');
+      return;
+    }
 
     try {
       setSavingGrades(true);
@@ -496,10 +558,112 @@ export default function EpreuvesPage() {
       toast.success(
         `${data.total} note(s) enregistrée(s) (${data.created} créée(s), ${data.updated} mise(s) à jour)`,
       );
+      setLastSavedAt(new Date());
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Échec de l\'enregistrement des notes.'));
     } finally {
       setSavingGrades(false);
+    }
+  };
+
+  const publishGrades = async () => {
+    if (!selectedClass || !selectedModule || !selectedElementModule || !academicYear.trim()) {
+      toast.error('Choisissez la classe, le module, l’élément et l’année académique.');
+      return;
+    }
+    if (enteredGradesCount === 0) {
+      toast.error('Enregistrez au moins une note avant publication.');
+      return;
+    }
+    try {
+      setPublishingGrades(true);
+      const res = await api.post('/grades/publish', {
+        classId: selectedClass.id,
+        moduleId: selectedModule.id,
+        elementModuleId: selectedElementModule.id,
+        academicYear: academicYear.trim(),
+        semester: semester.trim() || undefined,
+      });
+      const data = res.data as { published: number };
+      setGradeInputs((cur) =>
+        Object.fromEntries(
+          Object.entries(cur).map(([studentId, entry]) => [
+            studentId,
+            entry.score.trim()
+              ? { ...entry, publicationStatus: 'published', lockedAt: new Date().toISOString() }
+              : entry,
+          ]),
+        ),
+      );
+      toast.success(`${data.published} note(s) publiée(s).`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Échec de la publication des notes.'));
+    } finally {
+      setPublishingGrades(false);
+    }
+  };
+
+  const reopenGrades = async () => {
+    if (!selectedClass || !academicYear.trim()) {
+      toast.error('Choisissez la classe et l’année académique.');
+      return;
+    }
+    try {
+      setReopeningGrades(true);
+      const res = await api.post('/grades/reopen', {
+        classId: selectedClass.id,
+        moduleId: selectedModule?.id,
+        elementModuleId: selectedElementModule?.id,
+        academicYear: academicYear.trim(),
+        semester: semester.trim() || undefined,
+      });
+      const data = res.data as { reopened: number };
+      setGradeInputs((cur) =>
+        Object.fromEntries(
+          Object.entries(cur).map(([studentId, entry]) => [
+            studentId,
+            { ...entry, lockedAt: null },
+          ]),
+        ),
+      );
+      toast.success(`${data.reopened} note(s) rouverte(s).`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Échec de la réouverture des notes.'));
+    } finally {
+      setReopeningGrades(false);
+    }
+  };
+
+  const unpublishGrades = async () => {
+    if (!selectedClass || !selectedModule || !selectedElementModule || !academicYear.trim()) {
+      toast.error('Choisissez la classe, le module, l’élément et l’année académique.');
+      return;
+    }
+    try {
+      setUnpublishingGrades(true);
+      const res = await api.post('/grades/unpublish', {
+        classId: selectedClass.id,
+        moduleId: selectedModule.id,
+        elementModuleId: selectedElementModule.id,
+        academicYear: academicYear.trim(),
+        semester: semester.trim() || undefined,
+      });
+      const data = res.data as { unpublished: number };
+      setGradeInputs((cur) =>
+        Object.fromEntries(
+          Object.entries(cur).map(([studentId, entry]) => [
+            studentId,
+            entry.score.trim()
+              ? { ...entry, publicationStatus: 'draft', lockedAt: null }
+              : entry,
+          ]),
+        ),
+      );
+      toast.success(`${data.unpublished} note(s) masquée(s). Les notes restent enregistrées.`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Échec du retrait de publication.'));
+    } finally {
+      setUnpublishingGrades(false);
     }
   };
 
@@ -637,6 +801,8 @@ export default function EpreuvesPage() {
             id: existing?.id,
             score: existing ? String(existing.score) : '',
             comment: existing?.comment ?? '',
+            publicationStatus: existing?.publicationStatus ?? 'draft',
+            lockedAt: existing?.lockedAt ?? null,
           };
           return acc;
         }, {}),
@@ -674,38 +840,8 @@ export default function EpreuvesPage() {
           ) : myGrades.length === 0 ? (
             <EmptyState title="Aucune note disponible" description={currentAcademicYear ? `Aucune note publiée pour ${currentAcademicYear}.` : 'Aucune note publiée pour l’année courante.'} />
           ) : (
-            <section className="space-y-4">
-              {Object.entries(groupedStudentGrades).map(([group, rows]) => (
-                <div key={group} className="surface-card space-y-4">
-                  <div className="panel-header">
-                    <div>
-                      <h2 className="panel-title">{group}</h2>
-                      <p className="panel-copy">Historique des notes du compte connecté.</p>
-                    </div>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {rows.map((grade) => (
-                      <article key={grade.id} className="rounded-[1.6rem] border border-slate-200 bg-white p-4 shadow-sm">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{grade.module?.name ?? 'Module'}</p>
-                        <h3 className="mt-2 text-lg font-semibold text-slate-950">{grade.elementModule?.name ?? 'Élément'}</h3>
-                        <p className="mt-1 text-sm text-slate-500">{grade.academicClass ? `${grade.academicClass.name} · Année ${grade.academicClass.year}` : 'Classe actuelle'}</p>
-                        <div className="mt-4 flex items-end justify-between">
-                          <div>
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Note</p>
-                            <p className="mt-1 text-3xl font-semibold text-slate-950">{grade.score}<span className="text-base text-slate-400">/{grade.maxScore}</span></p>
-                          </div>
-                          <span className="status-chip status-chip--ok">{(((grade.score / grade.maxScore) * 20)).toFixed(2)}/20</span>
-                        </div>
-                        <div className="mt-4 space-y-1 text-sm text-slate-600">
-                          <p>{grade.elementModule?.type ?? '-'}{grade.semester ? ` · ${grade.semester}` : ''}</p>
-                          <p>{grade.teacher ? `${grade.teacher.firstName} ${grade.teacher.lastName}` : 'Enseignant non renseigné'}</p>
-                          {grade.comment ? <p className="rounded-2xl bg-slate-50 px-3 py-2 text-slate-700">{grade.comment}</p> : null}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </div>
-              ))}
+            <section className="surface-card">
+              <StudentReleve student={myStudent} grades={myGrades} />
             </section>
           )}
 
@@ -714,48 +850,13 @@ export default function EpreuvesPage() {
               <div className="panel-header">
                 <div>
                   <h2 className="panel-title">Historique des années</h2>
-                  <p className="panel-copy">Les années précédentes restent disponibles à la demande.</p>
+                  <p className="panel-copy">Les années précédentes utilisent le même format de relevé.</p>
                 </div>
               </div>
-              <div className="space-y-3">
-                {gradeHistory.map((entry) => {
-                  const isOpen = openHistoryYears.includes(entry.year);
-                  return (
-                    <div key={entry.year} className="rounded-[1.5rem] border border-slate-200 bg-white">
-                      <button
-                        type="button"
-                        className="flex w-full items-center justify-between px-4 py-3 text-left"
-                        onClick={() =>
-                          setOpenHistoryYears((current) =>
-                            isOpen ? current.filter((year) => year !== entry.year) : [...current, entry.year],
-                          )
-                        }
-                      >
-                        <div>
-                          <p className="font-semibold text-slate-900">{entry.year}</p>
-                          <p className="text-sm text-slate-500">{entry.grades.length} note(s)</p>
-                        </div>
-                        {isOpen ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
-                      </button>
-                      {isOpen && (
-                        <div className="grid gap-3 border-t border-slate-100 p-4 md:grid-cols-2 xl:grid-cols-3">
-                          {entry.grades.map((grade) => (
-                            <article key={grade.id} className="rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4">
-                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{grade.module?.name ?? 'Module'}</p>
-                              <h3 className="mt-2 text-base font-semibold text-slate-950">{grade.elementModule?.name ?? 'Élément'}</h3>
-                              <p className="mt-1 text-sm text-slate-500">{grade.academicClass ? `${grade.academicClass.name} · Année ${grade.academicClass.year}` : 'Classe'}</p>
-                              <div className="mt-4 flex items-end justify-between">
-                                <p className="text-2xl font-semibold text-slate-950">{grade.score}<span className="text-sm text-slate-400">/{grade.maxScore}</span></p>
-                                <span className="status-chip status-chip--muted">{((grade.score / grade.maxScore) * 20).toFixed(2)}/20</span>
-                              </div>
-                            </article>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <StudentReleve
+                student={myStudent}
+                grades={gradeHistory.flatMap((entry) => entry.grades)}
+              />
             </section>
           )}
         </>
@@ -768,6 +869,12 @@ export default function EpreuvesPage() {
         <MetricCard label="Modules" value={filteredModules.length} hint="Dans la classe / semestre choisi" icon={BookOpen} />
         <MetricCard label="Éléments" value={elementModules.length} hint="Dans le module choisi" icon={Layers} />
         <MetricCard label="Notes remplies" value={enteredGradesCount} hint="Prêtes à être enregistrées" icon={FileSpreadsheet} />
+      </section>
+      <section className="grid gap-3 md:grid-cols-4">
+        <MetricCard label="Brouillon" value={publicationCounts.draft} hint="Non visible côté étudiant" icon={FileText} />
+        <MetricCard label="Publié" value={publicationCounts.published} hint="Visible dans le portail étudiant" icon={Send} />
+        <MetricCard label="Modifié" value={publicationCounts.modified_after_publication} hint="À republier après contrôle" icon={Save} />
+        <MetricCard label="Verrouillé" value={publicationCounts.locked} hint="Lecture seule après publication" icon={Lock} />
       </section>
 
       {/* Academic path */}
@@ -786,21 +893,12 @@ export default function EpreuvesPage() {
         ) : (
           <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-7">
             {/* Année académique */}
-            <div className="field-stack">
-              <label className="field-label">Année académique</label>
-              <select
-                className="input"
-                value={academicYear}
-                onChange={(e) => setAcademicYear(e.target.value)}
-              >
-                <option value="">Choisir</option>
-                {academicYears.map((y) => (
-                  <option key={y.id} value={y.label}>
-                    {y.label}{y.isCurrent ? ' ★' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <AcademicYearSelect
+              value={academicYear}
+              years={academicYears}
+              onChange={setAcademicYear}
+              required
+            />
 
             <div className="field-stack">
               <label className="field-label">Département</label>
@@ -837,20 +935,12 @@ export default function EpreuvesPage() {
               </select>
             </div>
 
-            <div className="field-stack">
-              <label className="field-label">Semestre</label>
-              <select
-                className="input"
-                value={semester}
-                onChange={(e) => setSemester(e.target.value)}
-                disabled={!classId || loadingStudents}
-              >
-                <option value="">Tous</option>
-                {availableSemesters.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
+            <SemesterSelect
+              value={semester}
+              onChange={setSemester}
+              emptyLabel="Tous"
+              disabled={!classId || loadingStudents}
+            />
 
             <div className="field-stack">
               <label className="field-label">Module</label>
@@ -880,7 +970,7 @@ export default function EpreuvesPage() {
                 <option value="">Choisir</option>
                 {elementModules.map((e) => (
                   <option key={e.id} value={e.id}>
-                    {e.name} ({e.type}) — Pond. {e.ponderation ?? 1} — coefficient {e.coefficient ?? 1}
+                    {e.name} ({e.type}) — Pond. {e.ponderation ?? 1}
                   </option>
                 ))}
               </select>
@@ -895,7 +985,14 @@ export default function EpreuvesPage() {
           <div>
             <h2 className="panel-title">Liste des étudiants</h2>
             <p className="panel-copy">
-              Saisissez la note par étudiant ou importez un fichier.
+              Saisissez la note par étudiant, enregistrez en brouillon, puis publiez quand le jury valide.
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {savingGrades
+                ? 'Enregistrement du brouillon...'
+                : lastSavedAt
+                  ? `Dernier enregistrement : ${lastSavedAt.toLocaleTimeString('fr-FR')}`
+                  : 'Brouillon non enregistré'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -932,11 +1029,42 @@ export default function EpreuvesPage() {
               className="btn-primary flex items-center gap-2"
               type="button"
               onClick={saveGrades}
-              disabled={!canEdit || savingGrades}
+              disabled={!canEdit || savingGrades || notesLocked}
             >
               <Save size={14} />
-              {savingGrades ? 'Enregistrement...' : 'Enregistrer les notes'}
+              {savingGrades ? 'Enregistrement...' : 'Enregistrer'}
             </button>
+            {canManagePublication && (
+              <>
+                <button
+                  className="btn-primary flex items-center gap-2"
+                  type="button"
+                  onClick={publishGrades}
+                  disabled={publishingGrades || enteredGradesCount === 0}
+                >
+                  <Send size={14} />
+                  {publishingGrades ? 'Publication...' : 'Publier'}
+                </button>
+                <button
+                  className="btn-outline flex items-center gap-2"
+                  type="button"
+                  onClick={unpublishGrades}
+                  disabled={unpublishingGrades || enteredGradesCount === 0}
+                >
+                  <Lock size={14} />
+                  {unpublishingGrades ? 'Masquage...' : 'Masquer'}
+                </button>
+                <button
+                  className="btn-outline flex items-center gap-2"
+                  type="button"
+                  onClick={reopenGrades}
+                  disabled={reopeningGrades || !notesLocked}
+                >
+                  <Lock size={14} />
+                  {reopeningGrades ? 'Réouverture...' : 'Rouvrir'}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -984,12 +1112,13 @@ export default function EpreuvesPage() {
           <div className="space-y-4">
             <div className="overflow-x-auto">
               <table className="table-base">
-                <thead>
+                <thead className="sticky top-0 z-10 bg-white">
                   <tr>
                     <th>Étudiant</th>
                     <th>Code Massar</th>
-                    <th>Note /20</th>
+                    <th>Note</th>
                     <th>Commentaire</th>
+                    <th>Publication</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1005,9 +1134,13 @@ export default function EpreuvesPage() {
                             value={entry.score}
                             onChange={(e) => updateGradeInput(student.id, 'score', e.target.value)}
                             inputMode="decimal"
-                            placeholder="/20"
-                            disabled={!canEdit}
+                            placeholder="0 à 20"
+                            tabIndex={0}
+                            disabled={!canEdit || Boolean(entry.lockedAt)}
                           />
+                          {entry.score.trim() && (Number(entry.score) < 0 || Number(entry.score) > 20 || Number.isNaN(Number(entry.score))) ? (
+                            <p className="mt-1 text-xs text-red-600">Valeur invalide</p>
+                          ) : null}
                         </td>
                         <td className="min-w-72">
                           <input
@@ -1015,9 +1148,11 @@ export default function EpreuvesPage() {
                             value={entry.comment}
                             onChange={(e) => updateGradeInput(student.id, 'comment', e.target.value)}
                             placeholder="Observation facultative"
-                            disabled={!canEdit}
+                            tabIndex={0}
+                            disabled={!canEdit || Boolean(entry.lockedAt)}
                           />
                         </td>
+                        <td>{publicationChip(entry.publicationStatus, entry.lockedAt)}</td>
                       </tr>
                     );
                   })}
@@ -1027,6 +1162,11 @@ export default function EpreuvesPage() {
             {!canEdit && (
               <p className="text-sm text-amber-700">
                 Votre rôle permet la consultation, mais pas la modification depuis cette interface.
+              </p>
+            )}
+            {notesLocked && (
+              <p className="text-sm text-amber-700">
+                Ces notes sont publiées et verrouillées. Un administrateur peut les rouvrir avant correction.
               </p>
             )}
           </div>

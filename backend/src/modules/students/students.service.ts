@@ -8,7 +8,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { TransferStudentsDto } from './dto/transfer-students.dto';
 import { ProgressStudentsDto } from './dto/progress-students.dto';
-import { GroupType, PrepaYear, Prisma, StudentCycle } from '@prisma/client';
+import { GroupType, PrepaYear, Prisma, Sex, StudentCycle } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { KeyedTtlCache } from '../../common/utils/keyed-ttl-cache';
@@ -84,6 +84,12 @@ export class StudentsService {
     search?: string,
     filiereId?: number,
     departmentIds?: number[],
+    options: {
+      departmentId?: number;
+      classId?: number;
+      gender?: Sex;
+      birthYear?: number;
+    } = {},
   ) {
     const filters: Prisma.StudentWhereInput[] = [];
     if (search) {
@@ -98,6 +104,17 @@ export class StudentsService {
       });
     }
     if (filiereId) filters.push({ filiereId });
+    if (options.classId) filters.push({ classId: options.classId });
+    if (options.gender) filters.push({ sex: options.gender });
+    if (options.departmentId) filters.push({ filiere: { departmentId: options.departmentId } });
+    if (options.birthYear) {
+      filters.push({
+        dateNaissance: {
+          gte: new Date(`${options.birthYear}-01-01T00:00:00.000Z`),
+          lte: new Date(`${options.birthYear}-12-31T23:59:59.999Z`),
+        },
+      });
+    }
     if (departmentIds !== undefined) {
       filters.push({ filiere: { departmentId: { in: departmentIds } } });
     }
@@ -111,6 +128,10 @@ export class StudentsService {
       search: search ?? null,
       filiereId: filiereId ?? null,
       departmentIds: departmentIds ?? null,
+      departmentId: options.departmentId ?? null,
+      classId: options.classId ?? null,
+      gender: options.gender ?? null,
+      birthYear: options.birthYear ?? null,
     });
 
     return this.listCache.getOrLoad(cacheKey, async () => {
@@ -132,6 +153,8 @@ export class StudentsService {
           limit: pagination.limit,
           total,
           totalPages: Math.ceil(total / pagination.limit),
+          hasNextPage: pagination.page * pagination.limit < total,
+          hasPreviousPage: pagination.page > 1,
         },
       };
     });

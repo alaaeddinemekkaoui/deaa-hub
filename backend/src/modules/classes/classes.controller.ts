@@ -34,7 +34,7 @@ export class ClassesController {
   constructor(private readonly classesService: ClassesService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   findAll(@Query() query: ClassQueryDto, @CurrentUser() user: JwtPayload) {
     return this.classesService.findAll(query, deptScope(user));
   }
@@ -53,25 +53,25 @@ export class ClassesController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.classesService.findOne(id);
   }
 
   @Get(':id/cours')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   findCours(@Param('id', ParseIntPipe) id: number) {
     return this.classesService.findCours(id);
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.INSPECTOR)
   create(@Body() dto: CreateClassDto, @CurrentUser() user: JwtPayload) {
     return this.classesService.create(dto, user);
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.INSPECTOR)
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateClassDto,
@@ -81,7 +81,7 @@ export class ClassesController {
   }
 
   @Post(':id/transfer')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.INSPECTOR)
   transfer(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: TransferClassDto,
@@ -91,7 +91,7 @@ export class ClassesController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.INSPECTOR)
   remove(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: JwtPayload,

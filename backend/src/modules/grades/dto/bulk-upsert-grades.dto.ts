@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -21,6 +22,7 @@ class BulkGradeEntryDto {
 
   @IsNumber()
   @Min(0)
+  @Max(20)
   score: number;
 
   @IsOptional()

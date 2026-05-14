@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<stressTest generatedAt="2026-05-13T10:41:15.060Z" apiBaseUrl="http://127.0.0.1:5000/api" frontendBaseUrl="http://127.0.0.1:3001" graph="stress-results.svg">
+  <configuration stages="5,10,15,25,50" durationSeconds="8" timeoutMs="10000" />
+  <results>
+    <stage concurrency="5" durationSeconds="8">
+      <target name="api-authenticated-get" requests="64" ok="64" failed="0" errorRate="0" rps="6.88" p50Ms="300" p95Ms="3063" p99Ms="5017" maxMs="5017">
+        <status code="200" count="64" />
+      </target>
+      <target name="frontend-pages" requests="276" ok="276" failed="0" errorRate="0" rps="34.44" p50Ms="141" p95Ms="208" p99Ms="240" maxMs="254">
+        <status code="200" count="276" />
+      </target>
+    </stage>
+    <stage concurrency="10" durationSeconds="8">
+      <target name="api-authenticated-get" requests="319" ok="319" failed="0" errorRate="0" rps="33.9" p50Ms="17" p95Ms="1324" p99Ms="1862" maxMs="2014">
+        <status code="200" count="319" />
+      </target>
+      <target name="frontend-pages" requests="264" ok="264" failed="0" errorRate="0" rps="32.76" p50Ms="301" p95Ms="397" p99Ms="435" maxMs="464">
+        <status code="200" count="264" />
+      </target>
+    </stage>
+    <stage concurrency="15" durationSeconds="8">
+      <target name="api-authenticated-get" requests="532" ok="532" failed="0" errorRate="0" rps="61.46" p50Ms="19" p95Ms="1040" p99Ms="1710" maxMs="2443">
+        <status code="200" count="532" />
+      </target>
+      <target name="frontend-pages" requests="251" ok="251" failed="0" errorRate="0" rps="30.39" p50Ms="453" p95Ms="894" p99Ms="1054" maxMs="1063">
+        <status code="200" count="251" />
+      </target>
+    </stage>
+    <stage concurrency="25" durationSeconds="8">
+      <target name="api-authenticated-get" requests="624" ok="624" failed="0" errorRate="0" rps="70.67" p50Ms="25" p95Ms="1303" p99Ms="1745" maxMs="2404">
+        <status code="200" count="624" />
+      </target>
+      <target name="frontend-pages" requests="289" ok="289" failed="0" errorRate="0" rps="35.44" p50Ms="718" p95Ms="849" p99Ms="880" maxMs="908">
+        <status code="200" count="289" />
+      </target>
+    </stage>
+    <stage concurrency="50" durationSeconds="8">
+      <target name="api-authenticated-get" requests="512" ok="512" failed="0" errorRate="0" rps="50.35" p50Ms="43" p95Ms="2975" p99Ms="3705" maxMs="4507">
+        <status code="200" count="512" />
+      </target>
+      <target name="frontend-pages" requests="300" ok="300" failed="0" errorRate="0" rps="36.73" p50Ms="1358" p95Ms="1732" p99Ms="1836" maxMs="1940">
+        <status code="200" count="300" />
+      </target>
+    </stage>
+  </results>
+</stressTest>

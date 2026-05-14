@@ -54,14 +54,14 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
       />
       <aside
         className={cn(
-          'text-slate-900 transition-all duration-300 ease-in-out md:sticky md:top-[94px] md:h-[calc(100vh-94px)] md:self-start',
+          'text-slate-900 transition-all duration-300 ease-in-out md:sticky md:top-[94px] md:h-[calc(100vh-106px)] md:self-start',
           open
-            ? 'fixed inset-x-3 top-[88px] z-40 max-h-[calc(100vh-104px)] overflow-y-auto p-0 opacity-100 md:static md:w-[260px] md:max-h-screen md:overflow-visible md:p-4'
+            ? 'fixed inset-x-3 top-[88px] z-40 max-h-[calc(100vh-104px)] overflow-y-auto p-0 opacity-100 md:static md:w-[260px] md:max-h-none md:overflow-hidden md:p-0'
             : 'pointer-events-none fixed inset-x-3 top-[82px] z-40 max-h-0 -translate-y-3 overflow-hidden opacity-0 md:static md:w-0 md:max-h-screen md:translate-y-0',
         )}
         aria-hidden={!open}
       >
-        <div className="space-y-4 rounded-[1.6rem] border border-slate-200/80 bg-white/92 p-3 shadow-[0_24px_70px_-46px_rgba(15,36,26,0.28)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/78 md:min-h-full md:w-[228px] md:bg-white/72 md:supports-[backdrop-filter]:bg-white/58">
+        <div className="flex max-h-[inherit] flex-col space-y-4 rounded-[1.6rem] border border-slate-200/80 bg-white/92 p-3 shadow-[0_24px_70px_-46px_rgba(15,36,26,0.28)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/78 md:h-full md:w-[228px] md:bg-white/72 md:supports-[backdrop-filter]:bg-white/58">
         {/* Department badge for regular users */}
         {(['user', 'teacher', 'student', 'inspector'] as const).includes(role as 'user' | 'teacher' | 'student' | 'inspector') && user?.departments && user.departments.length > 0 && (
           <div className="mx-1 rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2.5">
@@ -80,7 +80,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
         <div className="border-t border-slate-200/80" />
 
         {/* Navigation groups */}
-        <nav className="grid gap-1">
+        <nav className="grid min-h-0 flex-1 gap-1 overflow-y-auto pr-1">
           {visibleGroups.map((group) => {
             const isOpen = effectiveOpenGroups.has(group.heading);
             return (
@@ -117,6 +117,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
                         <Link
                           key={`${group.heading}-${label}`}
                           href={href}
+                          prefetch={false}
                           onClick={onClose}
                           className={cn('sidebar-link', active && 'active')}
                         >

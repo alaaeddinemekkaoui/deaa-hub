@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 export class GradeQueryDto extends PaginationDto {
@@ -65,4 +65,8 @@ export class GradeQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   assessmentType?: string;
+
+  @IsOptional()
+  @IsIn(['draft', 'published', 'modified_after_publication'])
+  publicationStatus?: string;
 }

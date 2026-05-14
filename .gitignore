@@ -13,3 +13,5 @@ backend/.env
 backend/api/**/*.js
 backend/api/**/*.js.map
 backend/api/**/*.d.ts
+
+.vercel

@@ -8,6 +8,7 @@ import {
   Min,
 } from 'class-validator';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
+import { Sex } from '@prisma/client';
 
 export class TeacherQueryDto extends PaginationDto {
   @IsOptional()
@@ -41,6 +42,10 @@ export class TeacherQueryDto extends PaginationDto {
   @IsInt()
   @Min(1)
   gradeId?: number;
+
+  @IsOptional()
+  @IsIn([Sex.male, Sex.female])
+  sex?: Sex;
 
   @IsOptional()
   @IsIn(['lastName', 'createdAt', 'updatedAt'])

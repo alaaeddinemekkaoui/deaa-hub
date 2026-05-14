@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { api, getApiErrorMessage } from '@/services/api';
+import { api, fetchRef, getApiErrorMessage } from '@/services/api';
 import { PageHeader } from '@/components/admin/page-header';
+import { useAuth } from '@/features/auth/auth-context';
 import { toast } from 'sonner';
 
 type TeacherProfile = {
@@ -35,7 +36,14 @@ type DocumentItem = {
   id: number;
   name: string;
   mimeType: string;
+  category?: string | null;
   createdAt: string;
+};
+
+type ProfileDocumentType = {
+  id: number;
+  name: string;
+  description?: string | null;
 };
 
 const TYPE_CHIP: Record<string, string> = {
@@ -51,13 +59,20 @@ function formatAffectationDate(iso: string) {
 
 export default function TeacherProfilePage() {
   const params = useParams<{ id: string }>();
+  const { user } = useAuth();
   const [teacher, setTeacher] = useState<TeacherProfile | null>(null);
   const [coursHistory, setCoursHistory] = useState<CoursAssignment[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [profileDocumentTypes, setProfileDocumentTypes] = useState<ProfileDocumentType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadCategory, setUploadCategory] = useState('');
   const [uploadingFile, setUploadingFile] = useState(false);
+  const teacherId = Number(params.id);
+  const isTeacherOwner = user?.role === 'teacher' && user.teacherProfile?.id === teacherId;
+  const canUploadDocuments = Boolean(user && user.role !== 'student' && (user.role !== 'teacher' || isTeacherOwner));
+  const canDeleteDocuments = user?.role === 'admin' || user?.role === 'staff';
 
   useEffect(() => {
     const load = async () => {
@@ -70,14 +85,16 @@ export default function TeacherProfilePage() {
       try {
         setLoading(true);
         setError(null);
-        const [teacherRes, coursRes, docsRes] = await Promise.all([
+        const [teacherRes, coursRes, docsRes, profileDocTypesRes] = await Promise.all([
           api.get<TeacherProfile>(`/teachers/${id}`),
           api.get<CoursAssignment[]>(`/teachers/${id}/cours`),
           api.get<DocumentItem[]>(`/documents/teacher/${id}`),
+          fetchRef<ProfileDocumentType[]>('/profile-document-types'),
         ]);
         setTeacher(teacherRes.data);
         setCoursHistory(Array.isArray(coursRes.data) ? coursRes.data : []);
         setDocuments(Array.isArray(docsRes.data) ? docsRes.data : []);
+        setProfileDocumentTypes(Array.isArray(profileDocTypesRes) ? profileDocTypesRes : []);
       } catch (loadError) {
         setError(getApiErrorMessage(loadError, 'Impossible de charger le profil'));
       } finally {
@@ -91,17 +108,23 @@ export default function TeacherProfilePage() {
 
   const handleUploadDocument = async () => {
     if (!teacher || !uploadFile) return;
+    if (!uploadCategory) {
+      toast.error('Choisissez le type de document.');
+      return;
+    }
 
     setUploadingFile(true);
     try {
       const formData = new FormData();
       formData.append('teacherId', String(teacher.id));
+      formData.append('category', uploadCategory);
       formData.append('file', uploadFile);
       const response = await api.post<DocumentItem>('/documents/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setDocuments((prev) => [response.data, ...prev]);
       setUploadFile(null);
+      setUploadCategory('');
       toast.success('Document enseignant téléversé');
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Échec du téléversement'));
@@ -251,7 +274,23 @@ export default function TeacherProfilePage() {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+            {canUploadDocuments ? (
+            <div className="grid gap-3 md:grid-cols-[minmax(180px,260px)_1fr_auto]">
+              <div className="field-stack">
+                <label className="field-label">Type de document</label>
+                <select
+                  className="input"
+                  value={uploadCategory}
+                  onChange={(e) => setUploadCategory(e.target.value)}
+                >
+                  <option value="">Sélectionner un type</option>
+                  {profileDocumentTypes.map((type) => (
+                    <option key={type.id} value={type.name}>
+                      {type.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="field-stack">
                 <label className="field-label">Téléverser un document</label>
                 <input
@@ -266,12 +305,13 @@ export default function TeacherProfilePage() {
                   className="btn-primary"
                   type="button"
                   onClick={() => void handleUploadDocument()}
-                  disabled={!uploadFile || uploadingFile}
+                  disabled={!uploadFile || !uploadCategory || uploadingFile}
                 >
                   {uploadingFile ? 'Téléversement...' : 'Téléverser'}
                 </button>
               </div>
             </div>
+            ) : null}
 
             {documents.length === 0 ? (
               <p className="text-sm text-slate-400">Aucun document enregistré pour cet enseignant.</p>
@@ -283,6 +323,7 @@ export default function TeacherProfilePage() {
                       <tr>
                         <th>Nom</th>
                         <th>Type</th>
+                        <th>Catégorie</th>
                         <th>Date</th>
                         <th>Actions</th>
                       </tr>
@@ -292,8 +333,10 @@ export default function TeacherProfilePage() {
                         <tr key={doc.id}>
                           <td className="font-medium text-slate-900">{doc.name}</td>
                           <td>{doc.mimeType}</td>
+                          <td>{doc.category ? <span className="status-chip status-chip--muted">{doc.category}</span> : '—'}</td>
                           <td>{new Date(doc.createdAt).toLocaleDateString('fr-FR')}</td>
                           <td>
+                            {canDeleteDocuments ? (
                             <button
                               type="button"
                               className="btn-outline text-xs"
@@ -301,6 +344,11 @@ export default function TeacherProfilePage() {
                             >
                               Supprimer
                             </button>
+                            ) : (
+                              <a className="btn-outline text-xs" href={`/api/documents/${doc.id}/file`} target="_blank" rel="noreferrer">
+                                Ouvrir
+                              </a>
+                            )}
                           </td>
                         </tr>
                       ))}

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>DEAA-Hub - Simulation de pic 3000 utilisateurs</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 32px; color: #0f172a; line-height: 1.5; background: #ffffff; }
+    h1 { margin-bottom: 4px; font-size: 30px; }
+    h2 { margin-top: 34px; margin-bottom: 10px; font-size: 21px; }
+    h3 { margin: 0 0 6px; font-size: 15px; }
+    .note { color: #475569; max-width: 980px; }
+    .hero { max-width: 1080px; border-bottom: 2px solid #e2e8f0; padding-bottom: 18px; }
+    .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; max-width: 1080px; margin: 22px 0; }
+    .card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; background: #f8fafc; }
+    .card .value { font-size: 24px; font-weight: 700; margin-top: 4px; }
+    .card .label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; }
+    table { border-collapse: collapse; margin: 16px 0 24px; width: 100%; max-width: 1080px; font-size: 14px; }
+    th, td { border: 1px solid #cbd5e1; padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { background: #f1f5f9; }
+    .explain { max-width: 1080px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .explain article { border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; }
+    .muted { color: #64748b; }
+    .callout { max-width: 980px; border-left: 4px solid #0f6b4f; background: #f0fdf4; padding: 12px 16px; margin: 18px 0; }
+    .risk, .critical { color: #b91c1c; font-weight: 700; }
+    .watch { color: #a16207; font-weight: 700; }
+    .good { color: #047857; font-weight: 700; }
+    @media (max-width: 900px) {
+      .cards, .explain { grid-template-columns: 1fr; }
+      body { margin: 18px; }
+      table { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <section class="hero">
+    <h1>DEAA-Hub - Simulation de pic pour 3000 utilisateurs connectés</h1>
+    <p class="note">Ce rapport est conçu pour une présentation non technique. Il explique la signification des chiffres du test de charge et la méthode utilisée pour estimer le comportement avec 3000 utilisateurs.</p>
+  </section>
+
+  <section class="cards">
+    <div class="card"><div class="label">Utilisateurs simulés</div><div class="value">3000</div><div class="muted">Personnes connectées à la plateforme.</div></div>
+    <div class="card"><div class="label">Requêtes actives</div><div class="value">150</div><div class="muted">Requêtes simultanées estimées.</div></div>
+    <div class="card"><div class="label">État API</div><div class="value good">BON</div><div class="muted">P95 projeté : 365 ms.</div></div>
+    <div class="card"><div class="label">État Frontend</div><div class="value good">BON</div><div class="muted">P95 projeté : 119 ms.</div></div>
+  </section>
+
+  <div class="callout">
+    <strong>Conclusion principale :</strong> selon les données du test local, l'API et le frontend sont tous les deux projetés comme <strong>BON</strong> pour un pic de 3000 utilisateurs connectés.
+    Cela signifie que la majorité des utilisateurs devraient recevoir des réponses rapidement, à condition que l'infrastructure de production ait une capacité comparable.
+  </div>
+
+  <h2>Comment lire le graphique</h2>
+  <p class="note">Le graphique montre le temps de réponse P95. Plus la valeur est basse, meilleur est le résultat. Les premiers points viennent du vrai test de charge, et le dernier point représente la projection pour 3000 utilisateurs.</p>
+  <img src="peak-3000-simulation.svg" alt="Graphique de simulation de pic" width="980">
+
+  <h2>Signification des termes</h2>
+  <section class="explain">
+    <article>
+      <h3>Utilisateurs connectés</h3>
+      <p>Personnes connectées ou en train d'utiliser la plateforme pendant la même période. Tous les utilisateurs connectés ne cliquent pas exactement au même instant.</p>
+    </article>
+    <article>
+      <h3>Requêtes actives</h3>
+      <p>Nombre de requêtes qui arrivent au serveur en même temps. Ce rapport utilise le modèle suivant : 1 requête active pour 20 utilisateurs connectés. Donc 3000 utilisateurs connectés deviennent environ 150 requêtes actives.</p>
+    </article>
+    <article>
+      <h3>P50</h3>
+      <p>Le temps de réponse médian. La moitié des requêtes sont plus rapides que cette valeur, et l'autre moitié est plus lente.</p>
+    </article>
+    <article>
+      <h3>P95</h3>
+      <p>Un indicateur important de l'expérience utilisateur. 95% des requêtes sont plus rapides que cette valeur. Il est souvent plus utile que la moyenne, car il montre ce que ressentent les utilisateurs les plus lents.</p>
+    </article>
+    <article>
+      <h3>RPS</h3>
+      <p>Requêtes par seconde. Cela indique le volume de trafic que le système a traité pendant le test.</p>
+    </article>
+    <article>
+      <h3>Taux d'erreur</h3>
+      <p>Pourcentage des requêtes échouées. 0% signifie que toutes les requêtes testées ont réussi.</p>
+    </article>
+  </section>
+
+  <h2>Résultat projeté pour 3000 utilisateurs</h2>
+  <table>
+    <thead><tr><th>Zone</th><th>Ce que cela mesure</th><th>P50 projeté</th><th>P95 projeté</th><th>RPS projeté</th><th>État</th></tr></thead>
+    <tbody>
+      <tr><td>API</td><td>Réponses du backend et de la base de données : étudiants, enseignants, notes, tableau de bord, statistiques.</td><td>279 ms</td><td>365 ms</td><td>646.81</td><td class="good">BON</td></tr>
+      <tr><td>Frontend</td><td>Réponses des pages servies par l'application web.</td><td>90 ms</td><td>119 ms</td><td>1842.61</td><td class="good">BON</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Données mesurées pendant le test</h2>
+  <p class="note">Ces données sont les résultats réels utilisés pour créer la projection. Le test a augmenté progressivement le nombre de travailleurs actifs et a vérifié à la fois les endpoints API backend et les pages frontend.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Travailleurs actifs</th>
+        <th>Requêtes API</th>
+        <th>API P95</th>
+        <th>API RPS</th>
+        <th>Erreurs API</th>
+        <th>Requêtes frontend</th>
+        <th>Frontend P95</th>
+        <th>Frontend RPS</th>
+        <th>Erreurs frontend</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>5</td>
+        <td>4592</td>
+        <td>20 ms</td>
+        <td>382.27</td>
+        <td>0%</td>
+        <td>13411</td>
+        <td>8 ms</td>
+        <td>1117.29</td>
+        <td>0%</td>
+      </tr>
+      <tr>
+        <td>10</td>
+        <td>4572</td>
+        <td>42 ms</td>
+        <td>380.3</td>
+        <td>0%</td>
+        <td>17659</td>
+        <td>10 ms</td>
+        <td>1471.29</td>
+        <td>0%</td>
+      </tr>
+      <tr>
+        <td>25</td>
+        <td>5560</td>
+        <td>75 ms</td>
+        <td>461.56</td>
+        <td>0%</td>
+        <td>17559</td>
+        <td>29 ms</td>
+        <td>1461.56</td>
+        <td>0%</td>
+      </tr>
+      <tr>
+        <td>50</td>
+        <td>6019</td>
+        <td>133 ms</td>
+        <td>498.61</td>
+        <td>0%</td>
+        <td>18508</td>
+        <td>47 ms</td>
+        <td>1537.77</td>
+        <td>0%</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Signification de l'état</h2>
+  <table>
+    <thead><tr><th>État</th><th>Signification</th></tr></thead>
+    <tbody>
+      <tr><td class="good">BON</td><td>Le P95 est inférieur ou égal à 1 seconde. Le système devrait être ressenti comme rapide.</td></tr>
+      <tr><td class="watch">A SURVEILLER</td><td>Le P95 est entre 1 et 2,5 secondes. C'est acceptable, mais à surveiller.</td></tr>
+      <tr><td class="risk">RISQUE</td><td>Le P95 est entre 2,5 et 5 secondes. Les utilisateurs peuvent remarquer une lenteur.</td></tr>
+      <tr><td class="critical">CRITIQUE</td><td>Le P95 est supérieur à 5 secondes. Il y a un risque de timeout et de frustration utilisateur.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Notes importantes</h2>
+  <p class="note">Ceci est une simulation de planification, et non un test destructif avec 3000 vrais navigateurs ouverts en même temps. Cette méthode est plus sûre et plus facile à expliquer, car elle utilise des mesures réelles sur des charges plus petites, puis projette le pic attendu. Pour un test officiel en production, il faut prévoir une fenêtre de maintenance, surveiller le CPU, la mémoire, les connexions à la base de données, et confirmer les limites d'hébergement avant d'augmenter le trafic.</p>
+</body>
+</html>

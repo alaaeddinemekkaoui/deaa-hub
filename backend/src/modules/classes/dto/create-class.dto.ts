@@ -1,5 +1,6 @@
 import { Type, Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsInt,
   IsIn,
   IsNotEmpty,
@@ -25,6 +26,15 @@ export class CreateClassDto {
   @Min(1)
   @Max(2100)
   year: number;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @ValidateIf((_, value) => value !== null && value !== '')
+  @IsString()
+  @MaxLength(20)
+  academicYear?: string | null;
 
   @IsOptional()
   @Transform(({ value }: { value: unknown }) =>
@@ -72,4 +82,11 @@ export class CreateClassDto {
   @IsString()
   @MaxLength(80)
   classType?: string | null;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    value === true || value === 'true' || value === 1 || value === '1',
+  )
+  @IsBoolean()
+  createNextSemestre?: boolean;
 }

@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { GroupType, Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { KeyedTtlCache } from '../../common/utils/keyed-ttl-cache';
 import { TtlCache } from '../../common/utils/ttl-cache';
 import { CreateTeacherDto } from './dto/create-teacher.dto';
 import { UpdateTeacherDto } from './dto/update-teacher.dto';
@@ -23,6 +24,11 @@ import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class TeachersService {
+  private readonly listCache = new KeyedTtlCache<unknown>({
+    prefix: 'teachers:list',
+    ttlMs: 45 * 1000,
+    staleTtlMs: 3 * 60 * 1000,
+  });
   private readonly rolesCache = new TtlCache<unknown[]>({
     key: 'teachers:roles',
     ttlMs: 5 * 60 * 1000,
@@ -48,6 +54,7 @@ export class TeachersService {
       filiereId,
       roleId,
       gradeId,
+      sex,
       sortBy,
       sortOrder,
     } = query;
@@ -127,38 +134,57 @@ export class TeachersService {
       filters.push({ gradeId });
     }
 
+    if (sex) {
+      filters.push({ sex });
+    }
+
     const where: Prisma.TeacherWhereInput =
       filters.length > 0 ? { AND: filters } : {};
 
-    const [data, total] = await Promise.all([
-      this.prisma.teacher.findMany({
-        where,
-        include: this.buildTeacherInclude(),
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy:
-          sortBy === 'lastName'
-            ? [{ lastName: sortOrder }, { firstName: sortOrder }]
-            : [
-                { [sortBy]: sortOrder },
-                { lastName: 'asc' },
-                { firstName: 'asc' },
-              ],
-      }),
-      this.prisma.teacher.count({ where }),
-    ]);
+    const cacheKey = JSON.stringify({
+      page,
+      limit,
+      search: search ?? null,
+      departmentId: departmentId ?? null,
+      filiereId: filiereId ?? null,
+      roleId: roleId ?? null,
+      gradeId: gradeId ?? null,
+      sex: sex ?? null,
+      sortBy,
+      sortOrder,
+    });
 
-    return {
-      data,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit) || 1,
-        hasNextPage: page * limit < total,
-        hasPreviousPage: page > 1,
-      },
-    };
+    return this.listCache.getOrLoad(cacheKey, async () => {
+      const [data, total] = await Promise.all([
+        this.prisma.teacher.findMany({
+          where,
+          include: this.buildTeacherInclude(),
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy:
+            sortBy === 'lastName'
+              ? [{ lastName: sortOrder }, { firstName: sortOrder }]
+              : [
+                  { [sortBy]: sortOrder },
+                  { lastName: 'asc' },
+                  { firstName: 'asc' },
+                ],
+        }),
+        this.prisma.teacher.count({ where }),
+      ]);
+
+      return {
+        data,
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit) || 1,
+          hasNextPage: page * limit < total,
+          hasPreviousPage: page > 1,
+        },
+      };
+    });
   }
 
   async findOne(id: number) {
@@ -190,10 +216,11 @@ export class TeachersService {
     }
 
     try {
-      return await this.prisma.teacher.create({
+      const result = await this.prisma.teacher.create({
         data: {
           firstName: dto.firstName.trim(),
           lastName: dto.lastName.trim(),
+          sex: dto.sex,
           cin: this.normalizeOptionalValue(dto.cin) ?? null,
           email: this.normalizeOptionalValue(dto.email)?.toLowerCase() ?? null,
           phoneNumber: this.normalizeOptionalValue(dto.phoneNumber) ?? null,
@@ -212,6 +239,8 @@ export class TeachersService {
         },
         include: this.buildTeacherInclude(),
       });
+      this.listCache.invalidate();
+      return result;
     } catch (error) {
       this.handleTeacherUniqueErrors(error);
       throw error;
@@ -280,6 +309,7 @@ export class TeachersService {
           ...(dto.lastName !== undefined
             ? { lastName: dto.lastName.trim() }
             : {}),
+          ...(dto.sex !== undefined ? { sex: dto.sex } : {}),
           ...(dto.cin !== undefined
             ? {
                 cin: this.normalizeOptionalValue(dto.cin) ?? null,
@@ -338,6 +368,7 @@ export class TeachersService {
       });
     }
 
+    this.listCache.invalidate();
     return result;
   }
 
@@ -364,6 +395,7 @@ export class TeachersService {
     });
 
     if (teacher.userId) this.usersService.invalidateListCache();
+    this.listCache.invalidate();
     return deleted;
   }
 

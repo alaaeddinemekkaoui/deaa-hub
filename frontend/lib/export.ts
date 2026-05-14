@@ -9,6 +9,7 @@ type ExportRecordsOptions = {
   rows: Array<Record<string, unknown>>;
   fileName: string;
   format: ExportFormat;
+  columns?: Array<{ key: string; label: string }>;
 };
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
@@ -68,6 +69,19 @@ const flattenRow = (
 const normalizeRows = (rows: Array<Record<string, unknown>>) =>
   rows.map((row) => flattenRow(row));
 
+const pickColumns = (
+  rows: Array<Record<string, unknown>>,
+  columns?: Array<{ key: string; label: string }>,
+) => {
+  if (!columns?.length) {
+    return rows;
+  }
+
+  return rows.map((row) =>
+    Object.fromEntries(columns.map((column) => [column.label, row[column.key] ?? ''])),
+  );
+};
+
 const sanitizeFileName = (value: string) =>
   value
     .trim()
@@ -84,8 +98,8 @@ const downloadBlob = (blob: Blob, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
-export const exportRecords = ({ rows, fileName, format }: ExportRecordsOptions) => {
-  const normalizedRows = normalizeRows(rows);
+export const exportRecords = ({ rows, fileName, format, columns }: ExportRecordsOptions) => {
+  const normalizedRows = pickColumns(normalizeRows(rows), columns);
   const safeFileName = sanitizeFileName(fileName);
 
   if (format === 'csv') {

@@ -38,6 +38,14 @@ export class ClassQueryDto extends PaginationDto {
 
   @IsOptional()
   @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MaxLength(20)
+  academicYear?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toUpperCase() : value,
   )
   @IsIn(['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'])
@@ -56,8 +64,8 @@ export class ClassQueryDto extends PaginationDto {
   optionId?: number;
 
   @IsOptional()
-  @IsIn(['name', 'year', 'createdAt', 'updatedAt'])
-  sortBy: 'name' | 'year' | 'createdAt' | 'updatedAt' = 'year';
+  @IsIn(['name', 'year', 'academicYear', 'createdAt', 'updatedAt'])
+  sortBy: 'name' | 'year' | 'academicYear' | 'createdAt' | 'updatedAt' = 'year';
 
   @IsOptional()
   @IsIn(['asc', 'desc'])

@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
+import { Sex } from '@prisma/client';
 
 export class StudentsQueryDto extends PaginationDto {
   @IsOptional()
@@ -13,4 +14,26 @@ export class StudentsQueryDto extends PaginationDto {
   @IsInt()
   @Min(1)
   filiereId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  departmentId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  classId?: number;
+
+  @IsOptional()
+  @IsIn([Sex.male, Sex.female])
+  gender?: Sex;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1900)
+  birthYear?: number;
 }

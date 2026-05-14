@@ -60,6 +60,12 @@ export class StudentsController {
       query.search,
       query.filiereId,
       departmentIds,
+      {
+        departmentId: query.departmentId,
+        classId: query.classId,
+        gender: query.gender,
+        birthYear: query.birthYear,
+      },
     );
   }
 

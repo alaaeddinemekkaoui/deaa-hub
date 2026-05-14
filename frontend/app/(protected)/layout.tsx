@@ -101,7 +101,7 @@ export default function ProtectedLayout({
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
       />
-      <div className="md:flex md:items-start">
+      <div className="md:flex md:items-start md:px-3">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <main className="w-full min-w-0">
           <div className="container-page">

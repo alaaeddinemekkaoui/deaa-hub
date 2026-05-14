@@ -64,6 +64,7 @@ export default function DashboardPage() {
                   <Link
                     key={action.href}
                     href={action.href}
+                    prefetch={false}
                     className={`group flex min-h-32 flex-col gap-3 rounded-[1.6rem] border border-slate-100 bg-slate-50/50 p-4 transition hover:-translate-y-0.5 hover:shadow-md ${style.cardColor}`}
                   >
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm">
@@ -106,6 +107,7 @@ export default function DashboardPage() {
                   <Link
                     key={action.href}
                     href={action.href}
+                    prefetch={false}
                     className={`group flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50/50 p-3.5 transition hover:-translate-y-0.5 hover:shadow-md ${style.cardColor}`}
                   >
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-sm">

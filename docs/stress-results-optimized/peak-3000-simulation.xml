@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<peakSimulation generatedAt="2026-05-13T10:41:33.003Z" peakUsers="3000" activeConcurrencyModel="150" usersPerActiveRequest="20">
+  <summary>
+    <message>Projection model: 3000 online users with about 1 active request per 20 users. This is a planning simulation based on measured stress-test data, not a full 3000-browser live test.</message>
+    <api status="critical" projectedP50Ms="115" projectedP95Ms="9663" projectedRps="50.35" />
+    <frontend status="critical" projectedP50Ms="3918" projectedP95Ms="5264" projectedRps="41.89" />
+  </summary>
+  <measuredData source="C:\Users\user\Desktop\deaa-hub\docs\stress-results-optimized\stress-results.json">
+    <measuredStage concurrency="5">
+      <api p50Ms="300" p95Ms="3063" rps="6.88" errorRate="0" />
+      <frontend p50Ms="141" p95Ms="208" rps="34.44" errorRate="0" />
+    </measuredStage>
+    <measuredStage concurrency="10">
+      <api p50Ms="17" p95Ms="1324" rps="33.9" errorRate="0" />
+      <frontend p50Ms="301" p95Ms="397" rps="32.76" errorRate="0" />
+    </measuredStage>
+    <measuredStage concurrency="15">
+      <api p50Ms="19" p95Ms="1040" rps="61.46" errorRate="0" />
+      <frontend p50Ms="453" p95Ms="894" rps="30.39" errorRate="0" />
+    </measuredStage>
+    <measuredStage concurrency="25">
+      <api p50Ms="25" p95Ms="1303" rps="70.67" errorRate="0" />
+      <frontend p50Ms="718" p95Ms="849" rps="35.44" errorRate="0" />
+    </measuredStage>
+    <measuredStage concurrency="50">
+      <api p50Ms="43" p95Ms="2975" rps="50.35" errorRate="0" />
+      <frontend p50Ms="1358" p95Ms="1732" rps="36.73" errorRate="0" />
+    </measuredStage>
+  </measuredData>
+</peakSimulation>

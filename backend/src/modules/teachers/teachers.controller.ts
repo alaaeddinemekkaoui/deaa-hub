@@ -141,19 +141,19 @@ export class TeachersController {
   }
 
   @Get(':id/class-logs')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   findClassLogs(@Param('id', ParseIntPipe) id: number) {
     return this.teachersService.findClassLogs(id);
   }
 
   @Get(':id/cours')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   findCours(@Param('id', ParseIntPipe) id: number) {
     return this.teachersService.findCours(id);
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.teachersService.findOne(id);
   }
