@@ -320,7 +320,7 @@ export default function ClassTransferPage() {
         </div>
 
         <div className="toolbar-shell">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="flex flex-col gap-3">
             <div className="relative flex-1">
               <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -331,23 +331,24 @@ export default function ClassTransferPage() {
                 onKeyDown={(e) => e.key === 'Enter' && (setPage(1), setQuery(search.trim()))}
               />
             </div>
-            <SearchableSelect
-              className="xl:max-w-64"
-              value={filterAcademicYear}
-              options={academicYearOptions}
-              label="Année académique"
-              placeholder="Choisir une année"
-              searchPlaceholder="Rechercher une année..."
-              includeAllOption
-              allLabel="Toutes les années académiques"
-              onChange={(value) => {
-                setFilterAcademicYear(value);
-                setPage(1);
-              }}
-            />
-            <div className="flex gap-2">
-              <button className="btn-outline" type="button" onClick={() => { setPage(1); setQuery(search.trim()); }}>Rechercher</button>
-              <button className="btn-outline" type="button" onClick={() => { setSearch(''); setQuery(''); setFilterAcademicYear(getDefaultAcademicYear(academicYears)); setPage(1); }}>Réinitialiser</button>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+              <SearchableSelect
+                value={filterAcademicYear}
+                options={academicYearOptions}
+                label="Année académique"
+                placeholder="Choisir une année"
+                searchPlaceholder="Rechercher une année..."
+                includeAllOption
+                allLabel="Toutes les années académiques"
+                onChange={(value) => {
+                  setFilterAcademicYear(value);
+                  setPage(1);
+                }}
+              />
+              <div className="flex gap-2">
+                <button className="btn-outline" type="button" onClick={() => { setPage(1); setQuery(search.trim()); }}>Rechercher</button>
+                <button className="btn-outline" type="button" onClick={() => { setSearch(''); setQuery(''); setFilterAcademicYear(getDefaultAcademicYear(academicYears)); setPage(1); }}>Réinitialiser</button>
+              </div>
             </div>
           </div>
         </div>

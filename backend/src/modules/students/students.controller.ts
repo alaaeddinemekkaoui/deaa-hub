@@ -65,6 +65,10 @@ export class StudentsController {
         classId: query.classId,
         gender: query.gender,
         birthYear: query.birthYear,
+        academicYear: query.academicYear,
+        entryYear: query.entryYear,
+        accountStatus: query.accountStatus,
+        laureateStatus: query.laureateStatus,
       },
     );
   }

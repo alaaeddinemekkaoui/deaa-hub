@@ -56,6 +56,17 @@ export class UpdateGradeDto {
   maxScore?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(20)
+  rattrapageScore?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  rattrapageMaxScore?: number | null;
+
+  @IsOptional()
   @IsString()
   @MaxLength(20)
   academicYear?: string;

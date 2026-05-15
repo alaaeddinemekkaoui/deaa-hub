@@ -57,6 +57,10 @@ type GradeContext = {
 type ElementGradeSummary = {
   score: number;
   maxScore: number;
+  initialScore: number;
+  initialMaxScore: number;
+  rattrapageScore: number | null;
+  rattrapageMaxScore: number | null;
   assessmentType: string | null;
   publicationStatus: GradePublicationStatus;
   publishedAt: Date | null;
@@ -324,7 +328,13 @@ export class GradesService {
   }
 
   async create(dto: CreateGradeDto, currentUser?: JwtPayload) {
-    this.ensureValidScores([{ studentId: dto.studentId, score: dto.score }], dto.maxScore ?? 20);
+    const maxScore = dto.maxScore ?? 20;
+    this.ensureValidScores([{ studentId: dto.studentId, score: dto.score }], maxScore);
+    this.ensureValidOptionalScores(
+      [{ studentId: dto.studentId, score: dto.rattrapageScore }],
+      dto.rattrapageMaxScore ?? maxScore,
+      'La note après rattrapage',
+    );
     const context = await this.resolveContext({
       studentId: dto.studentId,
       classId: dto.classId,
@@ -350,7 +360,12 @@ export class GradesService {
         semester: this.normalizeNullableString(dto.semester),
         assessmentType: this.normalizeNullableString(dto.assessmentType),
         score: dto.score,
-        maxScore: dto.maxScore ?? 20,
+        maxScore,
+        rattrapageScore: dto.rattrapageScore ?? null,
+        rattrapageMaxScore:
+          dto.rattrapageScore === undefined || dto.rattrapageScore === null
+            ? null
+            : (dto.rattrapageMaxScore ?? maxScore),
         academicYear:
           this.normalizeNullableString(dto.academicYear) ??
           context.student?.anneeAcademique ??
@@ -425,6 +440,13 @@ export class GradesService {
         dto.maxScore ?? existing.maxScore,
       );
     }
+    if (dto.rattrapageScore !== undefined) {
+      this.ensureValidOptionalScores(
+        [{ studentId: existing.student.id, score: dto.rattrapageScore }],
+        dto.rattrapageMaxScore ?? dto.maxScore ?? existing.maxScore,
+        'La note après rattrapage',
+      );
+    }
 
     const nextStudentId = dto.studentId ?? existing.student.id;
     const nextClassId =
@@ -497,7 +519,23 @@ export class GradesService {
           : {}),
         ...(dto.score !== undefined ? { score: dto.score } : {}),
         ...(dto.maxScore !== undefined ? { maxScore: dto.maxScore } : {}),
-        ...(dto.score !== undefined || dto.maxScore !== undefined
+        ...(dto.rattrapageScore !== undefined
+          ? { rattrapageScore: dto.rattrapageScore }
+          : {}),
+        ...(dto.rattrapageScore !== undefined
+          ? {
+              rattrapageMaxScore:
+                dto.rattrapageScore === null
+                  ? null
+                  : (dto.rattrapageMaxScore ?? dto.maxScore ?? existing.maxScore),
+            }
+          : dto.rattrapageMaxScore !== undefined
+            ? { rattrapageMaxScore: dto.rattrapageMaxScore }
+            : {}),
+        ...(dto.score !== undefined ||
+        dto.maxScore !== undefined ||
+        dto.rattrapageScore !== undefined ||
+        dto.rattrapageMaxScore !== undefined
           ? {
               publicationStatus:
                 existing.publishedAt ||
@@ -560,7 +598,16 @@ export class GradesService {
     );
     const normalizedSemester = this.normalizeNullableString(dto.semester);
     const normalizedAcademicYear = dto.academicYear.trim();
-    this.ensureValidScores(dto.grades, dto.maxScore ?? 20);
+    const maxScore = dto.maxScore ?? 20;
+    this.ensureValidScores(dto.grades, maxScore);
+    this.ensureValidOptionalScores(
+      dto.grades.map((entry) => ({
+        studentId: entry.studentId,
+        score: entry.rattrapageScore,
+      })),
+      maxScore,
+      'La note après rattrapage',
+    );
     const studentIds = Array.from(
       new Set(dto.grades.map((entry) => entry.studentId)),
     );
@@ -619,6 +666,10 @@ export class GradesService {
       let updated = 0;
 
       for (const entry of dto.grades) {
+        const hasRattrapageInput = Object.prototype.hasOwnProperty.call(
+          entry,
+          'rattrapageScore',
+        );
         const existing = entry.id
           ? existingByStudent.find((item) => item.id === entry.id)
           : existingByStudentMap.get(entry.studentId);
@@ -639,7 +690,17 @@ export class GradesService {
           semester: normalizedSemester,
           assessmentType: normalizedAssessmentType,
           score: entry.score,
-          maxScore: dto.maxScore ?? 20,
+          maxScore,
+          ...(hasRattrapageInput
+            ? {
+                rattrapageScore: entry.rattrapageScore ?? null,
+                rattrapageMaxScore:
+                  entry.rattrapageScore === undefined ||
+                  entry.rattrapageScore === null
+                    ? null
+                    : maxScore,
+              }
+            : {}),
           academicYear: normalizedAcademicYear,
           publicationStatus: nextStatus,
           lockedAt: null,
@@ -729,6 +790,27 @@ export class GradesService {
 
     const grades: BulkUpsertGradesDto['grades'] = [];
     let skipped = 0;
+    const normalizedSemester = this.normalizeNullableString(dto.semester);
+    const normalizedAssessmentType = this.normalizeNullableString(
+      dto.assessmentType,
+    );
+    const existingGrades = await this.prisma.studentGrade.findMany({
+      where: {
+        classId: dto.classId,
+        moduleId: context.resolvedModuleId,
+        elementModuleId: context.resolvedElementModuleId,
+        semester: normalizedSemester,
+        assessmentType: normalizedAssessmentType,
+        academicYear: dto.academicYear.trim(),
+      },
+      select: {
+        studentId: true,
+        score: true,
+      },
+    });
+    const existingGradeByStudentId = new Map(
+      existingGrades.map((grade) => [grade.studentId, grade]),
+    );
 
     for (const row of rows) {
       const student = this.findStudentFromImportRow(
@@ -743,15 +825,31 @@ export class GradesService {
         'grade',
         'result',
       ]);
+      const rattrapageScore = this.readImportNumber(row, [
+        'rattrapage',
+        'note_rattrapage',
+        'note_apres_rattrapage',
+        'note après rattrapage',
+        'apres_rattrapage',
+        'après_rattrapage',
+        'rattrapagescore',
+        'rattrapageScore',
+      ]);
 
-      if (!student || scoreValue === null) {
+      const existingScore = student
+        ? existingGradeByStudentId.get(student.id)?.score
+        : undefined;
+      const resolvedScore = scoreValue ?? existingScore ?? null;
+
+      if (!student || resolvedScore === null) {
         skipped += 1;
         continue;
       }
 
       grades.push({
         studentId: student.id,
-        score: scoreValue,
+        score: resolvedScore,
+        ...(rattrapageScore !== null ? { rattrapageScore } : {}),
         comment: this.readImportString(row, [
           'comment',
           'comments',
@@ -854,6 +952,8 @@ export class GradesService {
             moduleId: true,
             score: true,
             maxScore: true,
+            rattrapageScore: true,
+            rattrapageMaxScore: true,
             assessmentType: true,
             academicYear: true,
             semester: true,
@@ -886,9 +986,14 @@ export class GradesService {
       const studentMap = gradeMap.get(grade.studentId)!;
       // Keep the first grade found for each element (can be extended for multiple assessment types)
       if (!studentMap.has(grade.elementModuleId)) {
+        const finalGrade = this.resolveFinalGradeScore(grade);
         studentMap.set(grade.elementModuleId, {
-          score: grade.score,
-          maxScore: grade.maxScore,
+          score: finalGrade.score,
+          maxScore: finalGrade.maxScore,
+          initialScore: grade.score,
+          initialMaxScore: grade.maxScore,
+          rattrapageScore: grade.rattrapageScore,
+          rattrapageMaxScore: grade.rattrapageMaxScore,
           assessmentType: grade.assessmentType,
           publicationStatus: grade.publicationStatus as GradePublicationStatus,
           publishedAt: grade.publishedAt,
@@ -923,7 +1028,7 @@ export class GradesService {
             if (!grade) continue;
             const weight = el.ponderation;
             if (weight <= 0) continue;
-            weightedSum += (grade.score / grade.maxScore) * 20 * weight;
+            weightedSum += this.normalizeGradeScore(grade) * weight;
             totalWeight += weight;
           }
 
@@ -931,7 +1036,7 @@ export class GradesService {
             totalWeight > 0
               ? weightedSum / totalWeight
               : elementGrades.reduce(
-                  (sum, g) => sum + (g.score / g.maxScore) * 20,
+                  (sum, g) => sum + this.normalizeGradeScore(g),
                   0,
                 ) / elementGrades.length;
           moduleAverages[mod.id] = Math.round(avg * 100) / 100;
@@ -1465,6 +1570,56 @@ export class GradesService {
         `La note de l'étudiant ${invalid.studentId} doit être comprise entre 0 et ${maxScore}.`,
       );
     }
+  }
+
+  private ensureValidOptionalScores(
+    grades: Array<{ studentId: number; score?: number | null }>,
+    maxScore: number,
+    label: string,
+  ) {
+    if (!Number.isFinite(maxScore) || maxScore <= 0 || maxScore > 20) {
+      throw new BadRequestException('Le barème doit être compris entre 1 et 20.');
+    }
+    const invalid = grades.find(
+      (grade) =>
+        grade.score !== undefined &&
+        grade.score !== null &&
+        (!Number.isFinite(grade.score) ||
+          grade.score < 0 ||
+          grade.score > maxScore),
+    );
+    if (invalid) {
+      throw new BadRequestException(
+        `${label} de l'étudiant ${invalid.studentId} doit être comprise entre 0 et ${maxScore}.`,
+      );
+    }
+  }
+
+  private resolveFinalGradeScore(grade: {
+    score: number;
+    maxScore: number;
+    rattrapageScore?: number | null;
+    rattrapageMaxScore?: number | null;
+  }) {
+    if (grade.rattrapageScore !== undefined && grade.rattrapageScore !== null) {
+      return {
+        score: grade.rattrapageScore,
+        maxScore: grade.rattrapageMaxScore ?? grade.maxScore,
+      };
+    }
+    return { score: grade.score, maxScore: grade.maxScore };
+  }
+
+  private normalizeGradeScore(grade: {
+    score: number;
+    maxScore: number;
+    rattrapageScore?: number | null;
+    rattrapageMaxScore?: number | null;
+  }) {
+    const finalGrade = this.resolveFinalGradeScore(grade);
+    return finalGrade.maxScore > 0
+      ? (finalGrade.score / finalGrade.maxScore) * 20
+      : finalGrade.score;
   }
 
   private summarizePublication(

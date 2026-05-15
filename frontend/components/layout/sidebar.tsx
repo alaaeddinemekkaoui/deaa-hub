@@ -54,10 +54,10 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
       />
       <aside
         className={cn(
-          'text-slate-900 transition-all duration-300 ease-in-out md:sticky md:top-[94px] md:h-[calc(100vh-106px)] md:self-start',
+          'text-slate-900 transition-all duration-300 ease-in-out md:fixed md:left-3 md:top-[116px] md:z-20 md:h-[calc(100vh-128px)]',
           open
-            ? 'fixed inset-x-3 top-[88px] z-40 max-h-[calc(100vh-104px)] overflow-y-auto p-0 opacity-100 md:static md:w-[260px] md:max-h-none md:overflow-hidden md:p-0'
-            : 'pointer-events-none fixed inset-x-3 top-[82px] z-40 max-h-0 -translate-y-3 overflow-hidden opacity-0 md:static md:w-0 md:max-h-screen md:translate-y-0',
+            ? 'fixed inset-x-3 top-[88px] z-40 max-h-[calc(100vh-104px)] overflow-y-auto p-0 opacity-100 md:inset-auto md:w-[228px] md:max-h-none md:overflow-hidden md:p-0'
+            : 'pointer-events-none fixed inset-x-3 top-[82px] z-40 max-h-0 -translate-y-3 overflow-hidden opacity-0 md:inset-auto md:w-0 md:max-h-screen md:translate-y-0',
         )}
         aria-hidden={!open}
       >

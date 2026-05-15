@@ -12,6 +12,7 @@ import {
   Send,
   Save,
   Upload,
+  X,
 } from 'lucide-react';
 import { EmptyState } from '@/components/admin/empty-state';
 import {
@@ -20,6 +21,7 @@ import {
 } from '@/components/academic/academic-year-select';
 import { SemesterSelect } from '@/components/academic/semester-select';
 import { MetricCard } from '@/components/admin/metric-card';
+import { CollapsibleMetrics } from '@/components/admin/collapsible-metrics';
 import { PageHeader } from '@/components/admin/page-header';
 import { useAuth } from '@/features/auth/auth-context';
 import {
@@ -82,6 +84,8 @@ type Student = {
 type GradeRow = {
   id: number;
   score: number;
+  rattrapageScore?: number | null;
+  rattrapageMaxScore?: number | null;
   comment?: string | null;
   publicationStatus?: PublicationStatus;
   publishedAt?: string | null;
@@ -92,6 +96,7 @@ type GradeRow = {
 type GradeInput = {
   id?: number;
   score: string;
+  rattrapageScore: string;
   comment: string;
   publicationStatus?: PublicationStatus;
   lockedAt?: string | null;
@@ -101,6 +106,8 @@ type StudentGradeView = {
   id: number;
   score: number;
   maxScore: number;
+  rattrapageScore?: number | null;
+  rattrapageMaxScore?: number | null;
   academicYear: string;
   semester?: string | null;
   comment?: string | null;
@@ -132,6 +139,19 @@ function publicationChip(status?: PublicationStatus, lockedAt?: string | null) {
       {lockedAt ? ' · verrouillé' : ''}
     </span>
   );
+}
+
+function finalNormalizedScore(item: {
+  score: number;
+  maxScore: number;
+  rattrapageScore?: number | null;
+  rattrapageMaxScore?: number | null;
+}) {
+  const score = item.rattrapageScore ?? item.score;
+  const maxScore = item.rattrapageScore !== undefined && item.rattrapageScore !== null
+    ? (item.rattrapageMaxScore ?? item.maxScore)
+    : item.maxScore;
+  return maxScore > 0 ? (score / maxScore) * 20 : score;
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -177,6 +197,8 @@ export default function EpreuvesPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [gradeInputs, setGradeInputs] = useState<Record<number, GradeInput>>({});
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [rattrapageImportFile, setRattrapageImportFile] = useState<File | null>(null);
+  const [showRattrapageModal, setShowRattrapageModal] = useState(false);
 
   // Loading states
   const [loadingReference, setLoadingReference] = useState(true);
@@ -255,6 +277,11 @@ export default function EpreuvesPage() {
     [gradeInputs],
   );
 
+  const enteredRattrapageCount = useMemo(
+    () => Object.values(gradeInputs).filter((g) => g.rattrapageScore.trim() !== '').length,
+    [gradeInputs],
+  );
+
   const publicationCounts = useMemo(() => {
     return Object.values(gradeInputs).reduce(
       (acc, item) => {
@@ -272,7 +299,7 @@ export default function EpreuvesPage() {
   const simpleAverage = useMemo(
     () =>
       myGrades.length
-        ? `${(myGrades.reduce((sum, item) => sum + (item.score / item.maxScore) * 20, 0) / myGrades.length).toFixed(2)}`
+        ? `${(myGrades.reduce((sum, item) => sum + finalNormalizedScore(item), 0) / myGrades.length).toFixed(2)}`
         : '-',
     [myGrades],
   );
@@ -457,7 +484,7 @@ export default function EpreuvesPage() {
         students.length === 0
           ? {}
           : students.reduce<Record<number, GradeInput>>((acc, s) => {
-              acc[s.id] = { score: '', comment: '' };
+              acc[s.id] = { score: '', rattrapageScore: '', comment: '' };
               return acc;
             }, {}),
       );
@@ -488,6 +515,10 @@ export default function EpreuvesPage() {
             acc[s.id] = {
               id: existing?.id,
               score: existing ? String(existing.score) : '',
+              rattrapageScore:
+                existing?.rattrapageScore !== undefined && existing?.rattrapageScore !== null
+                  ? String(existing.rattrapageScore)
+                  : '',
               comment: existing?.comment ?? '',
               publicationStatus: existing?.publicationStatus ?? 'draft',
               lockedAt: existing?.lockedAt ?? null,
@@ -526,7 +557,16 @@ export default function EpreuvesPage() {
       .map((s) => {
         const entry = gradeInputs[s.id];
         if (!entry || entry.score.trim() === '') return null;
-        return { id: entry.id, studentId: s.id, score: Number(entry.score), comment: entry.comment.trim() || undefined };
+        return {
+          id: entry.id,
+          studentId: s.id,
+          score: Number(entry.score),
+          rattrapageScore:
+            entry.rattrapageScore.trim() === ''
+              ? null
+              : Number(entry.rattrapageScore),
+          comment: entry.comment.trim() || undefined,
+        };
       })
       .filter((g): g is NonNullable<typeof g> => g !== null);
 
@@ -538,8 +578,16 @@ export default function EpreuvesPage() {
       toast.error('Chaque note doit être un nombre valide.');
       return;
     }
+    if (grades.some((g) => g.rattrapageScore !== null && Number.isNaN(g.rattrapageScore))) {
+      toast.error('Chaque note après rattrapage doit être un nombre valide.');
+      return;
+    }
     if (grades.some((g) => g.score < 0 || g.score > 20)) {
       toast.error('Chaque note doit être comprise entre 0 et 20.');
+      return;
+    }
+    if (grades.some((g) => g.rattrapageScore !== null && (g.rattrapageScore < 0 || g.rattrapageScore > 20))) {
+      toast.error('Chaque note après rattrapage doit être comprise entre 0 et 20.');
       return;
     }
 
@@ -673,12 +721,13 @@ export default function EpreuvesPage() {
     const className   = (selectedClass?.name ?? 'classe').replace(/\s+/g, '_');
     const fileName    = `${elementName}_${className}.csv`;
     const csvEscape = (v: string) => (v.includes(',') || v.includes('"') ? `"${v.replace(/"/g, '""')}"` : v);
-    const header = 'codeMassar,fullName,score,comment';
+    const header = 'codeMassar,fullName,score,rattrapageScore,comment';
     const rows   = students.map((s) => {
       const existing = gradeInputs[s.id];
       const score = existing?.score ?? '';
+      const rattrapageScore = existing?.rattrapageScore ?? '';
       const comment = existing?.comment ?? '';
-      return `${s.codeMassar},${csvEscape(s.fullName)},${score},${csvEscape(comment)}`;
+      return `${s.codeMassar},${csvEscape(s.fullName)},${score},${rattrapageScore},${csvEscape(comment)}`;
     });
     const blob   = new Blob([[header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url    = URL.createObjectURL(blob);
@@ -747,7 +796,7 @@ export default function EpreuvesPage() {
     }
   };
 
-  const uploadGrades = async () => {
+  const uploadGrades = async (fileOverride?: File | null, options?: { rattrapageOnly?: boolean }) => {
     if (!selectedClass || !selectedModule || !selectedElementModule) {
       toast.error('Choisissez la classe, le module et l\'élément de module.');
       return;
@@ -756,7 +805,8 @@ export default function EpreuvesPage() {
       toast.error('Choisissez une année académique.');
       return;
     }
-    if (!importFile) {
+    const fileToUpload = fileOverride ?? importFile;
+    if (!fileToUpload) {
       toast.error('Choisissez un fichier XLSX, XLS ou CSV.');
       return;
     }
@@ -764,7 +814,7 @@ export default function EpreuvesPage() {
     try {
       setImportingGrades(true);
       const formData = new FormData();
-      formData.append('file', importFile);
+      formData.append('file', fileToUpload);
       formData.append('classId', String(selectedClass.id));
       formData.append('moduleId', String(selectedModule.id));
       formData.append('elementModuleId', String(selectedElementModule.id));
@@ -777,7 +827,8 @@ export default function EpreuvesPage() {
       });
       const data = res.data as { importedRows: number; skippedRows: number; created: number; updated: number };
       toast.success(`Import terminé : ${data.importedRows} ligne(s) prise(s) en compte, ${data.skippedRows} ignorée(s)`);
-      setImportFile(null);
+      if (options?.rattrapageOnly) setRattrapageImportFile(null);
+      else setImportFile(null);
 
       // Refresh grades
       const refreshed = await api.get<PaginatedResponse<GradeRow>>('/grades', {
@@ -800,6 +851,10 @@ export default function EpreuvesPage() {
           acc[s.id] = {
             id: existing?.id,
             score: existing ? String(existing.score) : '',
+            rattrapageScore:
+              existing?.rattrapageScore !== undefined && existing?.rattrapageScore !== null
+                ? String(existing.rattrapageScore)
+                : '',
             comment: existing?.comment ?? '',
             publicationStatus: existing?.publicationStatus ?? 'draft',
             lockedAt: existing?.lockedAt ?? null,
@@ -864,18 +919,30 @@ export default function EpreuvesPage() {
         <>
 
       {/* Metrics */}
-      <section className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Classes visibles" value={visibleClasses.length} hint="Selon votre rôle et vos filtres" icon={GraduationCap} />
-        <MetricCard label="Modules" value={filteredModules.length} hint="Dans la classe / semestre choisi" icon={BookOpen} />
-        <MetricCard label="Éléments" value={elementModules.length} hint="Dans le module choisi" icon={Layers} />
-        <MetricCard label="Notes remplies" value={enteredGradesCount} hint="Prêtes à être enregistrées" icon={FileSpreadsheet} />
-      </section>
-      <section className="grid gap-3 md:grid-cols-4">
-        <MetricCard label="Brouillon" value={publicationCounts.draft} hint="Non visible côté étudiant" icon={FileText} />
-        <MetricCard label="Publié" value={publicationCounts.published} hint="Visible dans le portail étudiant" icon={Send} />
-        <MetricCard label="Modifié" value={publicationCounts.modified_after_publication} hint="À republier après contrôle" icon={Save} />
-        <MetricCard label="Verrouillé" value={publicationCounts.locked} hint="Lecture seule après publication" icon={Lock} />
-      </section>
+      <CollapsibleMetrics
+        summary={
+          <>
+            <span className="font-semibold text-slate-900">{enteredGradesCount}</span> note(s) remplies ·{' '}
+            <span className="font-semibold text-slate-900">{publicationCounts.published}</span> publiée(s) ·{' '}
+            <span className="font-semibold text-slate-900">{publicationCounts.locked}</span> verrouillée(s)
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <section className="grid gap-4 md:grid-cols-4">
+            <MetricCard label="Classes visibles" value={visibleClasses.length} hint="Selon votre rôle et vos filtres" icon={GraduationCap} />
+            <MetricCard label="Modules" value={filteredModules.length} hint="Dans la classe / semestre choisi" icon={BookOpen} />
+            <MetricCard label="Éléments" value={elementModules.length} hint="Dans le module choisi" icon={Layers} />
+            <MetricCard label="Notes remplies" value={enteredGradesCount} hint="Prêtes à être enregistrées" icon={FileSpreadsheet} />
+          </section>
+          <section className="grid gap-3 md:grid-cols-4">
+            <MetricCard label="Brouillon" value={publicationCounts.draft} hint="Non visible côté étudiant" icon={FileText} />
+            <MetricCard label="Publié" value={publicationCounts.published} hint="Visible dans le portail étudiant" icon={Send} />
+            <MetricCard label="Modifié" value={publicationCounts.modified_after_publication} hint="À republier après contrôle" icon={Save} />
+            <MetricCard label="Verrouillé" value={publicationCounts.locked} hint="Lecture seule après publication" icon={Lock} />
+          </section>
+        </div>
+      </CollapsibleMetrics>
 
       {/* Academic path */}
       <section className="surface-card space-y-5">
@@ -994,6 +1061,9 @@ export default function EpreuvesPage() {
                   ? `Dernier enregistrement : ${lastSavedAt.toLocaleTimeString('fr-FR')}`
                   : 'Brouillon non enregistré'}
             </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {enteredGradesCount} note(s) initiale(s), {enteredRattrapageCount} note(s) après rattrapage.
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -1019,11 +1089,20 @@ export default function EpreuvesPage() {
             <button
               className="btn-outline flex items-center gap-2"
               type="button"
-              onClick={uploadGrades}
+              onClick={() => void uploadGrades()}
               disabled={!canEdit || importingGrades}
             >
               <Upload size={14} />
               {importingGrades ? 'Import...' : 'Importer un fichier'}
+            </button>
+            <button
+              className="btn-outline flex items-center gap-2"
+              type="button"
+              onClick={() => setShowRattrapageModal(true)}
+              disabled={!students.length || !selectedElementModule}
+            >
+              <FileSpreadsheet size={14} />
+              Rattrapage
             </button>
             <button
               className="btn-primary flex items-center gap-2"
@@ -1080,7 +1159,7 @@ export default function EpreuvesPage() {
               disabled={!canEdit}
             />
             <p className="text-xs text-slate-500">
-              Format attendu : <code>codeMassar</code>, <code>fullName</code>, <code>score</code>, <code>comment</code> — utilisez le bouton &quot;Liste étudiants&quot; pour obtenir le modèle.
+              Format attendu : <code>codeMassar</code>, <code>fullName</code>, <code>score</code>, <code>comment</code>. Les notes après rattrapage se saisissent depuis le bouton <code>Rattrapage</code>.
             </p>
           </div>
           <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
@@ -1123,14 +1202,14 @@ export default function EpreuvesPage() {
                 </thead>
                 <tbody>
                   {students.map((student) => {
-                    const entry = gradeInputs[student.id] ?? { score: '', comment: '' };
+                    const entry = gradeInputs[student.id] ?? { score: '', rattrapageScore: '', comment: '' };
                     return (
                       <tr key={student.id}>
                         <td className="font-medium text-slate-900">{student.fullName}</td>
                         <td className="text-slate-500">{student.codeMassar}</td>
                         <td className="min-w-36">
                           <input
-                            className="input"
+                            className={`input ${entry.rattrapageScore.trim() ? 'bg-slate-100 text-slate-500' : ''}`}
                             value={entry.score}
                             onChange={(e) => updateGradeInput(student.id, 'score', e.target.value)}
                             inputMode="decimal"
@@ -1140,6 +1219,11 @@ export default function EpreuvesPage() {
                           />
                           {entry.score.trim() && (Number(entry.score) < 0 || Number(entry.score) > 20 || Number.isNaN(Number(entry.score))) ? (
                             <p className="mt-1 text-xs text-red-600">Valeur invalide</p>
+                          ) : null}
+                          {entry.rattrapageScore.trim() ? (
+                            <div className="mt-2 inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+                              Après rattrapage : {entry.rattrapageScore}
+                            </div>
                           ) : null}
                         </td>
                         <td className="min-w-72">
@@ -1172,6 +1256,115 @@ export default function EpreuvesPage() {
           </div>
         )}
       </section>
+      {showRattrapageModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Notes après rattrapage</h3>
+                <p className="text-sm text-slate-500">
+                  Saisissez uniquement les notes de rattrapage. Si une case reste vide, la note initiale reste la note finale.
+                </p>
+              </div>
+              <button
+                className="btn-outline h-9 w-9 justify-center p-0"
+                type="button"
+                onClick={() => setShowRattrapageModal(false)}
+                aria-label="Fermer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto px-5 py-4">
+              <div className="grid gap-3 rounded-xl border border-dashed border-slate-200 p-4 md:grid-cols-[1fr_auto] md:items-end">
+                <div className="field-stack">
+                  <label className="field-label">Importer les notes après rattrapage</label>
+                  <input
+                    className="input"
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={(e) => setRattrapageImportFile(e.target.files?.[0] ?? null)}
+                    disabled={!canEdit}
+                  />
+                  <p className="text-xs text-slate-500">
+                    Colonnes acceptées : <code>codeMassar</code>, <code>fullName</code>, <code>rattrapageScore</code>. La colonne <code>score</code> est optionnelle si une note initiale existe déjà.
+                  </p>
+                </div>
+                <button
+                  className="btn-outline flex items-center gap-2"
+                  type="button"
+                  onClick={() => void uploadGrades(rattrapageImportFile, { rattrapageOnly: true })}
+                  disabled={!canEdit || importingGrades || !rattrapageImportFile}
+                >
+                  <Upload size={14} />
+                  {importingGrades ? 'Import...' : 'Importer rattrapage'}
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="table-base">
+                  <thead>
+                    <tr>
+                      <th>Étudiant</th>
+                      <th>Code Massar</th>
+                      <th>Note initiale</th>
+                      <th>Note après rattrapage</th>
+                      <th>Note finale</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {students.map((student) => {
+                      const entry = gradeInputs[student.id] ?? { score: '', rattrapageScore: '', comment: '' };
+                      const finalNote = entry.rattrapageScore.trim() || entry.score;
+                      return (
+                        <tr key={student.id}>
+                          <td className="font-medium text-slate-900">{student.fullName}</td>
+                          <td className="text-slate-500">{student.codeMassar}</td>
+                          <td className="text-slate-400">{entry.score || '-'}</td>
+                          <td className="min-w-44">
+                            <input
+                              className="input"
+                              value={entry.rattrapageScore}
+                              onChange={(e) => updateGradeInput(student.id, 'rattrapageScore', e.target.value)}
+                              inputMode="decimal"
+                              placeholder="Optionnel"
+                              disabled={!canEdit || Boolean(entry.lockedAt)}
+                            />
+                            {entry.rattrapageScore.trim() && (Number(entry.rattrapageScore) < 0 || Number(entry.rattrapageScore) > 20 || Number.isNaN(Number(entry.rattrapageScore))) ? (
+                              <p className="mt-1 text-xs text-red-600">Valeur invalide</p>
+                            ) : null}
+                          </td>
+                          <td className="font-semibold text-slate-900">{finalNote || '-'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-5 py-4">
+              <button
+                className="btn-outline"
+                type="button"
+                onClick={() => setShowRattrapageModal(false)}
+              >
+                Fermer
+              </button>
+              <button
+                className="btn-primary flex items-center gap-2"
+                type="button"
+                onClick={() => void saveGrades()}
+                disabled={!canEdit || savingGrades || notesLocked}
+              >
+                <Save size={14} />
+                {savingGrades ? 'Enregistrement...' : 'Enregistrer rattrapage'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
         </>
       )}
     </div>

@@ -130,12 +130,23 @@ a:focus-visible {
 }
 
 .toolbar-shell {
-  @apply flex flex-col gap-3 rounded-xl border px-4 py-3 lg:flex-row lg:items-center lg:justify-between;
+  @apply flex flex-col gap-3 rounded-xl border px-4 py-3;
   background: #ffffff;
 }
 
 .toolbar-group {
-  @apply flex flex-1 flex-col gap-3 sm:flex-row sm:items-center;
+  @apply flex flex-1 flex-col gap-3;
+}
+
+.toolbar-group > .relative.flex-1 {
+  min-width: min(20rem, 100%);
+  width: 100%;
+  max-width: none;
+}
+
+.toolbar-shell > .relative {
+  width: 100%;
+  max-width: none;
 }
 
 .toolbar-actions {

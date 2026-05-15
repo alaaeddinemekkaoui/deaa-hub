@@ -101,9 +101,9 @@ export default function ProtectedLayout({
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
       />
-      <div className="md:flex md:items-start md:px-3">
+      <div className="md:px-3">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <main className="w-full min-w-0">
+        <main className={`w-full min-w-0 transition-[padding] duration-300 ${sidebarOpen ? 'md:pl-[244px]' : 'md:pl-0'}`}>
           <div className="container-page">
             {children}
           </div>

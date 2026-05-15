@@ -26,6 +26,12 @@ class BulkGradeEntryDto {
   score: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(20)
+  rattrapageScore?: number | null;
+
+  @IsOptional()
   @IsString()
   @MaxLength(1000)
   comment?: string;

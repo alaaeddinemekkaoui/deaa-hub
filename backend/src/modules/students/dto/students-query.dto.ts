@@ -36,4 +36,23 @@ export class StudentsQueryDto extends PaginationDto {
   @IsInt()
   @Min(1900)
   birthYear?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  academicYear?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1900)
+  entryYear?: number;
+
+  @IsOptional()
+  @IsIn(['with', 'without'])
+  accountStatus?: 'with' | 'without';
+
+  @IsOptional()
+  @IsIn(['yes', 'no'])
+  laureateStatus?: 'yes' | 'no';
 }

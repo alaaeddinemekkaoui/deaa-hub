@@ -53,6 +53,17 @@ export class CreateGradeDto {
   @Min(1)
   maxScore?: number;
 
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(20)
+  rattrapageScore?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  rattrapageMaxScore?: number | null;
+
   @IsString()
   @MaxLength(20)
   academicYear: string;

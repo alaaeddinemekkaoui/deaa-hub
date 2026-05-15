@@ -308,30 +308,32 @@ model Document {
 }
 
 model StudentGrade {
-  id              Int            @id @default(autoincrement())
-  studentId       Int
-  teacherId       Int?
-  classId         Int?
-  moduleId        Int?
-  elementModuleId Int?
-  subject         String
-  semester        String?
-  assessmentType  String?
-  score           Float
-  maxScore        Float          @default(20)
-  academicYear    String
-  publicationStatus String       @default("draft")
-  publishedAt     DateTime?
-  reopenedAt      DateTime?
-  lockedAt        DateTime?
-  comment         String?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  academicClass   AcademicClass? @relation(fields: [classId], references: [id])
-  elementModule   ElementModule? @relation(fields: [elementModuleId], references: [id])
-  module          Module?        @relation(fields: [moduleId], references: [id])
-  student         Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  teacher         Teacher?       @relation(fields: [teacherId], references: [id])
+  id                 Int            @id @default(autoincrement())
+  studentId          Int
+  teacherId          Int?
+  classId            Int?
+  moduleId           Int?
+  elementModuleId    Int?
+  subject            String
+  semester           String?
+  assessmentType     String?
+  score              Float
+  maxScore           Float          @default(20)
+  rattrapageScore    Float?
+  rattrapageMaxScore Float?
+  academicYear       String
+  publicationStatus  String         @default("draft")
+  publishedAt        DateTime?
+  reopenedAt         DateTime?
+  lockedAt           DateTime?
+  comment            String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  academicClass      AcademicClass? @relation(fields: [classId], references: [id])
+  elementModule      ElementModule? @relation(fields: [elementModuleId], references: [id])
+  module             Module?        @relation(fields: [moduleId], references: [id])
+  student            Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher            Teacher?       @relation(fields: [teacherId], references: [id])
 
   @@index([studentId])
   @@index([teacherId])

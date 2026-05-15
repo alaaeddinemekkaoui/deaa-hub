@@ -61,6 +61,10 @@ type ModuleRow = {
 type GradeCell = {
   score: number;
   maxScore: number;
+  initialScore?: number;
+  initialMaxScore?: number;
+  rattrapageScore?: number | null;
+  rattrapageMaxScore?: number | null;
   assessmentType: string | null;
   publicationStatus: PublicationStatus;
   publishedAt?: string | null;
@@ -130,7 +134,7 @@ function computeStudentAverages(
           const weight = elementWeight(element);
           if (weight <= 0) return acc;
           return {
-            sum: acc.sum + (grade.score / grade.maxScore) * 20 * weight,
+            sum: acc.sum + normalizedGradeScore(grade) * weight,
             weight: acc.weight + weight,
           };
         },
@@ -138,7 +142,7 @@ function computeStudentAverages(
       );
       const avg = weighted.weight > 0
         ? weighted.sum / weighted.weight
-        : elementGrades.reduce((sum, { grade }) => sum + (grade.score / grade.maxScore) * 20, 0) /
+        : elementGrades.reduce((sum, { grade }) => sum + normalizedGradeScore(grade), 0) /
           elementGrades.length;
       filteredModuleAverages[mod.id] = Math.round(avg * 100) / 100;
       overallWeightedSum += weighted.sum;
@@ -164,6 +168,31 @@ function computeStudentAverages(
 
 function fmtScore(score: number, maxScore: number): string {
   return maxScore > 0 ? String(Math.round((score / maxScore) * 20 * 100) / 100) : String(score);
+}
+
+function hasRattrapage(grade: GradeCell): boolean {
+  return grade.rattrapageScore !== undefined && grade.rattrapageScore !== null;
+}
+
+function gradeInitialScore(grade: GradeCell) {
+  return {
+    score: grade.initialScore ?? grade.score,
+    maxScore: grade.initialMaxScore ?? grade.maxScore,
+  };
+}
+
+function gradeFinalScore(grade: GradeCell) {
+  return hasRattrapage(grade)
+    ? {
+        score: grade.rattrapageScore as number,
+        maxScore: grade.rattrapageMaxScore ?? grade.maxScore,
+      }
+    : { score: grade.score, maxScore: grade.maxScore };
+}
+
+function normalizedGradeScore(grade: GradeCell): number {
+  const final = gradeFinalScore(grade);
+  return final.maxScore > 0 ? (final.score / final.maxScore) * 20 : final.score;
 }
 
 function fmtAvg(avg: number | null): string {
@@ -809,21 +838,29 @@ export default function DeliberationPage() {
                               <Fragment key={mod.id}>
                                 {mod.elements.map((el) => {
                                   const g = student.grades[el.id];
+                                  const final = g ? gradeFinalScore(g) : null;
                                   return (
                                     <td
                                       key={el.id}
                                       className={`border border-slate-200 px-2 py-2 text-center text-xs ${!g ? 'bg-red-50/40' : ''}`}
                                     >
                                       {g ? (
-                                        <span
-                                          className={
-                                            g.score / g.maxScore < 0.5
-                                              ? 'text-red-600'
-                                              : 'text-slate-700'
-                                          }
-                                        >
-                                          {fmtScore(g.score, g.maxScore)}
-                                        </span>
+                                        <div className="space-y-0.5">
+                                          <span
+                                            className={
+                                              normalizedGradeScore(g) < 10
+                                                ? 'text-red-600'
+                                                : 'text-slate-700'
+                                            }
+                                          >
+                                            {fmtScore(final!.score, final!.maxScore)}
+                                          </span>
+                                          {hasRattrapage(g) ? (
+                                            <div className="text-[10px] text-slate-400">
+                                              Après rattrapage
+                                            </div>
+                                          ) : null}
+                                        </div>
                                       ) : (
                                         <span className="text-slate-300">—</span>
                                       )}
@@ -1001,7 +1038,13 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester }: R
                 Pond.
               </th>
               <th className="border border-slate-300 px-2 py-2.5 text-center font-semibold text-slate-700">
-                Note
+                Note avant rattrapage
+              </th>
+              <th className="border border-slate-300 px-2 py-2.5 text-center font-semibold text-slate-700">
+                Note après rattrapage
+              </th>
+              <th className="border border-slate-300 px-2 py-2.5 text-center font-semibold text-slate-700">
+                Note finale
               </th>
             </tr>
           </thead>
@@ -1016,7 +1059,7 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester }: R
                     {mod.name}
                   </td>
                   <td
-                    colSpan={4}
+                    colSpan={6}
                     className="border border-slate-200 px-4 py-2 text-slate-400 text-center"
                   >
                     Aucun élément
@@ -1025,6 +1068,8 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester }: R
               ) : (
                 mod.elements.map((el, elIdx) => {
                   const g = student.grades[el.id];
+                  const initial = g ? gradeInitialScore(g) : null;
+                  const final = g ? gradeFinalScore(g) : null;
                   return (
                     <tr
                       key={el.id}
@@ -1060,8 +1105,26 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester }: R
                       </td>
                       <td className="border border-slate-200 px-3 py-2 text-center font-medium">
                         {g ? (
-                          <span className={g.score / g.maxScore < 0.5 ? 'text-red-600' : 'text-slate-800'}>
-                            {fmtScore(g.score, g.maxScore)}
+                          <span className={(initial!.score / initial!.maxScore) < 0.5 ? 'text-red-600' : 'text-slate-800'}>
+                            {fmtScore(initial!.score, initial!.maxScore)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                      <td className="border border-slate-200 px-3 py-2 text-center font-medium">
+                        {g && hasRattrapage(g) ? (
+                          <span className={(g.rattrapageScore as number) / (g.rattrapageMaxScore ?? g.maxScore) < 0.5 ? 'text-red-600' : 'text-slate-800'}>
+                            {fmtScore(g.rattrapageScore as number, g.rattrapageMaxScore ?? g.maxScore)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                      <td className="border border-slate-200 px-3 py-2 text-center font-semibold">
+                        {g ? (
+                          <span className={normalizedGradeScore(g) < 10 ? 'text-red-600' : 'text-slate-900'}>
+                            {fmtScore(final!.score, final!.maxScore)}
                           </span>
                         ) : (
                           <span className="text-slate-300">—</span>
@@ -1076,7 +1139,7 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester }: R
           <tfoot>
             <tr className="bg-amber-50 font-bold">
               <td
-                colSpan={4}
+                colSpan={6}
                 className="border border-slate-300 px-4 py-3 text-right text-slate-800"
               >
                 Moyenne générale de l'étudiant

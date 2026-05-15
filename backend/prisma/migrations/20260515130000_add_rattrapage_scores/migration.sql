@@ -1,0 +1,3 @@
+ALTER TABLE "StudentGrade"
+ADD COLUMN "rattrapageScore" DOUBLE PRECISION,
+ADD COLUMN "rattrapageMaxScore" DOUBLE PRECISION;

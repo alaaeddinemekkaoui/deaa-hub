@@ -89,6 +89,10 @@ export class StudentsService {
       classId?: number;
       gender?: Sex;
       birthYear?: number;
+      academicYear?: string;
+      entryYear?: number;
+      accountStatus?: 'with' | 'without';
+      laureateStatus?: 'yes' | 'no';
     } = {},
   ) {
     const filters: Prisma.StudentWhereInput[] = [];
@@ -106,6 +110,12 @@ export class StudentsService {
     if (filiereId) filters.push({ filiereId });
     if (options.classId) filters.push({ classId: options.classId });
     if (options.gender) filters.push({ sex: options.gender });
+    if (options.academicYear) filters.push({ anneeAcademique: options.academicYear });
+    if (options.entryYear) filters.push({ firstYearEntry: options.entryYear });
+    if (options.accountStatus === 'with') filters.push({ userId: { not: null } });
+    if (options.accountStatus === 'without') filters.push({ userId: null });
+    if (options.laureateStatus === 'yes') filters.push({ laureate: { isNot: null } });
+    if (options.laureateStatus === 'no') filters.push({ laureate: { is: null } });
     if (options.departmentId) filters.push({ filiere: { departmentId: options.departmentId } });
     if (options.birthYear) {
       filters.push({
@@ -132,6 +142,10 @@ export class StudentsService {
       classId: options.classId ?? null,
       gender: options.gender ?? null,
       birthYear: options.birthYear ?? null,
+      academicYear: options.academicYear ?? null,
+      entryYear: options.entryYear ?? null,
+      accountStatus: options.accountStatus ?? null,
+      laureateStatus: options.laureateStatus ?? null,
     });
 
     return this.listCache.getOrLoad(cacheKey, async () => {

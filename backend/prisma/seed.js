@@ -20,7 +20,7 @@ var __importStar = (this && this.__importStar) || (function () {
         ownKeys = Object.getOwnPropertyNames || function (o) {
             var ar = [];
             for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
+            return ar;jj
         };
         return ownKeys(o);
     };

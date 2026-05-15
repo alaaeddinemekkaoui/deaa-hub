@@ -2,12 +2,17 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, CalendarRange, Eye, FolderOpen, GraduationCap, KeyRound, MoreHorizontal, Pencil, Search, Trash2, UserPlus, Users } from 'lucide-react';
+import {
+  AcademicYearSelect,
+  sortAcademicYearsCurrentFirst,
+} from '@/components/academic/academic-year-select';
 import { EmptyState } from '@/components/admin/empty-state';
 import { ExportDataButton } from '@/components/admin/export-data-button';
 import { ImportDataButton } from '@/components/admin/import-data-button';
 import { MetricCard } from '@/components/admin/metric-card';
+import { CollapsibleMetrics } from '@/components/admin/collapsible-metrics';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { ProfileDocsModal } from '@/components/profile/profile-docs-modal';
 import { PageHeader } from '@/components/admin/page-header';
@@ -53,7 +58,8 @@ type Student = {
 };
 
 type Filiere = { id: number; name: string; departmentId?: number };
-type AcademicClass = { id: number; name: string; year: number; filiereId?: number | null };
+type Department = { id: number; name: string };
+type AcademicClass = { id: number; name: string; year: number; filiereId?: number | null; academicYear?: string | null };
 type AcademicYear = { id: number; label: string; isCurrent: boolean };
 
 export default function StudentsPage() {
@@ -61,11 +67,21 @@ export default function StudentsPage() {
   const canDelete = user?.role === 'admin';
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
   const [students, setStudents] = useState<Student[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [filieres, setFilieres] = useState<Filiere[]>([]);
   const [classes, setClasses] = useState<AcademicClass[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
+  const [filterAcademicYear, setFilterAcademicYear] = useState('');
+  const [filterDepartmentId, setFilterDepartmentId] = useState('');
+  const [filterFiliereId, setFilterFiliereId] = useState('');
+  const [filterClassId, setFilterClassId] = useState('');
+  const [filterGender, setFilterGender] = useState('');
+  const [filterEntryYear, setFilterEntryYear] = useState('');
+  const [filterBirthYear, setFilterBirthYear] = useState('');
+  const [filterAccountStatus, setFilterAccountStatus] = useState('');
+  const [filterLaureateStatus, setFilterLaureateStatus] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -122,18 +138,54 @@ export default function StudentsPage() {
       .map((part) => part[0]?.toUpperCase() ?? '')
       .join('') || 'ET';
 
+  const filteredFilieres = useMemo(
+    () =>
+      filieres.filter(
+        (item) =>
+          !filterDepartmentId ||
+          String(item.departmentId ?? '') === filterDepartmentId,
+      ),
+    [filterDepartmentId, filieres],
+  );
+
+  const filteredClasses = useMemo(
+    () =>
+      classes.filter((item) => {
+        if (filterFiliereId && String(item.filiereId ?? '') !== filterFiliereId) return false;
+        if (filterAcademicYear && item.academicYear && item.academicYear !== filterAcademicYear) return false;
+        return true;
+      }),
+    [classes, filterAcademicYear, filterFiliereId],
+  );
+
+  const activeFilterCount = [
+    query,
+    filterAcademicYear,
+    filterDepartmentId,
+    filterFiliereId,
+    filterClassId,
+    filterGender,
+    filterEntryYear,
+    filterBirthYear,
+    filterAccountStatus,
+    filterLaureateStatus,
+  ].filter(Boolean).length;
+
   // Load reference data once per session
   useEffect(() => {
     const loadRef = async () => {
       try {
-        const [filieresData, classesData, yearsData] = await Promise.all([
+        const [departmentsData, filieresData, classesData, yearsData] = await Promise.all([
+          fetchRef<PaginatedResponse<Department>>('/departments?page=1&limit=1000&sortBy=name&sortOrder=asc'),
           fetchRef<PaginatedResponse<Filiere>>('/filieres?page=1&limit=1000&sortBy=name&sortOrder=asc'),
           fetchRef<PaginatedResponse<AcademicClass>>('/classes?page=1&limit=1000&sortBy=name&sortOrder=asc'),
           fetchRef<AcademicYear[]>('/academic-years'),
         ]);
+        setDepartments(departmentsData.data);
         setFilieres(filieresData.data);
         setClasses(classesData.data);
-        setAcademicYears(yearsData);
+        const sortedYears = sortAcademicYearsCurrentFirst(yearsData);
+        setAcademicYears(sortedYears);
         const currentAcademicYear = yearsData.find((item) => item.isCurrent) ?? yearsData[0];
         if (currentAcademicYear) setAnneeAcademique(currentAcademicYear.label);
         if (filieresData.data.length > 0) setFiliereId(String(filieresData.data[0].id));
@@ -154,6 +206,15 @@ export default function StudentsPage() {
         const studentParams: Record<string, string | number> = { page: 1, limit: 100 };
         const normalizedQuery = query.trim();
         if (normalizedQuery) studentParams.search = normalizedQuery;
+        if (filterAcademicYear) studentParams.academicYear = filterAcademicYear;
+        if (filterDepartmentId) studentParams.departmentId = Number(filterDepartmentId);
+        if (filterFiliereId) studentParams.filiereId = Number(filterFiliereId);
+        if (filterClassId) studentParams.classId = Number(filterClassId);
+        if (filterGender) studentParams.gender = filterGender;
+        if (filterEntryYear) studentParams.entryYear = Number(filterEntryYear);
+        if (filterBirthYear) studentParams.birthYear = Number(filterBirthYear);
+        if (filterAccountStatus) studentParams.accountStatus = filterAccountStatus;
+        if (filterLaureateStatus) studentParams.laureateStatus = filterLaureateStatus;
         const studentsRes = await api.get<PaginatedResponse<Student>>('/students', { params: studentParams });
         setStudents(studentsRes.data.data);
       } catch (loadError) {
@@ -163,7 +224,32 @@ export default function StudentsPage() {
       }
     };
     void load();
-  }, [query, refreshKey]);
+  }, [
+    filterAcademicYear,
+    filterAccountStatus,
+    filterBirthYear,
+    filterClassId,
+    filterDepartmentId,
+    filterEntryYear,
+    filterFiliereId,
+    filterGender,
+    filterLaureateStatus,
+    query,
+    refreshKey,
+  ]);
+
+  useEffect(() => {
+    if (filterFiliereId && !filteredFilieres.some((item) => String(item.id) === filterFiliereId)) {
+      setFilterFiliereId('');
+      setFilterClassId('');
+    }
+  }, [filterFiliereId, filteredFilieres]);
+
+  useEffect(() => {
+    if (filterClassId && !filteredClasses.some((item) => String(item.id) === filterClassId)) {
+      setFilterClassId('');
+    }
+  }, [filterClassId, filteredClasses]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -189,6 +275,20 @@ export default function StudentsPage() {
   const openCreateModal = () => {
     resetForm();
     setIsModalOpen(true);
+  };
+
+  const resetFilters = () => {
+    setSearch('');
+    setQuery('');
+    setFilterAcademicYear('');
+    setFilterDepartmentId('');
+    setFilterFiliereId('');
+    setFilterClassId('');
+    setFilterGender('');
+    setFilterEntryYear('');
+    setFilterBirthYear('');
+    setFilterAccountStatus('');
+    setFilterLaureateStatus('');
   };
 
   const closeModal = () => {
@@ -361,30 +461,52 @@ export default function StudentsPage() {
         description="Gérez les profils d'étudiants, les affectations de classes et les dossiers académiques. Importez en masse ou ajoutez individuellement."
       />
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <MetricCard
-          label="Total d'étudiants"
-          value={students.length}
-          hint="Enregistrements actuellement chargés"
-          icon={GraduationCap}
-        />
-        <MetricCard
-          label="Filières"
-          value={filieres.length}
-          hint="Programmes disponibles"
-          icon={BookOpen}
-        />
-        <MetricCard
-          label="Classes"
-          value={classes.length}
-          hint="Groupes académiques actifs"
-          icon={CalendarRange}
-        />
-      </section>
+      <CollapsibleMetrics
+        summary={
+          <>
+            <span className="font-semibold text-slate-900">{students.length}</span> étudiant(s) chargé(s) ·{' '}
+            <span className="font-semibold text-slate-900">{activeFilterCount}</span> filtre(s) actif(s)
+          </>
+        }
+      >
+        <section className="grid gap-4 md:grid-cols-3">
+          <MetricCard
+            label="Total d'étudiants"
+            value={students.length}
+            hint="Enregistrements actuellement chargés"
+            icon={GraduationCap}
+          />
+          <MetricCard
+            label="Filières"
+            value={filieres.length}
+            hint="Programmes disponibles"
+            icon={BookOpen}
+          />
+          <MetricCard
+            label="Classes"
+            value={classes.length}
+            hint="Groupes académiques actifs"
+            icon={CalendarRange}
+          />
+        </section>
+      </CollapsibleMetrics>
 
       <section className="flex justify-end gap-2">
         <ImportDataButton onSuccess={() => setRefreshKey((k) => k + 1)} />
-        <ExportDataButton filters={{ search: query || undefined }} />
+        <ExportDataButton
+          filters={{
+            search: query || undefined,
+            academicYear: filterAcademicYear || undefined,
+            departmentId: filterDepartmentId || undefined,
+            filiereId: filterFiliereId || undefined,
+            classId: filterClassId || undefined,
+            gender: filterGender || undefined,
+            entryYear: filterEntryYear || undefined,
+            birthYear: filterBirthYear || undefined,
+            accountStatus: filterAccountStatus || undefined,
+            laureateStatus: filterLaureateStatus || undefined,
+          }}
+        />
         {studentsWithoutAccount > 0 && (
           <button
             className="btn-outline flex items-center gap-1.5"
@@ -400,12 +522,12 @@ export default function StudentsPage() {
         </button>
       </section>
 
-      <div className="toolbar-shell">
-        <div className="toolbar-group">
-          <div className="relative flex-1 max-w-sm">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <div className="space-y-4 rounded-xl border bg-white px-4 py-3">
+        <div className="grid gap-3 md:grid-cols-[minmax(18rem,1fr)_auto_auto] md:items-center">
+          <div className="relative min-w-0">
+            <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
-              className="input pl-9"
+              className="input pl-11"
               placeholder="Chercher par nom, CIN, Massar..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -415,15 +537,111 @@ export default function StudentsPage() {
           <button className="btn-primary" type="button" onClick={() => setQuery(search.trim())}>
             Chercher
           </button>
-          {query && (
+          {activeFilterCount > 0 && (
             <button
               className="btn-outline"
               type="button"
-              onClick={() => { setSearch(''); setQuery(''); }}
+              onClick={resetFilters}
             >
               Effacer
             </button>
           )}
+        </div>
+        <div className="grid w-full gap-3 md:grid-cols-3 xl:grid-cols-5">
+          <AcademicYearSelect
+            value={filterAcademicYear}
+            years={academicYears}
+            onChange={setFilterAcademicYear}
+            label="Année académique"
+            includeAllOption
+            allLabel="Toutes les années"
+          />
+          <div className="field-stack">
+            <label className="field-label">Département</label>
+            <select
+              className="input"
+              value={filterDepartmentId}
+              onChange={(event) => {
+                setFilterDepartmentId(event.target.value);
+                setFilterFiliereId('');
+                setFilterClassId('');
+              }}
+            >
+              <option value="">Tous</option>
+              {departments.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field-stack">
+            <label className="field-label">Filière</label>
+            <select
+              className="input"
+              value={filterFiliereId}
+              onChange={(event) => {
+                setFilterFiliereId(event.target.value);
+                setFilterClassId('');
+              }}
+            >
+              <option value="">Toutes</option>
+              {filteredFilieres.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field-stack">
+            <label className="field-label">Classe</label>
+            <select className="input" value={filterClassId} onChange={(event) => setFilterClassId(event.target.value)}>
+              <option value="">Toutes</option>
+              {filteredClasses.map((item) => (
+                <option key={item.id} value={item.id}>{item.name} · Année {item.year}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field-stack">
+            <label className="field-label">Sexe</label>
+            <select className="input" value={filterGender} onChange={(event) => setFilterGender(event.target.value)}>
+              <option value="">Tous</option>
+              <option value="female">Femme</option>
+              <option value="male">Homme</option>
+            </select>
+          </div>
+          <div className="field-stack">
+            <label className="field-label">Année d'entrée</label>
+            <input
+              className="input"
+              inputMode="numeric"
+              placeholder="Ex. 2025"
+              value={filterEntryYear}
+              onChange={(event) => setFilterEntryYear(event.target.value.replace(/\D/g, '').slice(0, 4))}
+            />
+          </div>
+          <div className="field-stack">
+            <label className="field-label">Année naissance</label>
+            <input
+              className="input"
+              inputMode="numeric"
+              placeholder="Ex. 2004"
+              value={filterBirthYear}
+              onChange={(event) => setFilterBirthYear(event.target.value.replace(/\D/g, '').slice(0, 4))}
+            />
+          </div>
+          <div className="field-stack">
+            <label className="field-label">Compte</label>
+            <select className="input" value={filterAccountStatus} onChange={(event) => setFilterAccountStatus(event.target.value)}>
+              <option value="">Tous</option>
+              <option value="with">Avec compte</option>
+              <option value="without">Sans compte</option>
+            </select>
+          </div>
+          <div className="field-stack">
+            <label className="field-label">Statut</label>
+            <select className="input" value={filterLaureateStatus} onChange={(event) => setFilterLaureateStatus(event.target.value)}>
+              <option value="">Tous</option>
+              <option value="no">Étudiant actif</option>
+              <option value="yes">Lauréat</option>
+            </select>
+          </div>
         </div>
       </div>
 

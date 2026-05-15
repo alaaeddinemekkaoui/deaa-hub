@@ -490,7 +490,7 @@ export default function ClassesCoursPage() {
         </div>
 
         <div className="toolbar-shell">
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
             <div className="relative flex-1">
               <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input

@@ -1,0 +1,116 @@
+[31m[Nest] 44364  - [39m05/15/2026, 9:35:59 AM [31m  ERROR[39m [38;5;3m[NestApplication] [39m[31mError: listen EADDRINUSE: address already in use 0.0.0.0:5000[39m[38;5;3m +17ms[39m
+node:net:1940
+    const ex = new UVExceptionWithHostPort(err, 'listen', address, port);
+               ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:5000
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 5000
+}
+
+Node.js v25.1.0
+[31m[Nest] 35192  - [39m05/15/2026, 9:42:36 AM [31m  ERROR[39m [38;5;3m[NestApplication] [39m[31mError: listen EADDRINUSE: address already in use 0.0.0.0:5000[39m[38;5;3m +24ms[39m
+node:net:1940
+    const ex = new UVExceptionWithHostPort(err, 'listen', address, port);
+               ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:5000
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 5000
+}
+
+Node.js v25.1.0
+node:internal/modules/cjs/loader:1423
+  throw err;
+  ^
+
+Error: Cannot find module 'C:\Users\user\Desktop\deaa-hub\backend\dist\main'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1420:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1058:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1063:22)
+    at Module._load (node:internal/modules/cjs/loader:1226:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v25.1.0
+node:internal/modules/cjs/loader:1423
+  throw err;
+  ^
+
+Error: Cannot find module 'C:\Users\user\Desktop\deaa-hub\backend\dist\main'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1420:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1058:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1063:22)
+    at Module._load (node:internal/modules/cjs/loader:1226:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v25.1.0
+ERROR: The process "21540" not found.
+ERROR: The process "21540" not found.
+node:child_process:1000
+    throw err;
+    ^
+
+Error: Command failed: taskkill /pid 21540 /T /F
+ERROR: The process "21540" not found.
+
+    at genericNodeError (node:internal/errors:998:15)
+    at wrappedFn (node:internal/errors:543:14)
+    at checkExecSyncError (node:child_process:925:11)
+    at execSync (node:child_process:997:15)
+    at treeKillSync (C:\Users\user\Desktop\deaa-hub\backend\node_modules\@nestjs\cli\lib\utils\tree-kill.js:7:38)
+    at C:\Users\user\Desktop\deaa-hub\backend\node_modules\@nestjs\cli\actions\start.action.js:68:46
+    at Object.onWatchStatusChange (C:\Users\user\Desktop\deaa-hub\backend\node_modules\@nestjs\cli\lib\compiler\watch-compiler.js:83:17)
+    at C:\Users\user\Desktop\deaa-hub\backend\node_modules\typescript\lib\typescript.js:133916:30
+    at emitFilesAndReportErrors (C:\Users\user\Desktop\deaa-hub\backend\node_modules\typescript\lib\typescript.js:133737:5)
+    at result.afterProgramCreate (C:\Users\user\Desktop\deaa-hub\backend\node_modules\typescript\lib\typescript.js:133912:5) {
+  status: 128,
+  signal: null,
+  output: [
+    null,
+    Buffer(0) [Uint8Array] [],
+    Buffer(39) [Uint8Array] [
+       69,  82,  82,  79,  82,  58,  32,  84, 104,
+      101,  32, 112, 114, 111,  99, 101, 115, 115,
+       32,  34,  50,  49,  53,  52,  48,  34,  32,
+      110, 111, 116,  32, 102, 111, 117, 110, 100,
+       46,  13,  10
+    ]
+  ],
+  pid: 41720,
+  stdout: Buffer(0) [Uint8Array] [],
+  stderr: Buffer(39) [Uint8Array] [
+     69,  82,  82,  79,  82,  58,  32,  84, 104,
+    101,  32, 112, 114, 111,  99, 101, 115, 115,
+     32,  34,  50,  49,  53,  52,  48,  34,  32,
+    110, 111, 116,  32, 102, 111, 117, 110, 100,
+     46,  13,  10
+  ]
+}
+
+Node.js v25.1.0
