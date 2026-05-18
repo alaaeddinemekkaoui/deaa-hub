@@ -16,10 +16,8 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage, memoryStorage } from 'multer';
-import { createReadStream, existsSync, mkdirSync } from 'fs';
-import { tmpdir } from 'os';
-import { extname, join } from 'path';
+import { memoryStorage } from 'multer';
+import { createReadStream, existsSync } from 'fs';
 import { Request } from 'express';
 import type { Response } from 'express';
 import { StudentsService } from './students.service';
@@ -34,20 +32,17 @@ import { UserRole, isDeptScoped } from '../../common/types/role.type';
 import { StudentsQueryDto } from './dto/students-query.dto';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { ObjectStorageService } from '../../common/storage/object-storage.service';
 
 type AuthRequest = Request & { user: JwtPayload };
 
 @Controller('students')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class StudentsController {
-  constructor(private readonly studentsService: StudentsService) {}
-
-  private static getPhotoUploadDir() {
-    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-      return join(tmpdir(), 'deaa-hub', 'uploads', 'photos');
-    }
-    return join(process.cwd(), 'uploads', 'photos');
-  }
+  constructor(
+    private readonly studentsService: StudentsService,
+    private readonly storage: ObjectStorageService,
+  ) {}
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
@@ -145,8 +140,17 @@ export class StudentsController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.STUDENT)
-  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: JwtPayload) {
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.STUDENT,
+  )
+  findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
     return this.studentsService.findOne(id, user);
   }
 
@@ -221,16 +225,7 @@ export class StudentsController {
   )
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: (_, __, cb) => {
-          const dir = StudentsController.getPhotoUploadDir();
-          mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (_, file, cb) => {
-          cb(null, `student-${Date.now()}${extname(file.originalname)}`);
-        },
-      }),
+      storage: memoryStorage(),
       fileFilter: (_, file, cb) => cb(null, file.mimetype.startsWith('image/')),
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
@@ -240,7 +235,16 @@ export class StudentsController {
     @UploadedFile() file: Express.Multer.File | undefined,
   ) {
     if (!file) throw new BadRequestException('No image uploaded');
-    return this.studentsService.updatePhoto(id, file.path);
+    const stored = await this.storage.uploadBuffer({
+      bucketName: 'profileImages',
+      buffer: file.buffer,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      folder: `students/${id}`,
+      allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'],
+      maxSizeBytes: 5 * 1024 * 1024,
+    });
+    return this.studentsService.updatePhoto(id, stored.reference);
   }
 
   @Get(':id/photo')
@@ -255,7 +259,21 @@ export class StudentsController {
   )
   async getPhoto(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
     const photoPath = await this.studentsService.getPhotoPath(id);
-    if (!photoPath || !existsSync(photoPath)) {
+    if (!photoPath) {
+      return res.status(404).json({ message: 'No photo' });
+    }
+    if (this.storage.parseReference(photoPath)) {
+      const ext = photoPath.split('.').pop()?.toLowerCase() ?? 'jpg';
+      const mime =
+        ext === 'png'
+          ? 'image/png'
+          : ext === 'webp'
+            ? 'image/webp'
+            : 'image/jpeg';
+      res.setHeader('Content-Type', mime);
+      return (await this.storage.getObject(photoPath)).pipe(res);
+    }
+    if (!existsSync(photoPath)) {
       return res.status(404).json({ message: 'No photo' });
     }
     const ext = photoPath.split('.').pop()?.toLowerCase() ?? 'jpg';

@@ -13,10 +13,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { createReadStream, existsSync, mkdirSync } from 'fs';
-import { diskStorage } from 'multer';
-import { tmpdir } from 'os';
-import { extname, join } from 'path';
+import { memoryStorage } from 'multer';
 import type { Response } from 'express';
 import { DocumentsService } from './documents.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
@@ -31,14 +28,6 @@ import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
-
-  private static getTempUploadDir() {
-    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-      return join(tmpdir(), 'deaa-hub', 'uploads', 'tmp');
-    }
-
-    return join(process.cwd(), 'uploads', 'tmp');
-  }
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
@@ -63,17 +52,7 @@ export class DocumentsController {
   )
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: (_, __, callback) => {
-          const uploadDir = DocumentsController.getTempUploadDir();
-          mkdirSync(uploadDir, { recursive: true });
-          callback(null, uploadDir);
-        },
-        filename: (_, file, callback) => {
-          const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-          callback(null, `${uniqueSuffix}${extname(file.originalname)}`);
-        },
-      }),
+      storage: memoryStorage(),
       fileFilter: (_, file, callback) => {
         const allowed = [
           'application/pdf',
@@ -95,7 +74,13 @@ export class DocumentsController {
   }
 
   @Get('student/:studentId')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.STUDENT)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.STUDENT,
+  )
   findByStudent(
     @Param('studentId', ParseIntPipe) studentId: number,
     @CurrentUser() user: JwtPayload,
@@ -104,7 +89,14 @@ export class DocumentsController {
   }
 
   @Get('teacher/:teacherId')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.TEACHER,
+    UserRole.INSPECTOR,
+  )
   findByTeacher(
     @Param('teacherId', ParseIntPipe) teacherId: number,
     @CurrentUser() user: JwtPayload,
@@ -129,8 +121,11 @@ export class DocumentsController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.STAFF)
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.documentsService.remove(id);
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.documentsService.remove(id, user);
   }
 
   @Get(':id/file')
@@ -143,13 +138,11 @@ export class DocumentsController {
     UserRole.STUDENT,
     UserRole.INSPECTOR,
   )
-  async serveFile(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
-    const doc = await this.documentsService.getFilePath(id);
-    if (!existsSync(doc.path)) {
-      return res.status(404).json({ message: 'File not found on disk' });
-    }
-    res.setHeader('Content-Type', doc.mimeType);
-    res.setHeader('Content-Disposition', `inline; filename="${doc.name}"`);
-    createReadStream(doc.path).pipe(res);
+  async serveFile(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.documentsService.streamFile(id, res, user);
   }
 }

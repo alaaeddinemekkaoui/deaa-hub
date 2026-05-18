@@ -14,10 +14,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { mkdirSync } from 'fs';
-import { tmpdir } from 'os';
-import { extname, join } from 'path';
+import { memoryStorage } from 'multer';
 import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -44,14 +41,6 @@ const READ_ROLES = [
 export class CoursResourcesController {
   constructor(private readonly coursResourcesService: CoursResourcesService) {}
 
-  private static getTempUploadDir() {
-    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-      return join(tmpdir(), 'deaa-hub', 'uploads', 'cours-resources-tmp');
-    }
-
-    return join(process.cwd(), 'uploads', 'cours-resources-tmp');
-  }
-
   @Get()
   @Roles(...READ_ROLES)
   findAll(
@@ -72,17 +61,7 @@ export class CoursResourcesController {
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.TEACHER)
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: (_, __, callback) => {
-          const uploadDir = CoursResourcesController.getTempUploadDir();
-          mkdirSync(uploadDir, { recursive: true });
-          callback(null, uploadDir);
-        },
-        filename: (_, file, callback) => {
-          const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-          callback(null, `${uniqueSuffix}${extname(file.originalname)}`);
-        },
-      }),
+      storage: memoryStorage(),
       fileFilter: (_, file, callback) => {
         const allowed = [
           'application/pdf',

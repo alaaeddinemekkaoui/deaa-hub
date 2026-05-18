@@ -3,18 +3,23 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  StreamableFile,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
-import { existsSync, mkdirSync, renameSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { createReadStream, existsSync } from 'fs';
+import type { Response } from 'express';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 import { UserRole } from '../../common/types/role.type';
+import { ObjectStorageService } from '../../common/storage/object-storage.service';
 
 @Injectable()
 export class DocumentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: ObjectStorageService,
+  ) {}
 
   private slugify(value: string) {
     return value
@@ -23,14 +28,6 @@ export class DocumentsService {
       .replace(/[^a-zA-Z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
       .toLowerCase();
-  }
-
-  private getUploadBaseDir() {
-    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-      return join(tmpdir(), 'deaa-hub', 'uploads');
-    }
-
-    return join(process.cwd(), 'uploads');
   }
 
   findAll() {
@@ -105,43 +102,72 @@ export class DocumentsService {
       if (!student) {
         throw new NotFoundException('Student not found');
       }
-      if (currentUser?.role === UserRole.STUDENT && student.userId !== currentUser.sub) {
-        throw new ForbiddenException('Vous pouvez téléverser uniquement vos propres documents.');
+      if (
+        currentUser?.role === UserRole.STUDENT &&
+        student.userId !== currentUser.sub
+      ) {
+        throw new ForbiddenException(
+          'Vous pouvez téléverser uniquement vos propres documents.',
+        );
       }
 
-      const studentDir = join(
-        this.getUploadBaseDir(),
-        'students',
-        student.codeMassar,
-      );
-      if (!existsSync(studentDir)) {
-        mkdirSync(studentDir, { recursive: true });
-      }
+      const stored = await this.storage.uploadBuffer({
+        bucketName: 'originalDocuments',
+        buffer: file.buffer,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        folder: `students/${student.codeMassar}`,
+        allowedMimeTypes: [
+          'application/pdf',
+          'image/png',
+          'image/jpeg',
+          'image/jpg',
+        ],
+        maxSizeBytes: 10 * 1024 * 1024,
+      });
 
-      const finalPath = join(studentDir, file.originalname);
-      renameSync(file.path, finalPath);
-
-      return this.prisma.document.create({
+      const document = await this.prisma.document.create({
         data: {
           name: file.originalname,
           mimeType: file.mimetype,
-          path: finalPath,
+          path: stored.reference,
+          storageProvider: 'minio',
+          bucket: stored.bucket,
+          objectKey: stored.key,
+          fileHash: stored.hash,
+          size: stored.size,
           studentId: student.id,
           ...(dto.category ? { category: dto.category.trim() } : {}),
         },
       });
+      await this.audit(currentUser?.sub, 'document.upload', {
+        documentId: document.id,
+        studentId: student.id,
+      });
+      return document;
     }
 
     const teacher = await this.prisma.teacher.findUnique({
       where: { id: dto.teacherId },
-      select: { id: true, firstName: true, lastName: true, cin: true, userId: true },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        cin: true,
+        userId: true,
+      },
     });
 
     if (!teacher) {
       throw new NotFoundException('Teacher not found');
     }
-    if (currentUser?.role === UserRole.TEACHER && teacher.userId !== currentUser.sub) {
-      throw new ForbiddenException('Vous pouvez téléverser uniquement vos propres documents.');
+    if (
+      currentUser?.role === UserRole.TEACHER &&
+      teacher.userId !== currentUser.sub
+    ) {
+      throw new ForbiddenException(
+        'Vous pouvez téléverser uniquement vos propres documents.',
+      );
     }
 
     const teacherFolder = teacher.cin
@@ -149,29 +175,64 @@ export class DocumentsService {
       : `teacher-${teacher.id}-${this.slugify(
           `${teacher.firstName}-${teacher.lastName}`,
         )}`;
-    const teacherDir = join(this.getUploadBaseDir(), 'teachers', teacherFolder);
-    if (!existsSync(teacherDir)) {
-      mkdirSync(teacherDir, { recursive: true });
-    }
+    const stored = await this.storage.uploadBuffer({
+      bucketName: 'originalDocuments',
+      buffer: file.buffer,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      folder: `teachers/${teacherFolder}`,
+      allowedMimeTypes: [
+        'application/pdf',
+        'image/png',
+        'image/jpeg',
+        'image/jpg',
+      ],
+      maxSizeBytes: 10 * 1024 * 1024,
+    });
 
-    const finalPath = join(teacherDir, file.originalname);
-    renameSync(file.path, finalPath);
-
-    return this.prisma.document.create({
+    const document = await this.prisma.document.create({
       data: {
         name: file.originalname,
         mimeType: file.mimetype,
-        path: finalPath,
+        path: stored.reference,
+        storageProvider: 'minio',
+        bucket: stored.bucket,
+        objectKey: stored.key,
+        fileHash: stored.hash,
+        size: stored.size,
         teacherId: teacher.id,
         ...(dto.category ? { category: dto.category.trim() } : {}),
       },
     });
+    await this.audit(currentUser?.sub, 'document.upload', {
+      documentId: document.id,
+      teacherId: teacher.id,
+    });
+    return document;
   }
 
-  async getFilePath(id: number) {
+  async streamFile(id: number, res: Response, user?: JwtPayload) {
     const doc = await this.prisma.document.findUnique({ where: { id } });
     if (!doc) throw new NotFoundException('Document not found');
-    return doc;
+    res.setHeader('Content-Type', doc.mimeType);
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${encodeURIComponent(doc.name)}"`,
+    );
+
+    if (
+      doc.storageProvider === 'minio' ||
+      this.storage.parseReference(doc.path)
+    ) {
+      await this.audit(user?.sub, 'document.download', { documentId: doc.id });
+      return new StreamableFile(await this.storage.getObject(doc.path));
+    }
+
+    if (!existsSync(doc.path)) {
+      throw new NotFoundException('File not found on disk');
+    }
+    await this.audit(user?.sub, 'document.download', { documentId: doc.id });
+    return new StreamableFile(createReadStream(doc.path));
   }
 
   findByStudent(studentId: number) {
@@ -188,7 +249,9 @@ export class DocumentsService {
         select: { userId: true },
       });
       if (!student || student.userId !== user.sub) {
-        throw new ForbiddenException('Vous ne pouvez consulter que vos propres documents');
+        throw new ForbiddenException(
+          'Vous ne pouvez consulter que vos propres documents',
+        );
       }
     }
 
@@ -209,7 +272,9 @@ export class DocumentsService {
         select: { userId: true },
       });
       if (!teacher || teacher.userId !== user.sub) {
-        throw new ForbiddenException('Vous ne pouvez consulter que vos propres documents');
+        throw new ForbiddenException(
+          'Vous ne pouvez consulter que vos propres documents',
+        );
       }
     }
 
@@ -238,8 +303,18 @@ export class DocumentsService {
     });
   }
 
-  remove(id: number) {
-    return this.prisma.document.delete({ where: { id } });
+  async remove(id: number, user?: JwtPayload) {
+    const doc = await this.prisma.document.findUnique({ where: { id } });
+    if (!doc) throw new NotFoundException('Document not found');
+    if (
+      doc.storageProvider === 'minio' ||
+      this.storage.parseReference(doc.path)
+    ) {
+      await this.storage.deleteObject(doc.path);
+    }
+    const deleted = await this.prisma.document.delete({ where: { id } });
+    await this.audit(user?.sub, 'document.delete', { documentId: id });
+    return deleted;
   }
 
   async missingDocuments(studentId: number) {
@@ -250,5 +325,16 @@ export class DocumentsService {
     return required.filter(
       (item) => !existing.some((name) => name.includes(item)),
     );
+  }
+
+  private async audit(
+    userId: number | undefined,
+    action: string,
+    metadata: Prisma.JsonObject,
+  ) {
+    if (!userId) return;
+    await this.prisma.activityLog.create({
+      data: { userId, action, metadata },
+    });
   }
 }

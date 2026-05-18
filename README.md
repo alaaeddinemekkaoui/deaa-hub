@@ -17,6 +17,7 @@ For the complete product, setup, API, and operations guide, see:
 - **Frontend**: Next.js (App Router), TypeScript, Tailwind CSS, shadcn-style UI components
 - **Backend**: NestJS (TypeScript), REST API, modular architecture
 - **Database**: PostgreSQL + Prisma ORM
+- **Runtime infrastructure**: Redis for temporary/session/cache state, MinIO for object storage
 - **Security**: JWT auth, bcrypt password hashing, RBAC, DTO validation
 
 ## Monorepo Structure
@@ -58,6 +59,51 @@ deaa-hub/
 - PostgreSQL schema managed through Prisma (`backend/prisma/schema.prisma`)
 - Relational model with foreign keys and indexed lookup fields
 - Core indexes include student, filiere, department, class, cycle, and reservation lookups
+
+## Storage And Stateless Backend Notes
+
+- PostgreSQL stores users, roles, students, teachers, modules, grades, attendance, document metadata, signature-ready metadata, and audit logs.
+- Raw files are not stored in PostgreSQL. New document uploads, course resources, and profile images are stored in MinIO with object references and hashes in the database.
+- Redis is available as a reusable backend service for sessions, OTP codes, temporary verification tokens, QR attendance tokens, cache keys, rate limits, and queue keys. QR attendance tokens now use Redis with database fallback for compatibility.
+- The backend no longer needs local disk for new runtime uploads. Existing local `Document.path`, `CoursResource.path`, and profile image paths continue to work while files are migrated.
+
+Required infrastructure variables are listed in `.env.example` and `backend/.env.example`:
+
+```bash
+DATABASE_URL=
+REDIS_URL=
+MINIO_ENDPOINT=
+MINIO_PORT=
+MINIO_ACCESS_KEY=
+MINIO_SECRET_KEY=
+MINIO_USE_SSL=false
+MINIO_BUCKET_ORIGINAL_DOCUMENTS=
+MINIO_BUCKET_SIGNED_DOCUMENTS=
+MINIO_BUCKET_SIGNATURE_ASSETS=
+MINIO_BUCKET_PROFILE_IMAGES=
+MINIO_BUCKET_TEMP=
+```
+
+To run the backend infrastructure locally:
+
+```bash
+docker compose up --build
+```
+
+Health endpoints:
+
+- `GET /api` checks the backend process.
+- `GET /api/db-status` checks PostgreSQL.
+- `GET /api/health/infrastructure` checks PostgreSQL, Redis, and MinIO.
+
+Safe migration path from existing local uploads:
+
+1. Back up the current database and `backend/uploads`.
+2. Apply migrations with `cd backend && npm run prisma:deploy`.
+3. Start PostgreSQL, Redis, MinIO, and backend with the new environment values.
+4. Let new uploads write directly to MinIO.
+5. Gradually copy existing local files into the appropriate MinIO bucket, then update each row’s `path`, `storageProvider`, `bucket`, `objectKey`, `fileHash`, and `size`.
+6. After all rows use `minio://...` references, app instances can run without a shared local upload directory behind a load balancer.
 
 ## Local Setup
 

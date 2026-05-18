@@ -295,6 +295,11 @@ model Document {
   name          String
   mimeType      String
   path          String
+  storageProvider String?  @default("local")
+  bucket        String?
+  objectKey     String?
+  fileHash      String?
+  size          Int?
   studentId     Int?
   teacherId     Int?
   category      String?
@@ -305,6 +310,8 @@ model Document {
 
   @@index([studentId])
   @@index([teacherId])
+  @@index([storageProvider])
+  @@index([bucket, objectKey])
 }
 
 model StudentGrade {
@@ -724,6 +731,10 @@ model CoursResource {
   fileName     String
   mimeType     String
   path         String
+  storageProvider String?  @default("local")
+  bucket       String?
+  objectKey    String?
+  fileHash     String?
   size         Int
   createdAt    DateTime      @default(now())
   class        AcademicClass @relation(fields: [classId], references: [id], onDelete: Cascade)
@@ -736,6 +747,8 @@ model CoursResource {
   @@index([teacherId])
   @@index([uploadedById])
   @@index([createdAt])
+  @@index([storageProvider])
+  @@index([bucket, objectKey])
 }
 
 model Meal {

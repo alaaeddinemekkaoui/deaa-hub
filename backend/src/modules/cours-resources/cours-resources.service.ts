@@ -6,15 +6,15 @@ import {
   StreamableFile,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { createReadStream, existsSync, mkdirSync, renameSync } from 'fs';
-import { tmpdir } from 'os';
-import { basename, join } from 'path';
+import { createReadStream, existsSync } from 'fs';
+import { basename } from 'path';
 import type { Response } from 'express';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 import { UserRole } from '../../common/types/role.type';
 import { UpdateCoursResourceDto } from './dto/update-cours-resource.dto';
 import { UploadCoursResourceDto } from './dto/upload-cours-resource.dto';
+import { ObjectStorageService } from '../../common/storage/object-storage.service';
 
 const RESOURCE_INCLUDE = {
   cours: { select: { id: true, name: true, type: true } },
@@ -25,15 +25,10 @@ const RESOURCE_INCLUDE = {
 
 @Injectable()
 export class CoursResourcesService {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getUploadBaseDir() {
-    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-      return join(tmpdir(), 'deaa-hub', 'uploads', 'cours-resources');
-    }
-
-    return join(process.cwd(), 'uploads', 'cours-resources');
-  }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: ObjectStorageService,
+  ) {}
 
   private slugify(value: string) {
     return value
@@ -75,19 +70,29 @@ export class CoursResourcesService {
     await this.ensureCoursClassExists(dto.coursId, dto.classId);
 
     const teacherId = await this.resolveTeacherId(dto, user);
-    const classDir = join(
-      this.getUploadBaseDir(),
-      `class-${dto.classId}`,
-      `cours-${dto.coursId}`,
-    );
-    if (!existsSync(classDir)) mkdirSync(classDir, { recursive: true });
-
     const safeTitle = dto.title?.trim() || file.originalname;
-    const finalName = `${Date.now()}-${this.slugify(file.originalname) || basename(file.filename)}`;
-    const finalPath = join(classDir, finalName);
-    renameSync(file.path, finalPath);
+    const folder = `cours-resources/class-${dto.classId}/cours-${dto.coursId}`;
+    const stored = await this.storage.uploadBuffer({
+      bucketName: 'originalDocuments',
+      buffer: file.buffer,
+      originalName:
+        this.slugify(file.originalname) || basename(file.originalname),
+      mimeType: file.mimetype,
+      folder,
+      allowedMimeTypes: [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'image/png',
+        'image/jpeg',
+        'image/jpg',
+      ],
+      maxSizeBytes: 25 * 1024 * 1024,
+    });
 
-    return this.prisma.coursResource.create({
+    const resource = await this.prisma.coursResource.create({
       data: {
         coursId: dto.coursId,
         classId: dto.classId,
@@ -96,11 +101,21 @@ export class CoursResourcesService {
         title: safeTitle,
         fileName: file.originalname,
         mimeType: file.mimetype,
-        path: finalPath,
-        size: file.size,
+        path: stored.reference,
+        storageProvider: 'minio',
+        bucket: stored.bucket,
+        objectKey: stored.key,
+        fileHash: stored.hash,
+        size: stored.size,
       },
       include: RESOURCE_INCLUDE,
     });
+    await this.audit(user.sub, 'document.upload', {
+      resourceId: resource.id,
+      coursId: dto.coursId,
+      classId: dto.classId,
+    });
+    return resource;
   }
 
   async download(
@@ -110,22 +125,42 @@ export class CoursResourcesService {
     disposition: 'inline' | 'attachment',
   ) {
     const resource = await this.getAuthorizedResource(id, user);
-    if (!existsSync(resource.path)) {
-      throw new NotFoundException('Fichier introuvable');
-    }
-
     res.setHeader('Content-Type', resource.mimeType);
     res.setHeader(
       'Content-Disposition',
       `${disposition}; filename="${encodeURIComponent(resource.fileName)}"`,
     );
+    await this.audit(user.sub, 'document.download', {
+      resourceId: resource.id,
+    });
+
+    if (
+      resource.storageProvider === 'minio' ||
+      this.storage.parseReference(resource.path)
+    ) {
+      return new StreamableFile(await this.storage.getObject(resource.path));
+    }
+
+    if (!existsSync(resource.path)) {
+      throw new NotFoundException('Fichier introuvable');
+    }
     return new StreamableFile(createReadStream(resource.path));
   }
 
   async remove(id: number, user: JwtPayload) {
     const resource = await this.getAuthorizedResource(id, user);
     await this.ensureCanManageResource(resource, user);
-    return this.prisma.coursResource.delete({ where: { id: resource.id } });
+    if (
+      resource.storageProvider === 'minio' ||
+      this.storage.parseReference(resource.path)
+    ) {
+      await this.storage.deleteObject(resource.path);
+    }
+    const deleted = await this.prisma.coursResource.delete({
+      where: { id: resource.id },
+    });
+    await this.audit(user.sub, 'document.delete', { resourceId: resource.id });
+    return deleted;
   }
 
   async update(id: number, dto: UpdateCoursResourceDto, user: JwtPayload) {
@@ -255,5 +290,15 @@ export class CoursResourcesService {
     });
     if (!student) throw new NotFoundException('Profil étudiant introuvable');
     return student;
+  }
+
+  private async audit(
+    userId: number,
+    action: string,
+    metadata: Prisma.JsonObject,
+  ) {
+    await this.prisma.activityLog.create({
+      data: { userId, action, metadata },
+    });
   }
 }

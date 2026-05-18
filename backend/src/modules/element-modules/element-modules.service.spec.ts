@@ -1,47 +1,37 @@
-import { ElementModulesService } from './element-modules.service';
 import { NotFoundException } from '@nestjs/common';
+import { ElementModulesService } from './element-modules.service';
 
 describe('ElementModulesService', () => {
   let service: ElementModulesService;
   let prisma: any;
+  let modulesService: any;
 
   beforeEach(() => {
     prisma = {
       module: {
-        findUnique: jest.fn(),
+        findUnique: jest
+          .fn()
+          .mockResolvedValueOnce({ id: 1 })
+          .mockResolvedValueOnce({ filiere: { departmentId: 10 } }),
       },
-      academicClass: {
-        findUnique: jest.fn(),
+      moduleClass: {
+        findMany: jest.fn().mockResolvedValue([{ classId: 2 }, { classId: 3 }]),
       },
       elementModule: {
-        create: jest.fn(),
-      },
-      cours: {
-        findFirst: jest.fn(),
-        update: jest.fn(),
-        create: jest.fn(),
-      },
-      coursClass: {
-        findFirst: jest.fn(),
-        create: jest.fn(),
+        create: jest
+          .fn()
+          .mockResolvedValue({ id: 100, name: 'Algo', cours: null }),
+        findUnique: jest.fn().mockResolvedValue({ id: 100, name: 'Algo' }),
       },
     };
+    modulesService = {
+      ensureCoursAndCoursClass: jest.fn().mockResolvedValue(undefined),
+    };
 
-    service = new ElementModulesService(prisma);
+    service = new ElementModulesService(prisma, modulesService);
   });
 
-  it('create should link an existing unlinked cours and create class assignment when needed', async () => {
-    prisma.module.findUnique.mockResolvedValue({ id: 1 });
-    prisma.academicClass.findUnique.mockResolvedValue({ id: 2 });
-    prisma.elementModule.create.mockResolvedValue({ id: 100, name: 'Algo' });
-    prisma.cours.findFirst.mockResolvedValue({
-      id: 200,
-      elementModuleId: null,
-    });
-    prisma.cours.update.mockResolvedValue({ id: 200, elementModuleId: 100 });
-    prisma.coursClass.findFirst.mockResolvedValue(null);
-    prisma.coursClass.create.mockResolvedValue({ id: 300 });
-
+  it('create should create an element and provision cours assignments for module classes', async () => {
     const result = await service.create({
       name: 'Algo',
       moduleId: 1,
@@ -50,107 +40,43 @@ describe('ElementModulesService', () => {
       volumeHoraire: 20,
     });
 
-    expect(prisma.cours.update).toHaveBeenCalledWith({
-      where: { id: 200 },
-      data: { elementModuleId: 100 },
+    expect(prisma.elementModule.create).toHaveBeenCalledWith({
+      data: {
+        name: 'Algo',
+        moduleId: 1,
+        volumeHoraire: 20,
+        sessionDurationMinutes: null,
+        type: 'CM',
+        ponderation: 1,
+        coefficient: 1,
+        classId: null,
+      },
+      select: { id: true, name: true, cours: { select: { id: true } } },
     });
-    expect(prisma.coursClass.create).toHaveBeenCalledWith({
-      data: { coursId: 200, classId: 2, teacherId: null },
-    });
-    expect(prisma.cours.create).not.toHaveBeenCalled();
+    expect(modulesService.ensureCoursAndCoursClass).toHaveBeenCalledTimes(2);
+    expect(modulesService.ensureCoursAndCoursClass).toHaveBeenCalledWith(
+      { id: 100, name: 'Algo', cours: null },
+      2,
+    );
     expect(result).toEqual({ id: 100, name: 'Algo' });
   });
 
-  it('create should create a new cours when no cours with same name exists', async () => {
-    prisma.module.findUnique.mockResolvedValue({ id: 1 });
-    prisma.academicClass.findUnique.mockResolvedValue({ id: 2 });
-    prisma.elementModule.create.mockResolvedValue({
-      id: 101,
-      name: 'Hydrologie',
-    });
-    prisma.cours.findFirst.mockResolvedValue(null);
-    prisma.cours.create.mockResolvedValue({ id: 201, name: 'Hydrologie' });
-    prisma.coursClass.create.mockResolvedValue({ id: 301 });
-
-    await service.create({
-      name: 'Hydrologie',
-      moduleId: 1,
-      classId: 2,
-      type: 'CM',
-      volumeHoraire: 30,
-    });
-
-    expect(prisma.cours.create).toHaveBeenCalledWith({
-      data: { name: 'Hydrologie', elementModuleId: 101 },
-    });
-    expect(prisma.coursClass.create).toHaveBeenCalledWith({
-      data: { coursId: 201, classId: 2 },
-    });
-  });
-
-  it('create should not relink or duplicate when existing cours is already linked and assignment exists', async () => {
-    prisma.module.findUnique.mockResolvedValue({ id: 1 });
-    prisma.academicClass.findUnique.mockResolvedValue({ id: 2 });
-    prisma.elementModule.create.mockResolvedValue({
-      id: 102,
-      name: 'Biochimie',
-    });
-    prisma.cours.findFirst.mockResolvedValue({ id: 202, elementModuleId: 999 });
-    prisma.coursClass.findFirst.mockResolvedValue({ id: 302 });
-
-    await service.create({
-      name: 'Biochimie',
-      moduleId: 1,
-      classId: 2,
-      type: 'CM',
-      volumeHoraire: 25,
-    });
-
-    expect(prisma.cours.update).not.toHaveBeenCalled();
-    expect(prisma.coursClass.create).not.toHaveBeenCalled();
-    expect(prisma.cours.create).not.toHaveBeenCalled();
-  });
-
   it('create should throw when module does not exist', async () => {
+    prisma.module.findUnique.mockReset();
     prisma.module.findUnique.mockResolvedValue(null);
 
     await expect(
       service.create({
         name: 'Algo',
         moduleId: 999,
-        classId: 2,
         type: 'CM',
         volumeHoraire: 20,
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('create should throw when class does not exist and classId is provided', async () => {
-    prisma.module.findUnique.mockResolvedValue({ id: 1 });
-    prisma.academicClass.findUnique.mockResolvedValue(null);
-
-    await expect(
-      service.create({
-        name: 'Algo',
-        moduleId: 1,
-        classId: 999,
-        type: 'CM',
-        volumeHoraire: 20,
-      }),
-    ).rejects.toBeInstanceOf(NotFoundException);
-  });
-
-  it('create should skip class assignment when classId is not provided', async () => {
-    prisma.module.findUnique.mockResolvedValue({ id: 1 });
-    prisma.elementModule.create.mockResolvedValue({
-      id: 111,
-      name: 'Cours Sans Classe',
-    });
-    prisma.cours.findFirst.mockResolvedValue({
-      id: 211,
-      elementModuleId: null,
-    });
-    prisma.cours.update.mockResolvedValue({ id: 211, elementModuleId: 111 });
+  it('create should skip cours assignment when the module has no classes', async () => {
+    prisma.moduleClass.findMany.mockResolvedValue([]);
 
     await service.create({
       name: 'Cours Sans Classe',
@@ -159,7 +85,6 @@ describe('ElementModulesService', () => {
       volumeHoraire: 10,
     });
 
-    expect(prisma.coursClass.findFirst).not.toHaveBeenCalled();
-    expect(prisma.coursClass.create).not.toHaveBeenCalled();
+    expect(modulesService.ensureCoursAndCoursClass).not.toHaveBeenCalled();
   });
 });

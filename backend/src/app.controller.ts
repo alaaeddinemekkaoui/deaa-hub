@@ -14,4 +14,9 @@ export class AppController {
   getDatabaseStatus() {
     return this.appService.getDatabaseStatus();
   }
+
+  @Get('health/infrastructure')
+  getInfrastructureHealth() {
+    return this.appService.getInfrastructureHealth();
+  }
 }

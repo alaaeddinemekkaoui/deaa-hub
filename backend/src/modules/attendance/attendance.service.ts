@@ -4,12 +4,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AttendanceMethod, AttendanceStatus, Prisma, UserRole } from '@prisma/client';
+import {
+  AttendanceMethod,
+  AttendanceStatus,
+  Prisma,
+  UserRole,
+} from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 import { EnableAttendanceDto } from './dto/enable-attendance.dto';
 import { ManualAttendanceDto } from './dto/manual-attendance.dto';
+import { RedisService } from '../../common/cache/redis.service';
 
 const SESSION_INCLUDE = {
   class: {
@@ -27,7 +33,9 @@ const SESSION_INCLUDE = {
       cours: { select: { id: true, name: true } },
     },
   },
-  teacher: { select: { id: true, firstName: true, lastName: true, userId: true } },
+  teacher: {
+    select: { id: true, firstName: true, lastName: true, userId: true },
+  },
   room: { select: { id: true, name: true } },
 } satisfies Prisma.TimetableSessionInclude;
 
@@ -37,11 +45,19 @@ type SessionWithAttendance = Prisma.TimetableSessionGetPayload<{
 
 @Injectable()
 export class AttendanceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+  ) {}
 
   async getOptions(
     user: JwtPayload,
-    query: { classId?: number; courseId?: number; dateFrom?: string; dateTo?: string },
+    query: {
+      classId?: number;
+      courseId?: number;
+      dateFrom?: string;
+      dateTo?: string;
+    },
   ) {
     const teacher = await this.prisma.teacher.findUnique({
       where: { userId: user.sub },
@@ -53,7 +69,8 @@ export class AttendanceService {
         : undefined;
 
     const classWhere: Prisma.AcademicClassWhereInput = {};
-    if (departmentScope) classWhere.filiere = { is: { departmentId: { in: departmentScope } } };
+    if (departmentScope)
+      classWhere.filiere = { is: { departmentId: { in: departmentScope } } };
     if (user.role === UserRole.teacher && teacher) {
       classWhere.cours = { some: { teacherId: teacher.id } };
     }
@@ -65,7 +82,8 @@ export class AttendanceService {
     });
 
     const coursWhere: Prisma.CoursWhereInput = {};
-    if (query.classId) coursWhere.classes = { some: { classId: query.classId } };
+    if (query.classId)
+      coursWhere.classes = { some: { classId: query.classId } };
     if (user.role === UserRole.teacher && teacher) {
       coursWhere.classes = {
         some: {
@@ -85,7 +103,12 @@ export class AttendanceService {
 
     const courses = await this.prisma.cours.findMany({
       where: coursWhere,
-      select: { id: true, name: true, type: true, elementModule: { select: { volumeHoraire: true } } },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        elementModule: { select: { volumeHoraire: true } },
+      },
       orderBy: { name: 'asc' },
     });
 
@@ -93,15 +116,29 @@ export class AttendanceService {
     const sessions = await this.prisma.timetableSession.findMany({
       where: sessionWhere,
       include: SESSION_INCLUDE,
-      orderBy: [{ weekStart: 'desc' }, { dayOfWeek: 'asc' }, { startTime: 'asc' }],
+      orderBy: [
+        { weekStart: 'desc' },
+        { dayOfWeek: 'asc' },
+        { startTime: 'asc' },
+      ],
     });
 
-    return { classes, courses, sessions: sessions.map((session) => this.presentSession(session)) };
+    return {
+      classes,
+      courses,
+      sessions: sessions.map((session) => this.presentSession(session)),
+    };
   }
 
   async getOverview(
     user: JwtPayload,
-    query: { classId?: number; courseId?: number; sessionId?: number; dateFrom?: string; dateTo?: string },
+    query: {
+      classId?: number;
+      courseId?: number;
+      sessionId?: number;
+      dateFrom?: string;
+      dateTo?: string;
+    },
   ) {
     const where = await this.buildOverviewWhere(user, query);
     if (query.sessionId) where.id = query.sessionId;
@@ -112,13 +149,22 @@ export class AttendanceService {
         attendanceRecords: {
           include: {
             student: {
-              select: { id: true, fullName: true, codeMassar: true, codeEtudiant: true },
+              select: {
+                id: true,
+                fullName: true,
+                codeMassar: true,
+                codeEtudiant: true,
+              },
             },
           },
           orderBy: { student: { fullName: 'asc' } },
         },
       },
-      orderBy: [{ weekStart: 'desc' }, { dayOfWeek: 'asc' }, { startTime: 'asc' }],
+      orderBy: [
+        { weekStart: 'desc' },
+        { dayOfWeek: 'asc' },
+        { startTime: 'asc' },
+      ],
     });
 
     const finalized = await Promise.all(
@@ -133,22 +179,37 @@ export class AttendanceService {
           attendanceRecords: {
             include: {
               student: {
-                select: { id: true, fullName: true, codeMassar: true, codeEtudiant: true },
+                select: {
+                  id: true,
+                  fullName: true,
+                  codeMassar: true,
+                  codeEtudiant: true,
+                },
               },
             },
             orderBy: { student: { fullName: 'asc' } },
           },
         },
-        orderBy: [{ weekStart: 'desc' }, { dayOfWeek: 'asc' }, { startTime: 'asc' }],
+        orderBy: [
+          { weekStart: 'desc' },
+          { dayOfWeek: 'asc' },
+          { startTime: 'asc' },
+        ],
       });
     }
 
     return sessions.map((session) => ({
       ...this.presentSession(session),
       summary: {
-        present: session.attendanceRecords.filter((record) => record.status === 'present').length,
-        absent: session.attendanceRecords.filter((record) => record.status === 'absent').length,
-        pending: session.attendanceRecords.filter((record) => record.status === 'pending').length,
+        present: session.attendanceRecords.filter(
+          (record) => record.status === 'present',
+        ).length,
+        absent: session.attendanceRecords.filter(
+          (record) => record.status === 'absent',
+        ).length,
+        pending: session.attendanceRecords.filter(
+          (record) => record.status === 'pending',
+        ).length,
       },
       students: session.attendanceRecords,
     }));
@@ -190,7 +251,10 @@ export class AttendanceService {
 
     return {
       now,
-      current: sessions.find((session) => this.isWithinSessionClock(session, now)) ?? sessions[0] ?? null,
+      current:
+        sessions.find((session) => this.isWithinSessionClock(session, now)) ??
+        sessions[0] ??
+        null,
       sessions,
     };
   }
@@ -213,7 +277,9 @@ export class AttendanceService {
     await this.ensureCanManageSession(session, user);
 
     const now = new Date();
-    const requestedDeadline = new Date(now.getTime() + (dto.minutes ?? 90) * 60_000);
+    const requestedDeadline = new Date(
+      now.getTime() + (dto.minutes ?? 90) * 60_000,
+    );
     const deadline = requestedDeadline;
 
     const token = `att_${id}_${randomBytes(32).toString('base64url')}`;
@@ -228,6 +294,7 @@ export class AttendanceService {
       },
       include: SESSION_INCLUDE,
     });
+    await this.storeQrToken(id, token, deadline);
     await this.ensurePendingRecords(updated, dto.reopenAbsent ?? false);
 
     return { ...this.presentSession(updated), qrToken: token };
@@ -247,6 +314,7 @@ export class AttendanceService {
       },
       include: SESSION_INCLUDE,
     });
+    await this.deleteQrToken(id);
     return this.presentSession(updated);
   }
 
@@ -255,7 +323,9 @@ export class AttendanceService {
     await this.ensureCanManageSession(session, user);
     const now = new Date();
     const base =
-      session.attendanceEnabled && session.attendanceDeadline && session.attendanceDeadline > now
+      session.attendanceEnabled &&
+      session.attendanceDeadline &&
+      session.attendanceDeadline > now
         ? session.attendanceDeadline
         : now;
     const deadline = new Date(base.getTime() + minutes * 60_000);
@@ -272,6 +342,7 @@ export class AttendanceService {
       },
       include: SESSION_INCLUDE,
     });
+    await this.storeQrToken(id, token, deadline);
     return { ...this.presentSession(updated), qrToken: token };
   }
 
@@ -287,7 +358,9 @@ export class AttendanceService {
     }
 
     const record = await this.prisma.attendanceRecord.upsert({
-      where: { studentId_sessionId: { studentId: dto.studentId, sessionId: id } },
+      where: {
+        studentId_sessionId: { studentId: dto.studentId, sessionId: id },
+      },
       create: {
         studentId: dto.studentId,
         sessionId: id,
@@ -312,7 +385,13 @@ export class AttendanceService {
     const session = await this.getSessionOrThrow(sessionId);
     const now = new Date();
 
-    if (!session.attendanceTokenHash || session.attendanceTokenHash !== this.hashToken(token)) {
+    if (
+      !(await this.isValidQrToken(
+        session.id,
+        token,
+        session.attendanceTokenHash,
+      ))
+    ) {
       throw new BadRequestException('invalid session');
     }
     if (!session.attendanceEnabled || session.attendanceClosedAt) {
@@ -327,7 +406,8 @@ export class AttendanceService {
       select: { id: true, fullName: true, classId: true },
     });
     if (!student) throw new BadRequestException('not enrolled');
-    if (student.classId !== session.classId) throw new BadRequestException('not enrolled');
+    if (student.classId !== session.classId)
+      throw new BadRequestException('not enrolled');
 
     const courseId = session.element.cours?.id;
     if (courseId) {
@@ -339,7 +419,9 @@ export class AttendanceService {
     }
 
     const record = await this.prisma.attendanceRecord.upsert({
-      where: { studentId_sessionId: { studentId: student.id, sessionId: session.id } },
+      where: {
+        studentId_sessionId: { studentId: student.id, sessionId: session.id },
+      },
       create: {
         studentId: student.id,
         sessionId: session.id,
@@ -395,7 +477,8 @@ export class AttendanceService {
         method: record.method,
         timestamp: record.timestamp,
         className: record.session.class.name,
-        courseName: record.session.element.cours?.name ?? record.session.element.name,
+        courseName:
+          record.session.element.cours?.name ?? record.session.element.name,
         moduleName: record.session.element.module.name,
         startTime: record.session.startTime,
         endTime: record.session.endTime,
@@ -414,9 +497,13 @@ export class AttendanceService {
     return session;
   }
 
-  private async ensureCanViewSession(session: SessionWithAttendance, user: JwtPayload) {
+  private async ensureCanViewSession(
+    session: SessionWithAttendance,
+    user: JwtPayload,
+  ) {
     if (user.role === UserRole.admin || user.role === UserRole.staff) return;
-    if (user.role === UserRole.teacher) return this.ensureCanManageSession(session, user);
+    if (user.role === UserRole.teacher)
+      return this.ensureCanManageSession(session, user);
     if (user.role === UserRole.student) {
       const student = await this.prisma.student.findUnique({
         where: { userId: user.sub },
@@ -427,7 +514,10 @@ export class AttendanceService {
     throw new ForbiddenException('Insufficient role permissions');
   }
 
-  private async ensureCanManageSession(session: SessionWithAttendance, user: JwtPayload) {
+  private async ensureCanManageSession(
+    session: SessionWithAttendance,
+    user: JwtPayload,
+  ) {
     if (user.role === UserRole.admin || user.role === UserRole.staff) return;
     if (user.role !== UserRole.teacher) {
       throw new ForbiddenException('Insufficient role permissions');
@@ -441,7 +531,10 @@ export class AttendanceService {
     }
   }
 
-  private async ensurePendingRecords(session: SessionWithAttendance, reopenAbsent = false) {
+  private async ensurePendingRecords(
+    session: SessionWithAttendance,
+    reopenAbsent = false,
+  ) {
     const students = await this.prisma.student.findMany({
       where: { classId: session.classId },
       select: { id: true },
@@ -450,7 +543,12 @@ export class AttendanceService {
       await Promise.all(
         students.map((student) =>
           tx.attendanceRecord.upsert({
-            where: { studentId_sessionId: { studentId: student.id, sessionId: session.id } },
+            where: {
+              studentId_sessionId: {
+                studentId: student.id,
+                sessionId: session.id,
+              },
+            },
             create: {
               studentId: student.id,
               sessionId: session.id,
@@ -466,7 +564,10 @@ export class AttendanceService {
       if (reopenAbsent) {
         await tx.attendanceRecord.updateMany({
           where: { sessionId: session.id, status: AttendanceStatus.absent },
-          data: { status: AttendanceStatus.pending, method: AttendanceMethod.qr },
+          data: {
+            status: AttendanceStatus.pending,
+            method: AttendanceMethod.qr,
+          },
         });
       }
     });
@@ -474,7 +575,12 @@ export class AttendanceService {
 
   private async buildOverviewWhere(
     user: JwtPayload,
-    query: { classId?: number; courseId?: number; dateFrom?: string; dateTo?: string },
+    query: {
+      classId?: number;
+      courseId?: number;
+      dateFrom?: string;
+      dateTo?: string;
+    },
   ) {
     const where: Prisma.TimetableSessionWhereInput = {};
     if (query.classId) where.classId = query.classId;
@@ -494,7 +600,9 @@ export class AttendanceService {
     }
 
     if (user.role === UserRole.inspector || user.role === UserRole.user) {
-      where.class = { filiere: { is: { departmentId: { in: user.departmentIds } } } };
+      where.class = {
+        filiere: { is: { departmentId: { in: user.departmentIds } } },
+      };
     }
 
     return where;
@@ -522,7 +630,11 @@ export class AttendanceService {
   }
 
   private async finalizeIfExpired(session: SessionWithAttendance) {
-    if (session.attendanceEnabled && session.attendanceDeadline && new Date() > session.attendanceDeadline) {
+    if (
+      session.attendanceEnabled &&
+      session.attendanceDeadline &&
+      new Date() > session.attendanceDeadline
+    ) {
       await this.closeExpiredSession(session.id);
       return true;
     }
@@ -533,14 +645,22 @@ export class AttendanceService {
     await this.markPendingAbsent(sessionId);
     await this.prisma.timetableSession.update({
       where: { id: sessionId },
-      data: { attendanceEnabled: false, attendanceTokenHash: null, attendanceClosedAt: new Date() },
+      data: {
+        attendanceEnabled: false,
+        attendanceTokenHash: null,
+        attendanceClosedAt: new Date(),
+      },
     });
+    await this.deleteQrToken(sessionId);
   }
 
   private async markPendingAbsent(sessionId: number) {
     await this.prisma.attendanceRecord.updateMany({
       where: { sessionId, status: AttendanceStatus.pending },
-      data: { status: AttendanceStatus.absent, method: AttendanceMethod.manual },
+      data: {
+        status: AttendanceStatus.absent,
+        method: AttendanceMethod.manual,
+      },
     });
   }
 
@@ -555,6 +675,39 @@ export class AttendanceService {
 
   private hashToken(token: string) {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private async storeQrToken(sessionId: number, token: string, deadline: Date) {
+    if (!this.redis.isEnabled) return;
+    const ttlSeconds = Math.max(
+      1,
+      Math.ceil((deadline.getTime() - Date.now()) / 1000),
+    );
+    await this.redis.setJson(
+      this.redis.qrAttendanceKey(sessionId),
+      { tokenHash: this.hashToken(token) },
+      ttlSeconds,
+    );
+  }
+
+  private async deleteQrToken(sessionId: number) {
+    if (!this.redis.isEnabled) return;
+    await this.redis.delete(this.redis.qrAttendanceKey(sessionId));
+  }
+
+  private async isValidQrToken(
+    sessionId: number,
+    token: string,
+    fallbackHash?: string | null,
+  ) {
+    const tokenHash = this.hashToken(token);
+    if (this.redis.isEnabled) {
+      const cached = await this.redis.getJson<{ tokenHash: string }>(
+        this.redis.qrAttendanceKey(sessionId),
+      );
+      if (cached) return cached.tokenHash === tokenHash;
+    }
+    return Boolean(fallbackHash && fallbackHash === tokenHash);
   }
 
   private sessionIdFromToken(token: string) {
@@ -576,19 +729,33 @@ export class AttendanceService {
     return d;
   }
 
-  private sessionBoundary(session: Pick<SessionWithAttendance, 'dayOfWeek' | 'weekStart' | 'startTime' | 'endTime'>, boundary: 'start' | 'end') {
-    const base = session.weekStart ? new Date(session.weekStart) : this.weekStart(new Date());
+  private sessionBoundary(
+    session: Pick<
+      SessionWithAttendance,
+      'dayOfWeek' | 'weekStart' | 'startTime' | 'endTime'
+    >,
+    boundary: 'start' | 'end',
+  ) {
+    const base = session.weekStart
+      ? new Date(session.weekStart)
+      : this.weekStart(new Date());
     base.setDate(base.getDate() + session.dayOfWeek - 1);
-    const [hours, minutes] = (boundary === 'start' ? session.startTime : session.endTime).split(':').map(Number);
+    const [hours, minutes] = (
+      boundary === 'start' ? session.startTime : session.endTime
+    )
+      .split(':')
+      .map(Number);
     base.setHours(hours, minutes, 0, 0);
     return base;
   }
 
-  private isWithinSessionClock(session: Pick<SessionWithAttendance, 'startTime' | 'endTime'>, now: Date) {
+  private isWithinSessionClock(
+    session: Pick<SessionWithAttendance, 'startTime' | 'endTime'>,
+    now: Date,
+  ) {
     const minutes = now.getHours() * 60 + now.getMinutes();
     const [sh, sm] = session.startTime.split(':').map(Number);
     const [eh, em] = session.endTime.split(':').map(Number);
     return minutes >= sh * 60 + sm && minutes <= eh * 60 + em;
   }
-
 }

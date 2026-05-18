@@ -9,6 +9,7 @@ export type JwtPayload = {
   email: string;
   role: UserRole;
   departmentIds: number[];
+  sid?: string;
 };
 
 @Injectable()
