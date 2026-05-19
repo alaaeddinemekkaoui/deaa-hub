@@ -109,7 +109,7 @@ export default function TeachersPage() {
   const [openActionsId, setOpenActionsId] = useState<number | null>(null);
   const [meta, setMeta] = useState({
     page: 1,
-    limit: resolveLimit(DEFAULT_PAGE_SIZE, 0),
+    limit: resolveLimit(DEFAULT_PAGE_SIZE),
     total: 0,
     totalPages: 1,
     hasNextPage: false,
@@ -260,7 +260,7 @@ export default function TeachersPage() {
       } catch (loadError) {
         setError(getApiErrorMessage(loadError, 'Unable to load teachers right now.'));
         setRows([]);
-        setMeta({ page: 1, limit: resolveLimit(DEFAULT_PAGE_SIZE, 0), total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false });
+        setMeta({ page: 1, limit: resolveLimit(DEFAULT_PAGE_SIZE), total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false });
       } finally {
         setLoading(false);
       }

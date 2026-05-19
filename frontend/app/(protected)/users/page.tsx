@@ -33,8 +33,11 @@ type MessageGroupSummary = {
   type: string;
   _count?: { members: number; messages: number };
 };
+type PageSizeValue = number | 'all';
 
-const PAGE_SIZE_OPTIONS = [5, 10, 15, 25, 50, 100] as const;
+const PAGE_SIZE_OPTIONS: PageSizeValue[] = [5, 10, 25, 50, 100, 'all'];
+const pageLimit = (pageSize: PageSizeValue, total: number) =>
+  pageSize === 'all' ? Math.max(total, 1) : pageSize;
 
 const ROLE_LABELS: Record<string, string> = {
   admin:     'Administrateur',
@@ -58,7 +61,7 @@ export default function UsersPage() {
   const [rows, setRows] = useState<User[]>([]);
   const [search, setSearch] = useState('');
   const [usersPage, setUsersPage] = useState(1);
-  const [usersPageSize, setUsersPageSize] = useState(10);
+  const [usersPageSize, setUsersPageSize] = useState<PageSizeValue>(10);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -73,7 +76,7 @@ export default function UsersPage() {
   const [downloadingBackup, setDownloadingBackup] = useState(false);
   const [syncingMessagingGroups, setSyncingMessagingGroups] = useState(false);
   const [messagingGroups, setMessagingGroups] = useState<MessageGroupSummary[]>([]);
-  const [groupsPageSize, setGroupsPageSize] = useState<number>(10);
+  const [groupsPageSize, setGroupsPageSize] = useState<PageSizeValue>(10);
   const [groupsPage, setGroupsPage] = useState(1);
 
   const [unlinked, setUnlinked] = useState<UnlinkedProfiles | null>(null);
@@ -101,8 +104,16 @@ export default function UsersPage() {
       .toLowerCase()
       .includes(query);
   });
-  const usersTotalPages = Math.max(1, Math.ceil(filteredRows.length / usersPageSize));
-  const pagedUsers = filteredRows.slice((usersPage - 1) * usersPageSize, usersPage * usersPageSize);
+  const usersLimit = pageLimit(usersPageSize, filteredRows.length);
+  const usersTotalPages = Math.max(1, Math.ceil(filteredRows.length / usersLimit));
+  const pagedUsers = usersPageSize === 'all'
+    ? filteredRows
+    : filteredRows.slice((usersPage - 1) * usersLimit, usersPage * usersLimit);
+  const groupsLimit = pageLimit(groupsPageSize, messagingGroups.length);
+  const groupsTotalPages = Math.max(1, Math.ceil(messagingGroups.length / groupsLimit));
+  const pagedMessagingGroups = groupsPageSize === 'all'
+    ? messagingGroups
+    : messagingGroups.slice((groupsPage - 1) * groupsLimit, groupsPage * groupsLimit);
 
   const loadUsers = async () => {
     const response = await api.get<User[]>('/users');
@@ -212,9 +223,8 @@ export default function UsersPage() {
   }, [isAdmin]);
 
   useEffect(() => {
-    const pageCount = Math.max(1, Math.ceil(messagingGroups.length / groupsPageSize));
-    if (groupsPage > pageCount) setGroupsPage(pageCount);
-  }, [groupsPage, groupsPageSize, messagingGroups.length]);
+    if (groupsPage > groupsTotalPages) setGroupsPage(groupsTotalPages);
+  }, [groupsPage, groupsTotalPages]);
 
   const resetUserForm = () => {
     setEditingId(null);
@@ -454,11 +464,15 @@ export default function UsersPage() {
               <span className="text-slate-500">Par page</span>
               <select
                 className="input h-9 py-0 pr-8"
-                value={usersPageSize}
-                onChange={(e) => { setUsersPageSize(Number(e.target.value)); setUsersPage(1); }}
+                value={String(usersPageSize)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setUsersPageSize(value === 'all' ? 'all' : Number(value));
+                  setUsersPage(1);
+                }}
               >
                 {PAGE_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={size}>{size}</option>
+                  <option key={String(size)} value={String(size)}>{size === 'all' ? 'Tout' : size}</option>
                 ))}
               </select>
             </div>
@@ -550,7 +564,7 @@ export default function UsersPage() {
           <div className="panel-header">
             <div>
               <h2 className="panel-title">Gestion des groupes messagerie</h2>
-              <p className="panel-copy">Groupes visibles et pagination 5 / 10 / 15 / 25 / 50 / 100.</p>
+                <p className="panel-copy">Groupes visibles avec pagination 5 / 10 / 25 / 50 / 100 / tout.</p>
             </div>
           </div>
 
@@ -579,11 +593,15 @@ export default function UsersPage() {
                 <span className="text-slate-500">Par page</span>
                 <select
                   className="input h-9 py-0 pr-8"
-                  value={groupsPageSize}
-                  onChange={(e) => { setGroupsPageSize(Number(e.target.value)); setGroupsPage(1); }}
+                  value={String(groupsPageSize)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setGroupsPageSize(value === 'all' ? 'all' : Number(value));
+                    setGroupsPage(1);
+                  }}
                 >
                   {PAGE_SIZE_OPTIONS.map((size) => (
-                    <option key={size} value={size}>{size}</option>
+                    <option key={String(size)} value={String(size)}>{size === 'all' ? 'Tout' : size}</option>
                   ))}
                 </select>
               </div>
@@ -594,9 +612,7 @@ export default function UsersPage() {
             ) : (
               <>
                 <div className="space-y-2">
-                  {messagingGroups
-                    .slice((groupsPage - 1) * groupsPageSize, groupsPage * groupsPageSize)
-                    .map((group) => (
+                  {pagedMessagingGroups.map((group) => (
                       <div key={group.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -621,13 +637,13 @@ export default function UsersPage() {
                     Précédent
                   </button>
                   <span className="text-slate-500">
-                    Page {groupsPage} / {Math.max(1, Math.ceil(messagingGroups.length / groupsPageSize))}
+                    Page {groupsPage} / {groupsTotalPages}
                   </span>
                   <button
                     type="button"
                     className="btn-outline"
-                    disabled={groupsPage >= Math.max(1, Math.ceil(messagingGroups.length / groupsPageSize))}
-                    onClick={() => setGroupsPage((p) => Math.min(Math.ceil(messagingGroups.length / groupsPageSize), p + 1))}
+                    disabled={groupsPage >= groupsTotalPages}
+                    onClick={() => setGroupsPage((p) => Math.min(groupsTotalPages, p + 1))}
                   >
                     Suivant
                   </button>

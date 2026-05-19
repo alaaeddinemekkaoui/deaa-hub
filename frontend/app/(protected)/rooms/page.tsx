@@ -23,7 +23,7 @@ const DEFAULT_ROOM_PAGE_SIZE: PageSizeValue = 25;
 const resolveLimit = (pageSize: PageSizeValue) => (pageSize === 'all' ? 1000 : pageSize);
 const initialRoomMeta: PaginatedResponse<Room>['meta'] = {
   page: 1,
-  limit: resolveLimit(DEFAULT_ROOM_PAGE_SIZE, 0),
+  limit: resolveLimit(DEFAULT_ROOM_PAGE_SIZE),
   total: 0,
   totalPages: 1,
   hasNextPage: false,

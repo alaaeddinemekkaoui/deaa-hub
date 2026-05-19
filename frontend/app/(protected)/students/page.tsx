@@ -66,7 +66,7 @@ const DEFAULT_STUDENT_PAGE_SIZE: PageSizeValue = 25;
 const resolveLimit = (pageSize: PageSizeValue) => (pageSize === 'all' ? 1000 : pageSize);
 const initialStudentMeta: PaginatedResponse<Student>['meta'] = {
   page: 1,
-  limit: resolveLimit(DEFAULT_STUDENT_PAGE_SIZE, 0),
+  limit: resolveLimit(DEFAULT_STUDENT_PAGE_SIZE),
   total: 0,
   totalPages: 1,
   hasNextPage: false,

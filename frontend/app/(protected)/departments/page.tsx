@@ -43,7 +43,7 @@ export default function DepartmentsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [meta, setMeta] = useState({
     page: 1,
-    limit: resolveLimit(DEFAULT_PAGE_SIZE, 0),
+    limit: resolveLimit(DEFAULT_PAGE_SIZE),
     total: 0,
     totalPages: 1,
     hasNextPage: false,

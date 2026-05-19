@@ -86,7 +86,11 @@ type Thread =
   | { kind: "group"; group: Group }
   | { kind: "direct"; peer: ConversationPeer };
 
-const PAGE_SIZE_OPTIONS = [5, 10, 15, 25, 50, 100] as const;
+type PageSizeValue = number | "all";
+
+const PAGE_SIZE_OPTIONS: PageSizeValue[] = [5, 10, 25, 50, 100, "all"];
+const pageLimit = (pageSize: PageSizeValue, total: number) =>
+  pageSize === "all" ? Math.max(total, 1) : pageSize;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -766,7 +770,7 @@ export default function MessagesPage() {
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
   const [search, setSearch] = useState("");
-  const [pageSize, setPageSize] = useState<number>(10);
+  const [pageSize, setPageSize] = useState<PageSizeValue>(10);
   const [groupScope, setGroupScope] = useState<"mine" | "all">("mine");
   const [tabPages, setTabPages] = useState<{
     groups: number;
@@ -947,10 +951,8 @@ export default function MessagesPage() {
       : activeTab === "received"
         ? filteredReceived.length
         : filteredSent.length;
-  const activePageCount = Math.max(
-    1,
-    Math.ceil(activeCollectionLength / pageSize),
-  );
+  const activeLimit = pageLimit(pageSize, activeCollectionLength);
+  const activePageCount = Math.max(1, Math.ceil(activeCollectionLength / activeLimit));
   const currentPage = Math.min(tabPages[activeTab], activePageCount);
 
   useEffect(() => {
@@ -960,18 +962,15 @@ export default function MessagesPage() {
     });
   }, [activeTab, currentPage]);
 
-  const paginatedGroups = filteredGroups.slice(
-    (tabPages.groups - 1) * pageSize,
-    tabPages.groups * pageSize,
-  );
-  const paginatedReceived = filteredReceived.slice(
-    (tabPages.received - 1) * pageSize,
-    tabPages.received * pageSize,
-  );
-  const paginatedSent = filteredSent.slice(
-    (tabPages.sent - 1) * pageSize,
-    tabPages.sent * pageSize,
-  );
+  const paginatedGroups = pageSize === "all"
+    ? filteredGroups
+    : filteredGroups.slice((tabPages.groups - 1) * activeLimit, tabPages.groups * activeLimit);
+  const paginatedReceived = pageSize === "all"
+    ? filteredReceived
+    : filteredReceived.slice((tabPages.received - 1) * activeLimit, tabPages.received * activeLimit);
+  const paginatedSent = pageSize === "all"
+    ? filteredSent
+    : filteredSent.slice((tabPages.sent - 1) * activeLimit, tabPages.sent * activeLimit);
 
   const threadTitle =
     activeThread?.kind === "group"
@@ -1089,15 +1088,16 @@ export default function MessagesPage() {
                 <span className="text-slate-500">Par page</span>
                 <select
                   className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px]"
-                  value={pageSize}
+                  value={String(pageSize)}
                   onChange={(e) => {
-                    setPageSize(Number(e.target.value));
+                    const value = e.target.value;
+                    setPageSize(value === "all" ? "all" : Number(value));
                     setTabPages({ groups: 1, received: 1, sent: 1 });
                   }}
                 >
                   {PAGE_SIZE_OPTIONS.map((size) => (
-                    <option key={size} value={size}>
-                      {size}
+                    <option key={String(size)} value={String(size)}>
+                      {size === "all" ? "Tout" : size}
                     </option>
                   ))}
                 </select>

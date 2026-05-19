@@ -227,6 +227,11 @@ export default function ClassesCoursPage() {
   useEffect(() => { setFilterFiliereId(''); }, [filterDeptId]);
   useEffect(() => { setFilterOptionId(''); }, [filterFiliereId]);
   useEffect(() => { setSelectedClassId(''); }, [filterOptionId]);
+  useEffect(() => {
+    if (assignmentsPage > assignmentTotalPages) {
+      setAssignmentsPage(assignmentTotalPages);
+    }
+  }, [assignmentsPage, assignmentTotalPages]);
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
 
@@ -443,55 +448,68 @@ export default function ClassesCoursPage() {
               description="Importez les éléments de module ou créez un cours manuellement pour commencer."
             />
           ) : (
-            <div className="data-table-wrap">
-              <div className="table-scroll">
-                <table className="table-base">
-                  <thead>
-                    <tr>
-                      <th>Cours</th>
-                      <th>Type</th>
-                      <th>Groupe</th>
-                      <th>Professeur</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {assignments.map((a) => (
-                      <tr key={a.cours.id}>
-                        <td>
-                          <Link href={`/cours/${a.cours.id}?classId=${selectedClassId}`} className="font-medium text-slate-950 transition hover:text-emerald-700 hover:underline">{a.cours.name}</Link>
-                          {a.cours.elementModuleId && (
-                            <p className="text-xs text-slate-400">Lié à un élément</p>
-                          )}
-                        </td>
-                        <td>
-                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
-                            a.cours.type === 'CM' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                            a.cours.type === 'TD' ? 'bg-violet-50 text-violet-700 border-violet-200' :
-                            'bg-amber-50 text-amber-700 border-amber-200'
-                          }`}>{a.cours.type}</span>
-                        </td>
-                        <td>{a.groupLabel ?? <span className="text-slate-400">—</span>}</td>
-                        <td>
-                          {a.teacher
-                            ? `${a.teacher.firstName} ${a.teacher.lastName}`
-                            : <span className="status-chip status-chip--warn">Non assigné</span>}
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn-outline"
-                            onClick={() => handleUnassign(a.cours.id)}
-                          >
-                            Retirer
-                          </button>
-                        </td>
+            <>
+              <div className="data-table-wrap">
+                <div className="table-scroll">
+                  <table className="table-base">
+                    <thead>
+                      <tr>
+                        <th>Cours</th>
+                        <th>Type</th>
+                        <th>Groupe</th>
+                        <th>Professeur</th>
+                        <th>Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {assignmentRows.map((a) => (
+                        <tr key={a.cours.id}>
+                          <td>
+                            <Link href={`/cours/${a.cours.id}?classId=${selectedClassId}`} className="font-medium text-slate-950 transition hover:text-emerald-700 hover:underline">{a.cours.name}</Link>
+                            {a.cours.elementModuleId && (
+                              <p className="text-xs text-slate-400">Lié à un élément</p>
+                            )}
+                          </td>
+                          <td>
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
+                              a.cours.type === 'CM' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                              a.cours.type === 'TD' ? 'bg-violet-50 text-violet-700 border-violet-200' :
+                              'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}>{a.cours.type}</span>
+                          </td>
+                          <td>{a.groupLabel ?? <span className="text-slate-400">—</span>}</td>
+                          <td>
+                            {a.teacher
+                              ? `${a.teacher.firstName} ${a.teacher.lastName}`
+                              : <span className="status-chip status-chip--warn">Non assigné</span>}
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="btn-outline"
+                              onClick={() => handleUnassign(a.cours.id)}
+                            >
+                              Retirer
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+              <PaginationControls
+                page={assignmentsPage}
+                totalPages={assignmentTotalPages}
+                total={assignments.length}
+                pageSize={assignmentsPageSize}
+                onPageSizeChange={(value) => {
+                  setAssignmentsPageSize(value);
+                  setAssignmentsPage(1);
+                }}
+                onPageChange={setAssignmentsPage}
+              />
+            </>
           )}
         </section>
       )}
@@ -574,6 +592,11 @@ export default function ClassesCoursPage() {
               page={coursMeta.hasNextPage || coursMeta.hasPreviousPage ? coursPage : 1}
               totalPages={coursMeta.totalPages}
               total={coursMeta.total}
+              pageSize={coursPageSize}
+              onPageSizeChange={(value) => {
+                setCoursPageSize(value);
+                setCoursPage(1);
+              }}
               onPageChange={setCoursPage}
             />
           </>
