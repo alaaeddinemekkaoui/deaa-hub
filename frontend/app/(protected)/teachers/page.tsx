@@ -22,7 +22,7 @@ import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { ProfileDocsModal } from '@/components/profile/profile-docs-modal';
 import { PageHeader } from '@/components/admin/page-header';
-import { PaginationControls } from '@/components/admin/pagination-controls';
+import { PaginationControls, type PageSizeValue } from '@/components/admin/pagination-controls';
 import { api, fetchRef, getApiErrorMessage, PaginatedResponse } from '@/services/api';
 import { useAuth } from '@/features/auth/auth-context';
 import { confirmDelete } from '@/lib/confirm';
@@ -62,7 +62,8 @@ type Teacher = {
   }>;
 };
 
-const PAGE_SIZE = 8;
+const DEFAULT_PAGE_SIZE: PageSizeValue = 10;
+const resolveLimit = (pageSize: PageSizeValue) => (pageSize === 'all' ? 1000 : pageSize);
 
 export default function TeachersPage() {
   const { user } = useAuth();
@@ -95,6 +96,7 @@ export default function TeachersPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSizeValue>(DEFAULT_PAGE_SIZE);
   const [sortBy, setSortBy] = useState<'lastName' | 'createdAt' | 'updatedAt'>(
     'lastName',
   );
@@ -107,7 +109,7 @@ export default function TeachersPage() {
   const [openActionsId, setOpenActionsId] = useState<number | null>(null);
   const [meta, setMeta] = useState({
     page: 1,
-    limit: PAGE_SIZE,
+    limit: resolveLimit(DEFAULT_PAGE_SIZE, 0),
     total: 0,
     totalPages: 1,
     hasNextPage: false,
@@ -242,7 +244,7 @@ export default function TeachersPage() {
         const teachersRes = await api.get<PaginatedResponse<Teacher>>('/teachers', {
           params: {
             page,
-            limit: PAGE_SIZE,
+            limit: resolveLimit(pageSize),
             search: query || undefined,
             departmentId: filterDepartmentId || undefined,
             filiereId: filterFiliereId || undefined,
@@ -258,7 +260,7 @@ export default function TeachersPage() {
       } catch (loadError) {
         setError(getApiErrorMessage(loadError, 'Unable to load teachers right now.'));
         setRows([]);
-        setMeta({ page: 1, limit: PAGE_SIZE, total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false });
+        setMeta({ page: 1, limit: resolveLimit(DEFAULT_PAGE_SIZE, 0), total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false });
       } finally {
         setLoading(false);
       }
@@ -271,10 +273,12 @@ export default function TeachersPage() {
     filterSex,
     filterRoleId,
     page,
+    pageSize,
     query,
     refreshKey,
     sortBy,
     sortOrder,
+    meta.total,
   ]);
 
   useEffect(() => {
@@ -744,6 +748,11 @@ export default function TeachersPage() {
               totalPages={meta.totalPages}
               total={meta.total}
               onPageChange={setPage}
+              pageSize={pageSize}
+              onPageSizeChange={(value) => {
+                setPageSize(value);
+                setPage(1);
+              }}
             />
           </>
         )}

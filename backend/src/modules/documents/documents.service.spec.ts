@@ -65,4 +65,106 @@ describe('DocumentsService', () => {
     });
     expect(result.id).toBe(11);
   });
+
+  it('generates a student releve PDF and stores it through object storage', async () => {
+    const prisma = {
+      student: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 7,
+          fullName: 'Aya Rahmani',
+          codeMassar: 'M123',
+          codeEtudiant: 'E123',
+          anneeAcademique: '2025/2026',
+          userId: 99,
+          academicClass: {
+            id: 3,
+            name: 'Agronomie 1A',
+            academicYear: '2025/2026',
+          },
+          filiere: { id: 2, name: 'Agronomie', code: 'AGR' },
+        }),
+      },
+      documentTemplate: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 4,
+          name: 'Relevé officiel',
+          type: 'releve_note',
+          header: 'DEAA Hub\nRelevé de notes',
+          body: 'Relevé pour {{studentName}} en {{academicYear}}.',
+          footer: 'Moyenne: {{average}}',
+          primaryColor: '#0f766e',
+          signatureLabel: 'Direction',
+          isDefault: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }),
+      },
+      studentGrade: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            score: 16,
+            maxScore: 20,
+            rattrapageScore: null,
+            rattrapageMaxScore: null,
+            academicYear: '2025/2026',
+            semester: 'S1',
+            subject: 'Biologie',
+            publicationStatus: 'draft',
+            module: { name: 'Sciences du vivant' },
+            elementModule: { name: 'Biologie', coefficient: 1 },
+            academicClass: { name: 'Agronomie 1A' },
+          },
+        ]),
+      },
+      document: {
+        create: jest.fn().mockResolvedValue({
+          id: 22,
+          name: 'releve-de-notes-aya-rahmani.pdf',
+          path: 'minio://deaa-signed-documents/generated/releves/M123/releve.pdf',
+        }),
+      },
+      activityLog: { create: jest.fn().mockResolvedValue({ id: 1 }) },
+    } as any;
+    const storage = {
+      uploadBuffer: jest.fn().mockResolvedValue({
+        bucket: 'deaa-signed-documents',
+        key: 'generated/releves/M123/releve.pdf',
+        reference:
+          'minio://deaa-signed-documents/generated/releves/M123/releve.pdf',
+        hash: 'sha256',
+        size: 512,
+      }),
+    } as any;
+
+    const service = new DocumentsService(prisma, storage);
+    const result = await service.generateStudentRelevePdf(
+      7,
+      { templateId: 4 },
+      {
+        sub: 99,
+        email: 'student@example.com',
+        role: UserRole.STUDENT,
+        departmentIds: [],
+      },
+    );
+
+    expect(storage.uploadBuffer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bucketName: 'signedDocuments',
+        mimeType: 'application/pdf',
+        folder: 'generated/releves/M123',
+        buffer: expect.any(Buffer),
+      }),
+    );
+    const uploaded = storage.uploadBuffer.mock.calls[0][0].buffer as Buffer;
+    expect(uploaded.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(prisma.document.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        storageProvider: 'minio',
+        studentId: 7,
+        category: 'Relevé de notes généré',
+      }),
+    });
+    expect(result.id).toBe(22);
+  });
 });

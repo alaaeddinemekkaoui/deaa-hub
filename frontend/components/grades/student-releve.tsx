@@ -43,8 +43,8 @@ const finalScore = (grade: ReleveGrade) =>
       }
     : { score: grade.score, maxScore: grade.maxScore };
 
-const normalizedFinalScore = (grade: ReleveGrade) => {
-  const value = finalScore(grade);
+const normalizedScore = (grade: ReleveGrade, mode: 'before' | 'after') => {
+  const value = mode === 'after' ? finalScore(grade) : { score: grade.score, maxScore: grade.maxScore };
   return value.maxScore > 0 ? (value.score / value.maxScore) * 20 : value.score;
 };
 
@@ -68,11 +68,18 @@ export function StudentReleve({ student, grades, title = 'Relevé de Notes' }: S
     return <p className="text-sm text-slate-400">Aucune note enregistrée pour cet étudiant.</p>;
   }
 
+  const releveModes: Array<{ key: 'before' | 'after'; title: string }> = [
+    { key: 'before', title: `${title} avant rattrapage` },
+    ...(grades.some(hasRattrapage)
+      ? [{ key: 'after' as const, title: `${title} après rattrapage` }]
+      : []),
+  ];
+
   return (
     <div className="space-y-6">
-      {years.map(([year, rows]) => {
+      {releveModes.flatMap((mode) => years.map(([year, rows]) => {
         const average = rows.length
-          ? rows.reduce((sum, grade) => sum + normalizedFinalScore(grade), 0) / rows.length
+          ? rows.reduce((sum, grade) => sum + normalizedScore(grade, mode.key), 0) / rows.length
           : null;
         const classInfo = rows[0]?.academicClass ?? student?.academicClass ?? null;
         const moduleRows = rows.reduce<Record<string, ReleveGrade[]>>((acc, grade) => {
@@ -82,12 +89,12 @@ export function StudentReleve({ student, grades, title = 'Relevé de Notes' }: S
         }, {});
 
         return (
-          <section key={year} className="space-y-6">
+          <section key={`${mode.key}-${year}`} className="space-y-6">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
                 Institut Agronomique et Vétérinaire Hassan II
               </p>
-              <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+              <h2 className="text-lg font-bold text-slate-900">{mode.title}</h2>
               <div className="flex flex-wrap gap-x-6 gap-y-1 pt-1 text-sm text-slate-600">
                 <span><span className="text-slate-400">Étudiant :</span> <strong>{student?.fullName ?? '-'}</strong></span>
                 <span><span className="text-slate-400">Code Massar :</span> <strong>{student?.codeMassar ?? '-'}</strong></span>
@@ -106,18 +113,16 @@ export function StudentReleve({ student, grades, title = 'Relevé de Notes' }: S
                     <th className="border border-slate-300 px-4 py-2.5 text-left font-semibold text-slate-700">Élément de module</th>
                     <th className="border border-slate-300 px-2 py-2.5 text-center font-semibold text-slate-700">Type</th>
                     <th className="border border-slate-300 px-2 py-2.5 text-center font-semibold text-slate-700">Pond.</th>
-                    <th className="border border-slate-300 px-2 py-2.5 text-center font-semibold text-slate-700">Note avant rattrapage</th>
-                    <th className="border border-slate-300 px-2 py-2.5 text-center font-semibold text-slate-700">Note après rattrapage</th>
-                    <th className="border border-slate-300 px-2 py-2.5 text-center font-semibold text-slate-700">Note finale</th>
+                    <th className="border border-slate-300 px-2 py-2.5 text-center font-semibold text-slate-700">Note</th>
                   </tr>
                 </thead>
                 <tbody>
                   {Object.entries(moduleRows).map(([moduleName, moduleGrades]) => {
                     const moduleAverage = moduleGrades.length
-                      ? moduleGrades.reduce((sum, grade) => sum + normalizedFinalScore(grade), 0) / moduleGrades.length
+                      ? moduleGrades.reduce((sum, grade) => sum + normalizedScore(grade, mode.key), 0) / moduleGrades.length
                       : null;
                     return moduleGrades.map((grade, index) => {
-                      const final = finalScore(grade);
+                      const display = mode.key === 'after' ? finalScore(grade) : { score: grade.score, maxScore: grade.maxScore };
                       return (
                       <tr key={grade.id} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                         {index === 0 ? (
@@ -135,22 +140,8 @@ export function StudentReleve({ student, grades, title = 'Relevé de Notes' }: S
                         <td className="border border-slate-200 px-2 py-2 text-center text-xs text-slate-500">{grade.elementModule?.type ?? grade.assessmentType ?? '-'}</td>
                         <td className="border border-slate-200 px-2 py-2 text-center text-xs text-slate-500">{grade.elementModule?.ponderation ?? 1}</td>
                         <td className="border border-slate-200 px-3 py-2 text-center font-medium">
-                          <span className={grade.score / grade.maxScore < 0.5 ? 'text-red-600' : 'text-slate-800'}>
-                            {fmtScore(grade.score, grade.maxScore)}
-                          </span>
-                        </td>
-                        <td className="border border-slate-200 px-3 py-2 text-center font-medium">
-                          {hasRattrapage(grade) ? (
-                            <span className={(grade.rattrapageScore as number) / (grade.rattrapageMaxScore ?? grade.maxScore) < 0.5 ? 'text-red-600' : 'text-slate-800'}>
-                              {fmtScore(grade.rattrapageScore as number, grade.rattrapageMaxScore ?? grade.maxScore)}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300">-</span>
-                          )}
-                        </td>
-                        <td className="border border-slate-200 px-3 py-2 text-center font-semibold">
-                          <span className={normalizedFinalScore(grade) < 10 ? 'text-red-600' : 'text-slate-900'}>
-                            {fmtScore(final.score, final.maxScore)}
+                          <span className={normalizedScore(grade, mode.key) < 10 ? 'text-red-600' : 'text-slate-900'}>
+                            {fmtScore(display.score, display.maxScore)}
                           </span>
                         </td>
                       </tr>
@@ -160,7 +151,7 @@ export function StudentReleve({ student, grades, title = 'Relevé de Notes' }: S
                 </tbody>
                 <tfoot>
                   <tr className="bg-amber-50 font-bold">
-                    <td colSpan={6} className="border border-slate-300 px-4 py-3 text-right text-slate-800">
+                    <td colSpan={4} className="border border-slate-300 px-4 py-3 text-right text-slate-800">
                       Moyenne générale de l'étudiant
                     </td>
                     <td className={`border border-slate-300 px-3 py-3 text-center text-base ${mentionColor(average)}`}>
@@ -184,7 +175,7 @@ export function StudentReleve({ student, grades, title = 'Relevé de Notes' }: S
             </div>
           </section>
         );
-      })}
+      }))}
     </div>
   );
 }

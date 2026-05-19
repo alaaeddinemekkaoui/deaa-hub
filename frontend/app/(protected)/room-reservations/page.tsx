@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CalendarCheck, CheckCircle, ChevronLeft, ChevronRight, Clock, Trash2, XCircle } from 'lucide-react';
 import { ModalShell } from '@/components/admin/modal-shell';
+import { PaginationControls, type PageSizeValue } from '@/components/admin/pagination-controls';
 import { PageHeader } from '@/components/admin/page-header';
 import { useAuth } from '@/features/auth/auth-context';
 import { api, getApiErrorMessage, PaginatedResponse } from '@/services/api';
@@ -118,6 +119,11 @@ const PURPOSE_LABELS: Record<Purpose, string> = {
 };
 
 const PURPOSES: Purpose[] = ['cours', 'examen', 'reunion', 'autre'];
+const PENDING_APPROVAL_INLINE_LIMIT = 5;
+const DEFAULT_ROOM_LIST_PAGE_SIZE: PageSizeValue = 25;
+const DEFAULT_STUDENT_REQUEST_PAGE_SIZE: PageSizeValue = 10;
+const pageLimit = (pageSize: PageSizeValue, total: number) =>
+  pageSize === 'all' ? Math.max(total, 1) : pageSize;
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -184,6 +190,10 @@ export default function RoomReservationsPage() {
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedDate, setSelectedDate] = useState(() => fmt(new Date()));
   const [loading, setLoading] = useState(true);
+  const [roomListPage, setRoomListPage] = useState(1);
+  const [studentRequestPage, setStudentRequestPage] = useState(1);
+  const [roomListPageSize, setRoomListPageSize] = useState<PageSizeValue>(DEFAULT_ROOM_LIST_PAGE_SIZE);
+  const [studentRequestPageSize, setStudentRequestPageSize] = useState<PageSizeValue>(DEFAULT_STUDENT_REQUEST_PAGE_SIZE);
 
   // Slide animation
   const [animClass, setAnimClass] = useState('');
@@ -309,6 +319,9 @@ export default function RoomReservationsPage() {
 
   // Detail modal
   const [detailRes, setDetailRes] = useState<Reservation | null>(null);
+  const [showAllPending, setShowAllPending] = useState(false);
+  const [pendingModalPage, setPendingModalPage] = useState(1);
+  const [pendingModalPageSize, setPendingModalPageSize] = useState<PageSizeValue>(DEFAULT_STUDENT_REQUEST_PAGE_SIZE);
 
   // ── Data loading ───────────────────────────────────────────────────────────
 
@@ -356,6 +369,18 @@ export default function RoomReservationsPage() {
   useEffect(() => {
     void loadReservations();
   }, [loadReservations]);
+
+  useEffect(() => {
+    setRoomListPage(1);
+  }, [selectedDepartmentId, selectedFiliereId, selectedClassId, selectedRoomId, weekStart]);
+
+  useEffect(() => {
+    setStudentRequestPage(1);
+  }, [reservations.length]);
+
+  useEffect(() => {
+    setPendingModalPage(1);
+  }, [reservations.length]);
 
   useEffect(() => {
     const id = window.setInterval(() => void loadReservations(true), 12000);
@@ -469,6 +494,26 @@ export default function RoomReservationsPage() {
     if (!hasAcademicFilter) return rooms;
     return rooms.filter((room) => (roomReservationCount.get(room.id) ?? 0) > 0);
   }, [hasAcademicFilter, rooms, roomReservationCount]);
+  const roomListLimit = pageLimit(roomListPageSize, visibleRooms.length);
+  const roomListTotalPages = Math.max(1, Math.ceil(visibleRooms.length / roomListLimit));
+  const pagedVisibleRooms = useMemo(
+    () =>
+      visibleRooms.slice(
+        (roomListPage - 1) * roomListLimit,
+        roomListPage * roomListLimit,
+      ),
+    [roomListLimit, roomListPage, visibleRooms],
+  );
+  const studentRequestLimit = pageLimit(studentRequestPageSize, reservations.length);
+  const studentRequestTotalPages = Math.max(1, Math.ceil(reservations.length / studentRequestLimit));
+  const pagedStudentReservations = useMemo(
+    () =>
+      reservations.slice(
+        (studentRequestPage - 1) * studentRequestLimit,
+        studentRequestPage * studentRequestLimit,
+      ),
+    [reservations, studentRequestLimit, studentRequestPage],
+  );
 
   // grid[day][startRow] = reservation
   const grid = useMemo(() => {
@@ -592,6 +637,17 @@ export default function RoomReservationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [reservations, isAdmin, userDeptIds],
   );
+  const pendingPreview = pendingReservations.slice(0, PENDING_APPROVAL_INLINE_LIMIT);
+  const pendingModalLimit = pageLimit(pendingModalPageSize, pendingReservations.length);
+  const pendingModalTotalPages = Math.max(1, Math.ceil(pendingReservations.length / pendingModalLimit));
+  const pendingModalRows = useMemo(
+    () =>
+      pendingReservations.slice(
+        (pendingModalPage - 1) * pendingModalLimit,
+        pendingModalPage * pendingModalLimit,
+      ),
+    [pendingModalLimit, pendingModalPage, pendingReservations],
+  );
 
   const selectedRoom = rooms.find((r) => String(r.id) === selectedRoomId);
 
@@ -616,14 +672,28 @@ export default function RoomReservationsPage() {
         {/* ── Pending approvals panel ── */}
         {canReviewReservations && pendingReservations.length > 0 && (
           <section className="surface-card p-4 space-y-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold">
                 {pendingReservations.length}
               </span>
-              <h2 className="font-semibold text-slate-800">Réservations en attente d&apos;approbation</h2>
+              <h2 className="font-semibold text-slate-800">
+                Réservations en attente d&apos;approbation
+              </h2>
+              <span className="text-sm text-slate-500">
+                {Math.min(PENDING_APPROVAL_INLINE_LIMIT, pendingReservations.length)} affichée{Math.min(PENDING_APPROVAL_INLINE_LIMIT, pendingReservations.length) > 1 ? 's' : ''} sur {pendingReservations.length}
+              </span>
+              {pendingReservations.length > PENDING_APPROVAL_INLINE_LIMIT && (
+                <button
+                  type="button"
+                  className="btn-outline ml-auto"
+                  onClick={() => setShowAllPending(true)}
+                >
+                  Voir les {pendingReservations.length} demandes
+                </button>
+              )}
             </div>
             <div className="space-y-2">
-              {pendingReservations.map((r) => (
+              {pendingPreview.map((r) => (
                 <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
                   <div className="text-sm">
                     <p className="font-medium text-slate-800">{r.reservedBy}</p>
@@ -653,6 +723,17 @@ export default function RoomReservationsPage() {
                 </div>
               ))}
             </div>
+            {pendingReservations.length > PENDING_APPROVAL_INLINE_LIMIT && (
+              <div className="flex justify-end border-t border-amber-100 pt-3">
+                <button
+                  type="button"
+                  className="btn-outline"
+                  onClick={() => setShowAllPending(true)}
+                >
+                  Afficher toutes les demandes
+                </button>
+              </div>
+            )}
           </section>
         )}
 
@@ -900,7 +981,7 @@ export default function RoomReservationsPage() {
               <div className="empty-note">Aucune demande pour le moment.</div>
             ) : (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {reservations.map((res) => (
+                {pagedStudentReservations.map((res) => (
                   <button key={res.id} type="button" className="rounded-[1.5rem] border bg-white p-4 text-left shadow-sm hover:border-slate-300" onClick={() => setDetailRes(res)}>
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -915,6 +996,19 @@ export default function RoomReservationsPage() {
                   </button>
                 ))}
               </div>
+            )}
+            {reservations.length > 0 && (
+              <PaginationControls
+                page={studentRequestPage}
+                totalPages={studentRequestTotalPages}
+                total={reservations.length}
+                onPageChange={setStudentRequestPage}
+                pageSize={studentRequestPageSize}
+                onPageSizeChange={(value) => {
+                  setStudentRequestPageSize(value);
+                  setStudentRequestPage(1);
+                }}
+              />
             )}
           </section>
         ) : !selectedRoomId ? (
@@ -944,7 +1038,7 @@ export default function RoomReservationsPage() {
               <div className="empty-note">Aucune salle réservée pour ces filtres sur cette semaine.</div>
             ) : (
               <div className="divide-y divide-slate-50">
-                {visibleRooms.map((room) => {
+                {pagedVisibleRooms.map((room) => {
                   const total = roomReservationCount.get(room.id) ?? 0;
                   return (
                     <button
@@ -969,6 +1063,21 @@ export default function RoomReservationsPage() {
                     </button>
                   );
                 })}
+              </div>
+            )}
+            {visibleRooms.length > 0 && (
+              <div className="px-5 pb-4">
+                <PaginationControls
+                  page={roomListPage}
+                  totalPages={roomListTotalPages}
+                  total={visibleRooms.length}
+                  onPageChange={setRoomListPage}
+                  pageSize={roomListPageSize}
+                  onPageSizeChange={(value) => {
+                    setRoomListPageSize(value);
+                    setRoomListPage(1);
+                  }}
+                />
               </div>
             )}
           </section>
@@ -1235,6 +1344,67 @@ export default function RoomReservationsPage() {
         </ModalShell>
 
         {/* ── Detail / delete modal ── */}
+        <ModalShell
+          open={showAllPending}
+          title={`Toutes les demandes (${pendingReservations.length})`}
+          description="Demandes de réservation de salle en attente."
+          onClose={() => setShowAllPending(false)}
+          footer={<button className="btn-outline" type="button" onClick={() => setShowAllPending(false)}>Fermer</button>}
+        >
+          <div className="max-h-[70vh] space-y-2 overflow-y-auto pr-1">
+            {pendingModalRows.map((r) => (
+              <div
+                key={r.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
+              >
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 text-left"
+                  onClick={() => {
+                    setShowAllPending(false);
+                    setDetailRes(r);
+                  }}
+                >
+                  <span className="block text-sm font-semibold text-slate-900">{r.reservedBy}</span>
+                  <span className="block text-xs text-slate-500">
+                    {r.room?.name ?? '—'} · {toDate(r.date).toLocaleDateString('fr-FR')} · {r.startTime}–{r.endTime}
+                  </span>
+                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="status-chip status-chip--warn">En attente</span>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                    onClick={() => approveReservation(r.id)}
+                  >
+                    <CheckCircle size={12} /> Approuver
+                  </button>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                    onClick={() => rejectReservation(r.id)}
+                  >
+                    <XCircle size={12} /> Rejeter
+                  </button>
+                </div>
+              </div>
+            ))}
+            {pendingReservations.length > 0 && (
+              <PaginationControls
+                page={pendingModalPage}
+                totalPages={pendingModalTotalPages}
+                total={pendingReservations.length}
+                onPageChange={setPendingModalPage}
+                pageSize={pendingModalPageSize}
+                onPageSizeChange={(value) => {
+                  setPendingModalPageSize(value);
+                  setPendingModalPage(1);
+                }}
+              />
+            )}
+          </div>
+        </ModalShell>
+
         <ModalShell
           open={!!detailRes}
           title="Réservation"

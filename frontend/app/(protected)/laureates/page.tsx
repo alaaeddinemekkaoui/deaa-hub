@@ -8,8 +8,9 @@ import { ExportDataButton } from '@/components/admin/export-data-button';
 import { ImportDataButton } from '@/components/admin/import-data-button';
 import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
+import { PaginationControls, type PageSizeValue } from '@/components/admin/pagination-controls';
 import { PageHeader } from '@/components/admin/page-header';
-import { api } from '@/services/api';
+import { api, PaginatedResponse } from '@/services/api';
 import { confirmDelete } from '@/lib/confirm';
 import { toast } from 'sonner';
 
@@ -38,6 +39,16 @@ type StudentOption = {
 };
 
 type Document = { id: number; name: string };
+const DEFAULT_LAUREATE_PAGE_SIZE: PageSizeValue = 25;
+const resolveLimit = (pageSize: PageSizeValue) => (pageSize === 'all' ? 1000 : pageSize);
+const initialMeta: PaginatedResponse<Laureate>['meta'] = {
+  page: 1,
+  limit: resolveLimit(DEFAULT_LAUREATE_PAGE_SIZE, 0),
+  total: 0,
+  totalPages: 1,
+  hasNextPage: false,
+  hasPreviousPage: false,
+};
 
 /* ── Searchable student combobox ─────────────────────────────────────── */
 function StudentCombobox({
@@ -148,6 +159,9 @@ function StudentCombobox({
 /* ── Main page ───────────────────────────────────────────────────────── */
 export default function LaureatesPage() {
   const [rows, setRows] = useState<Laureate[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSizeValue>(DEFAULT_LAUREATE_PAGE_SIZE);
+  const [meta, setMeta] = useState<PaginatedResponse<Laureate>['meta']>(initialMeta);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -168,10 +182,13 @@ export default function LaureatesPage() {
     try {
       setLoading(true);
       const [laureatesRes, docsRes] = await Promise.all([
-        api.get<Laureate[]>('/laureates'),
+        api.get<PaginatedResponse<Laureate>>('/laureates', {
+          params: { page, limit: resolveLimit(pageSize) },
+        }),
         api.get<Document[]>('/documents'),
       ]);
-      setRows(laureatesRes.data);
+      setRows(laureatesRes.data.data);
+      setMeta(laureatesRes.data.meta);
       setDocuments(docsRes.data);
     } catch {
       toast.error('Échec du chargement des données');
@@ -180,7 +197,7 @@ export default function LaureatesPage() {
     }
   };
 
-  useEffect(() => { void load(); }, [refreshKey]);
+  useEffect(() => { void load(); }, [page, pageSize, refreshKey, meta.total]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -377,6 +394,20 @@ export default function LaureatesPage() {
             </article>
           ))}
         </section>
+      )}
+
+      {!loading && meta.total > 0 && (
+        <PaginationControls
+          page={meta.page}
+          totalPages={meta.totalPages}
+          total={meta.total}
+          onPageChange={setPage}
+          pageSize={pageSize}
+          onPageSizeChange={(value) => {
+            setPageSize(value);
+            setPage(1);
+          }}
+        />
       )}
 
       {/* Add / Edit modal */}

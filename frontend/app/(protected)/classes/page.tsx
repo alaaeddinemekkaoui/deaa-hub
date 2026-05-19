@@ -169,6 +169,7 @@ function ClassesPageInner() {
   const [sortBy, setSortBy] = useState<'name' | 'year' | 'updatedAt'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [saving, setSaving] = useState(false);
+  const [importingFromModules, setImportingFromModules] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<PageMeta>(initialMeta(CLASS_PAGE_SIZE));
@@ -254,6 +255,30 @@ function ClassesPageInner() {
   const openCreateModal = () => {
     resetForm();
     setIsModalOpen(true);
+  };
+
+  const importClassesFromModules = async () => {
+    setImportingFromModules(true);
+    try {
+      const response = await api.post<{
+        created: number;
+        linkedModules: number;
+        linkedElements: number;
+        errors: string[];
+      }>('/classes/import-from-modules');
+      toast.success(
+        `${response.data.created} classe(s), ${response.data.linkedModules} module(s), ${response.data.linkedElements} élément(s) synchronisé(s).`,
+      );
+      if (response.data.errors.length > 0) {
+        toast.warning(`${response.data.errors.length} élément(s) non importé(s).`);
+      }
+      resetClassList();
+      setRefreshKey((key) => key + 1);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Impossible d'importer depuis les modules."));
+    } finally {
+      setImportingFromModules(false);
+    }
   };
 
   const resetClassList = useCallback(() => {
@@ -766,6 +791,14 @@ function ClassesPageInner() {
       <section className="flex justify-end gap-2">
         <ImportDataButton onSuccess={() => setRefreshKey((key) => key + 1)} />
         <ExportDataButton />
+        <button
+          className="btn-outline"
+          type="button"
+          onClick={importClassesFromModules}
+          disabled={importingFromModules}
+        >
+          {importingFromModules ? 'Import...' : 'Importer depuis modules'}
+        </button>
         <button className="btn-primary" type="button" onClick={openCreateModal}>
           Ajouter une classe
         </button>

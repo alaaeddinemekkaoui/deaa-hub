@@ -1,11 +1,12 @@
-'use client';
+"use client";
 
-const SEMESTERS = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'];
+const SEMESTERS = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10"];
 
 type SemesterSelectProps = {
   value: string;
   onChange: (value: string) => void;
   label?: string;
+  options?: string[];
   required?: boolean;
   includeEmpty?: boolean;
   emptyLabel?: string;
@@ -15,10 +16,11 @@ type SemesterSelectProps = {
 export function SemesterSelect({
   value,
   onChange,
-  label = 'Semestre',
+  label = "Semestre",
+  options = SEMESTERS,
   required = false,
   includeEmpty = true,
-  emptyLabel = '— Aucun semestre —',
+  emptyLabel = "— Aucun semestre —",
   disabled,
 }: SemesterSelectProps) {
   return (
@@ -33,7 +35,7 @@ export function SemesterSelect({
         onChange={(event) => onChange(event.target.value)}
       >
         {includeEmpty ? <option value="">{emptyLabel}</option> : null}
-        {SEMESTERS.map((semester) => (
+        {options.map((semester) => (
           <option key={semester} value={semester}>
             {semester}
           </option>

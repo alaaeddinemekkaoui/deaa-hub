@@ -1,33 +1,28 @@
-'use client';
+"use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  BookOpen,
-  Download,
-  GraduationCap,
-  Printer,
-} from 'lucide-react';
-import { EmptyState } from '@/components/admin/empty-state';
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { BookOpen, Download, GraduationCap, Printer } from "lucide-react";
+import { EmptyState } from "@/components/admin/empty-state";
 import {
   AcademicYearSelect,
   sortAcademicYearsCurrentFirst,
-} from '@/components/academic/academic-year-select';
-import { SemesterSelect } from '@/components/academic/semester-select';
-import { MetricCard } from '@/components/admin/metric-card';
-import { PageHeader } from '@/components/admin/page-header';
-import { useAuth } from '@/features/auth/auth-context';
+} from "@/components/academic/academic-year-select";
+import { SemesterSelect } from "@/components/academic/semester-select";
+import { MetricCard } from "@/components/admin/metric-card";
+import { PageHeader } from "@/components/admin/page-header";
+import { useAuth } from "@/features/auth/auth-context";
 import {
   api,
   fetchRef,
   getApiErrorMessage,
   PaginatedResponse,
-} from '@/services/api';
-import { toast } from 'sonner';
+} from "@/services/api";
+import { toast } from "sonner";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type AcademicYear = { id: number; label: string; isCurrent: boolean };
-type PublicationStatus = 'draft' | 'published' | 'modified_after_publication';
+type PublicationStatus = "draft" | "published" | "modified_after_publication";
 type Department = { id: number; name: string };
 type Filiere = { id: number; name: string; departmentId: number };
 type AcademicOption = { id: number; name: string; filiereId: number };
@@ -36,16 +31,21 @@ type AcademicClass = {
   id: number;
   name: string;
   year: number;
+  semestre?: string | null;
   filiereId?: number | null;
   optionId?: number | null;
-  filiere?: { id: number; name: string; department?: { id: number; name: string } } | null;
+  filiere?: {
+    id: number;
+    name: string;
+    department?: { id: number; name: string };
+  } | null;
   academicOption?: { id: number; name: string } | null;
 };
 
 type ElementRow = {
   id: number;
   name: string;
-  type: 'CM' | 'TD' | 'TP';
+  type: "CM" | "TD" | "TP";
   volumeHoraire?: number | null;
   ponderation?: number | null;
   coefficient?: number | null;
@@ -124,7 +124,10 @@ function computeStudentAverages(
   for (const mod of modules) {
     const elementGrades = mod.elements
       .map((el) => ({ element: el, grade: student.grades[el.id] }))
-      .filter((entry): entry is { element: ElementRow; grade: GradeCell } => entry.grade !== undefined);
+      .filter(
+        (entry): entry is { element: ElementRow; grade: GradeCell } =>
+          entry.grade !== undefined,
+      );
 
     if (elementGrades.length === 0) {
       filteredModuleAverages[mod.id] = null;
@@ -140,10 +143,13 @@ function computeStudentAverages(
         },
         { sum: 0, weight: 0 },
       );
-      const avg = weighted.weight > 0
-        ? weighted.sum / weighted.weight
-        : elementGrades.reduce((sum, { grade }) => sum + normalizedGradeScore(grade), 0) /
-          elementGrades.length;
+      const avg =
+        weighted.weight > 0
+          ? weighted.sum / weighted.weight
+          : elementGrades.reduce(
+              (sum, { grade }) => sum + normalizedGradeScore(grade),
+              0,
+            ) / elementGrades.length;
       filteredModuleAverages[mod.id] = Math.round(avg * 100) / 100;
       overallWeightedSum += weighted.sum;
       overallWeight += weighted.weight;
@@ -153,13 +159,16 @@ function computeStudentAverages(
   const validAverages = Object.values(filteredModuleAverages).filter(
     (v): v is number => v !== null,
   );
-  const filteredOverallAverage = overallWeight > 0
-    ? Math.round((overallWeightedSum / overallWeight) * 100) / 100
-    : validAverages.length > 0
-      ? Math.round(
-          (validAverages.reduce((sum, v) => sum + v, 0) / validAverages.length) * 100,
-        ) / 100
-      : null;
+  const filteredOverallAverage =
+    overallWeight > 0
+      ? Math.round((overallWeightedSum / overallWeight) * 100) / 100
+      : validAverages.length > 0
+        ? Math.round(
+            (validAverages.reduce((sum, v) => sum + v, 0) /
+              validAverages.length) *
+              100,
+          ) / 100
+        : null;
 
   return { ...student, filteredModuleAverages, filteredOverallAverage };
 }
@@ -167,7 +176,9 @@ function computeStudentAverages(
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function fmtScore(score: number, maxScore: number): string {
-  return maxScore > 0 ? String(Math.round((score / maxScore) * 20 * 100) / 100) : String(score);
+  return maxScore > 0
+    ? String(Math.round((score / maxScore) * 20 * 100) / 100)
+    : String(score);
 }
 
 function hasRattrapage(grade: GradeCell): boolean {
@@ -196,33 +207,34 @@ function normalizedGradeScore(grade: GradeCell): number {
 }
 
 function fmtAvg(avg: number | null): string {
-  if (avg === null) return '—';
+  if (avg === null) return "—";
   return avg.toFixed(2);
 }
 
 function mentionColor(avg: number | null): string {
-  if (avg === null) return 'text-slate-400';
-  if (avg >= 16) return 'text-emerald-600 font-semibold';
-  if (avg >= 14) return 'text-blue-600 font-semibold';
-  if (avg >= 12) return 'text-cyan-600';
-  if (avg >= 10) return 'text-amber-600';
-  return 'text-red-600 font-semibold';
+  if (avg === null) return "text-slate-400";
+  if (avg >= 16) return "text-emerald-600 font-semibold";
+  if (avg >= 14) return "text-blue-600 font-semibold";
+  if (avg >= 12) return "text-cyan-600";
+  if (avg >= 10) return "text-amber-600";
+  return "text-red-600 font-semibold";
 }
 
 function escapeHtml(value: string): string {
   return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DeliberationPage() {
   const { user } = useAuth();
-  const restrictedToOwnDepartments = user?.role === 'user' || user?.role === 'viewer';
+  const restrictedToOwnDepartments =
+    user?.role === "user" || user?.role === "viewer";
 
   // Reference data
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -232,14 +244,14 @@ export default function DeliberationPage() {
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
 
   // Selectors
-  const [departmentId, setDepartmentId] = useState('');
-  const [filiereId, setFiliereId] = useState('');
-  const [optionId, setOptionId] = useState('');
-  const [classId, setClassId] = useState('');
-  const [academicYear, setAcademicYear] = useState('');
-  const [semester, setSemester] = useState('');
-  const [moduleFilterId, setModuleFilterId] = useState('');
-  const [publicationStatus, setPublicationStatus] = useState('');
+  const [departmentId, setDepartmentId] = useState("");
+  const [filiereId, setFiliereId] = useState("");
+  const [optionId, setOptionId] = useState("");
+  const [classId, setClassId] = useState("");
+  const [academicYear, setAcademicYear] = useState("");
+  const [semester, setSemester] = useState("");
+  const [moduleFilterId, setModuleFilterId] = useState("");
+  const [publicationStatus, setPublicationStatus] = useState("");
 
   // Loaded data
   const [data, setData] = useState<DeliberationData | null>(null);
@@ -247,9 +259,11 @@ export default function DeliberationPage() {
   const [loading, setLoading] = useState(false);
 
   // UI state
-  const [activeTab, setActiveTab] = useState<'classe' | 'releve'>('classe');
-  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
-  const [studentSearch, setStudentSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<"classe" | "releve">("classe");
+  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(
+    null,
+  );
+  const [studentSearch, setStudentSearch] = useState("");
   const tableExportRef = useRef<HTMLElement | null>(null);
 
   // ─── Reference data visibility ─────────────────────────────────────────────
@@ -277,22 +291,28 @@ export default function DeliberationPage() {
   const visibleClasses = useMemo(() => {
     return classes.filter((c) => {
       const cDeptId = c.filiere?.department?.id;
-      if (departmentId && String(cDeptId ?? '') !== departmentId) return false;
-      if (filiereId && String(c.filiereId ?? '') !== filiereId) return false;
-      if (optionId && String(c.optionId ?? '') !== optionId) return false;
+      if (departmentId && String(cDeptId ?? "") !== departmentId) return false;
+      if (filiereId && String(c.filiereId ?? "") !== filiereId) return false;
+      if (optionId && String(c.optionId ?? "") !== optionId) return false;
       return true;
     });
   }, [classes, departmentId, filiereId, optionId]);
 
+  const selectedClass = useMemo(
+    () => visibleClasses.find((c) => String(c.id) === classId) ?? null,
+    [classId, visibleClasses],
+  );
+
   // ─── Semester derived from loaded modules ──────────────────────────────────
 
   const availableSemesters = useMemo(() => {
+    if (selectedClass?.semestre) return [selectedClass.semestre];
     if (!data) return [];
     const values = data.modules
       .map((m) => m.semestre)
       .filter((s): s is string => !!s);
     return [...new Set(values)].sort();
-  }, [data]);
+  }, [data, selectedClass]);
 
   // Modules visible for the selected semester
   const visibleModules = useMemo(() => {
@@ -331,17 +351,20 @@ export default function DeliberationPage() {
     if (!data || !tableExportRef.current) return;
     setExportingPdf(true);
     try {
-      const tableHtml = tableExportRef.current.querySelector('table')?.outerHTML;
+      const tableHtml =
+        tableExportRef.current.querySelector("table")?.outerHTML;
       if (!tableHtml) {
-        toast.error('Aucun tableau à exporter.');
+        toast.error("Aucun tableau à exporter.");
         return;
       }
-      const periodPart = [data.academicYear, semester].filter(Boolean).join(' — ');
-      const title = `Délibération — ${data.class.name}${periodPart ? ` — ${periodPart}` : ''}`;
+      const periodPart = [data.academicYear, semester]
+        .filter(Boolean)
+        .join(" — ");
+      const title = `Délibération — ${data.class.name}${periodPart ? ` — ${periodPart}` : ""}`;
       const safeTitle = escapeHtml(title);
-      const printWindow = window.open('', '_blank', 'width=1200,height=800');
+      const printWindow = window.open("", "_blank", "width=1200,height=800");
       if (!printWindow) {
-        toast.error('Impossible d’ouvrir la fenêtre d’export PDF.');
+        toast.error("Impossible d’ouvrir la fenêtre d’export PDF.");
         return;
       }
 
@@ -394,21 +417,23 @@ export default function DeliberationPage() {
     const load = async () => {
       try {
         setLoadingRef(true);
-        const [depsRes, filRes, optRes, classRes, yearsRes] = await Promise.all([
-          fetchRef<PaginatedResponse<Department>>(
-            '/departments?page=1&limit=200&sortBy=name&sortOrder=asc',
-          ),
-          fetchRef<PaginatedResponse<Filiere>>(
-            '/filieres?page=1&limit=500&sortBy=name&sortOrder=asc',
-          ),
-          fetchRef<PaginatedResponse<AcademicOption>>(
-            '/options?page=1&limit=500&sortBy=name&sortOrder=asc',
-          ),
-          fetchRef<PaginatedResponse<AcademicClass>>(
-            '/classes?page=1&limit=500&sortBy=name&sortOrder=asc',
-          ),
-          fetchRef<AcademicYear[]>('/academic-years'),
-        ]);
+        const [depsRes, filRes, optRes, classRes, yearsRes] = await Promise.all(
+          [
+            fetchRef<PaginatedResponse<Department>>(
+              "/departments?page=1&limit=200&sortBy=name&sortOrder=asc",
+            ),
+            fetchRef<PaginatedResponse<Filiere>>(
+              "/filieres?page=1&limit=500&sortBy=name&sortOrder=asc",
+            ),
+            fetchRef<PaginatedResponse<AcademicOption>>(
+              "/options?page=1&limit=500&sortBy=name&sortOrder=asc",
+            ),
+            fetchRef<PaginatedResponse<AcademicClass>>(
+              "/classes?page=1&limit=500&sortBy=name&sortOrder=asc",
+            ),
+            fetchRef<AcademicYear[]>("/academic-years"),
+          ],
+        );
         setDepartments(depsRes.data);
         setFilieres(filRes.data);
         setOptions(optRes.data);
@@ -421,7 +446,10 @@ export default function DeliberationPage() {
         else if (years.length > 0) setAcademicYear(years[0].label);
       } catch (error) {
         toast.error(
-          getApiErrorMessage(error, 'Impossible de charger les données de référence.'),
+          getApiErrorMessage(
+            error,
+            "Impossible de charger les données de référence.",
+          ),
         );
       } finally {
         setLoadingRef(false);
@@ -432,7 +460,11 @@ export default function DeliberationPage() {
 
   // Auto-select single department
   useEffect(() => {
-    if (restrictedToOwnDepartments && user?.departments?.length === 1 && !departmentId) {
+    if (
+      restrictedToOwnDepartments &&
+      user?.departments?.length === 1 &&
+      !departmentId
+    ) {
       setDepartmentId(String(user.departments[0].id));
     }
   }, [departmentId, restrictedToOwnDepartments, user?.departments]);
@@ -440,21 +472,26 @@ export default function DeliberationPage() {
   // Cascade reset filière
   useEffect(() => {
     const still = visibleFilieres.some((f) => String(f.id) === filiereId);
-    if (!still) setFiliereId('');
+    if (!still) setFiliereId("");
   }, [departmentId, filiereId, visibleFilieres]);
 
   // Cascade reset option
   useEffect(() => {
     const still = visibleOptions.some((o) => String(o.id) === optionId);
-    if (!still) setOptionId('');
+    if (!still) setOptionId("");
   }, [filiereId, optionId, visibleOptions]);
 
   // Reset semester when class changes
   useEffect(() => {
-    setSemester('');
-    setModuleFilterId('');
+    setSemester(selectedClass?.semestre ?? "");
+    setModuleFilterId("");
     setSelectedStudentId(null);
-  }, [classId]);
+  }, [classId, selectedClass]);
+
+  useEffect(() => {
+    if (semester || availableSemesters.length === 0) return;
+    setSemester(availableSemesters[0]);
+  }, [availableSemesters, semester]);
 
   // ─── Load deliberation ──────────────────────────────────────────────────────
 
@@ -480,7 +517,7 @@ export default function DeliberationPage() {
         setSelectedStudentId(null);
       } catch (error) {
         toast.error(
-          getApiErrorMessage(error, 'Impossible de charger la délibération.'),
+          getApiErrorMessage(error, "Impossible de charger la délibération."),
         );
         setData(null);
       } finally {
@@ -511,7 +548,7 @@ export default function DeliberationPage() {
         <MetricCard
           label="Modules"
           value={visibleModules.length}
-          hint={semester ? `Semestre ${semester}` : 'Tous les semestres'}
+          hint={semester ? `Semestre ${semester}` : "Tous les semestres"}
           icon={BookOpen}
         />
       </section>
@@ -522,7 +559,8 @@ export default function DeliberationPage() {
           <div>
             <h2 className="panel-title">Sélection de la classe</h2>
             <p className="panel-copy">
-              Choisissez la classe, l&apos;année académique et le semestre pour afficher les résultats.
+              Choisissez la classe, l&apos;année académique et le semestre pour
+              afficher les résultats.
             </p>
           </div>
           {data && (
@@ -534,7 +572,7 @@ export default function DeliberationPage() {
                 disabled={exportingPdf}
               >
                 <Download size={14} />
-                {exportingPdf ? 'Export...' : 'Exporter PDF'}
+                {exportingPdf ? "Export..." : "Exporter PDF"}
               </button>
               <button
                 className="btn-outline flex items-center gap-2"
@@ -558,7 +596,9 @@ export default function DeliberationPage() {
                 className="input"
                 value={departmentId}
                 onChange={(e) => setDepartmentId(e.target.value)}
-                disabled={restrictedToOwnDepartments && visibleDepartments.length <= 1}
+                disabled={
+                  restrictedToOwnDepartments && visibleDepartments.length <= 1
+                }
               >
                 <option value="">Tous</option>
                 {visibleDepartments.map((d) => (
@@ -612,7 +652,8 @@ export default function DeliberationPage() {
                 <option value="">Choisir</option>
                 {visibleClasses.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} ({c.year})
+                    {c.name} ({c.year}
+                    {c.semestre ? ` · ${c.semestre}` : ""})
                   </option>
                 ))}
               </select>
@@ -629,6 +670,7 @@ export default function DeliberationPage() {
               value={semester}
               onChange={setSemester}
               emptyLabel="Tous les semestres"
+              options={availableSemesters}
               disabled={!data || availableSemesters.length === 0}
             />
 
@@ -643,7 +685,8 @@ export default function DeliberationPage() {
                 <option value="">Tous les modules</option>
                 {(data?.modules ?? []).map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.name}{m.semestre ? ` (${m.semestre})` : ''}
+                    {m.name}
+                    {m.semestre ? ` (${m.semestre})` : ""}
                   </option>
                 ))}
               </select>
@@ -659,7 +702,9 @@ export default function DeliberationPage() {
                 <option value="">Tous les statuts</option>
                 <option value="draft">Brouillon</option>
                 <option value="published">Publié</option>
-                <option value="modified_after_publication">Modifié après publication</option>
+                <option value="modified_after_publication">
+                  Modifié après publication
+                </option>
               </select>
             </div>
           </div>
@@ -682,22 +727,22 @@ export default function DeliberationPage() {
           <div className="flex gap-2 print:hidden">
             <button
               type="button"
-              className={activeTab === 'classe' ? 'btn-primary' : 'btn-outline'}
-              onClick={() => setActiveTab('classe')}
+              className={activeTab === "classe" ? "btn-primary" : "btn-outline"}
+              onClick={() => setActiveTab("classe")}
             >
               Vue classe
             </button>
             <button
               type="button"
-              className={activeTab === 'releve' ? 'btn-primary' : 'btn-outline'}
-              onClick={() => setActiveTab('releve')}
+              className={activeTab === "releve" ? "btn-primary" : "btn-outline"}
+              onClick={() => setActiveTab("releve")}
             >
               Relevé de notes
             </button>
           </div>
 
           {/* ── Tab: Vue classe ──────────────────────────────────────────────── */}
-          {activeTab === 'classe' && (
+          {activeTab === "classe" && (
             <section ref={tableExportRef} className="surface-card space-y-4">
               {/* Print header */}
               <div className="hidden print:block space-y-1 mb-4">
@@ -705,12 +750,13 @@ export default function DeliberationPage() {
                   Institut Agronomique et Vétérinaire Hassan II
                 </p>
                 <h1 className="text-xl font-bold text-slate-900">
-                  Tableau de délibération — {data.class.name} ({data.class.year})
+                  Tableau de délibération — {data.class.name} ({data.class.year}
+                  )
                 </h1>
                 {data.academicYear && (
                   <p className="text-sm text-slate-600">
                     Année académique : {data.academicYear}
-                    {semester ? ` · ${semester}` : ''}
+                    {semester ? ` · ${semester}` : ""}
                   </p>
                 )}
                 {data.class.filiere && (
@@ -738,7 +784,8 @@ export default function DeliberationPage() {
                       Publié {data.publicationSummary.published}
                     </span>
                     <span className="status-chip status-chip--warning">
-                      Modifié {data.publicationSummary.modified_after_publication}
+                      Modifié{" "}
+                      {data.publicationSummary.modified_after_publication}
                     </span>
                   </div>
                 )}
@@ -747,7 +794,7 @@ export default function DeliberationPage() {
               {computedStudents.length === 0 ? (
                 <EmptyState
                   title="Aucun étudiant"
-                  description="Cette classe ne contient pas encore d&apos;étudiants."
+                  description="Cette classe ne contient pas encore d'étudiants."
                 />
               ) : visibleModules.length === 0 ? (
                 <EmptyState
@@ -826,7 +873,9 @@ export default function DeliberationPage() {
                         return (
                           <tr
                             key={student.id}
-                            className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}
+                            className={
+                              idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"
+                            }
                           >
                             <td className="border border-slate-200 px-3 py-2 font-medium text-slate-900 text-xs">
                               {student.fullName}
@@ -842,18 +891,21 @@ export default function DeliberationPage() {
                                   return (
                                     <td
                                       key={el.id}
-                                      className={`border border-slate-200 px-2 py-2 text-center text-xs ${!g ? 'bg-red-50/40' : ''}`}
+                                      className={`border border-slate-200 px-2 py-2 text-center text-xs ${!g ? "bg-red-50/40" : ""}`}
                                     >
                                       {g ? (
                                         <div className="space-y-0.5">
                                           <span
                                             className={
                                               normalizedGradeScore(g) < 10
-                                                ? 'text-red-600'
-                                                : 'text-slate-700'
+                                                ? "text-red-600"
+                                                : "text-slate-700"
                                             }
                                           >
-                                            {fmtScore(final!.score, final!.maxScore)}
+                                            {fmtScore(
+                                              final!.score,
+                                              final!.maxScore,
+                                            )}
                                           </span>
                                           {hasRattrapage(g) ? (
                                             <div className="text-[10px] text-slate-400">
@@ -862,7 +914,9 @@ export default function DeliberationPage() {
                                           ) : null}
                                         </div>
                                       ) : (
-                                        <span className="text-slate-300">—</span>
+                                        <span className="text-slate-300">
+                                          —
+                                        </span>
                                       )}
                                     </td>
                                   );
@@ -870,18 +924,28 @@ export default function DeliberationPage() {
                                 <td className="border border-slate-200 px-2 py-2 text-center text-xs font-semibold bg-emerald-50/40">
                                   <span
                                     className={mentionColor(
-                                      student.filteredModuleAverages[mod.id] ?? null,
+                                      student.filteredModuleAverages[mod.id] ??
+                                        null,
                                     )}
                                   >
-                                    {fmtAvg(student.filteredModuleAverages[mod.id] ?? null)}
+                                    {fmtAvg(
+                                      student.filteredModuleAverages[mod.id] ??
+                                        null,
+                                    )}
                                   </span>
                                 </td>
                               </Fragment>
                             ))}
                             <td className="border border-slate-200 px-2 py-2 text-center text-xs font-bold bg-amber-50/40">
-                              <span className={mentionColor(avg)}>{fmtAvg(avg)}</span>
+                              <span className={mentionColor(avg)}>
+                                {fmtAvg(avg)}
+                              </span>
                               <div className="text-[10px] font-normal text-slate-400">
-                                {avg !== null && avg < 10 ? 'Ajourné' : avg !== null ? 'Admis' : 'Notes manquantes'}
+                                {avg !== null && avg < 10
+                                  ? "Ajourné"
+                                  : avg !== null
+                                    ? "Admis"
+                                    : "Notes manquantes"}
                               </div>
                             </td>
                           </tr>
@@ -896,7 +960,8 @@ export default function DeliberationPage() {
               {computedStudents.length > 0 && (
                 <div className="flex flex-wrap gap-4 pt-2 text-sm text-slate-600 print:pt-4">
                   <span>
-                    Total : <strong>{computedStudents.length}</strong> étudiant(s)
+                    Total : <strong>{computedStudents.length}</strong>{" "}
+                    étudiant(s)
                   </span>
                 </div>
               )}
@@ -904,13 +969,14 @@ export default function DeliberationPage() {
           )}
 
           {/* ── Tab: Relevé de notes ─────────────────────────────────────────── */}
-          {activeTab === 'releve' && (
+          {activeTab === "releve" && (
             <section className="surface-card space-y-5">
               <div className="panel-header print:hidden">
                 <div>
                   <h2 className="panel-title">Relevé de notes individuel</h2>
                   <p className="panel-copy">
-                    Sélectionnez un étudiant pour afficher et imprimer son relevé.
+                    Sélectionnez un étudiant pour afficher et imprimer son
+                    relevé.
                   </p>
                 </div>
               </div>
@@ -927,9 +993,11 @@ export default function DeliberationPage() {
                 <label className="field-label">Étudiant</label>
                 <select
                   className="input"
-                  value={selectedStudentId ?? ''}
+                  value={selectedStudentId ?? ""}
                   onChange={(e) =>
-                    setSelectedStudentId(e.target.value ? Number(e.target.value) : null)
+                    setSelectedStudentId(
+                      e.target.value ? Number(e.target.value) : null,
+                    )
                   }
                 >
                   <option value="">Choisir un étudiant</option>
@@ -968,12 +1036,18 @@ export default function DeliberationPage() {
 type ReleveProps = {
   student: ComputedStudent;
   modules: ModuleRow[];
-  classInfo: DeliberationData['class'];
+  classInfo: DeliberationData["class"];
   academicYear: string | null;
   semester: string;
 };
 
-function ReleveDeNote({ student, modules, classInfo, academicYear, semester }: ReleveProps) {
+function ReleveDeNote({
+  student,
+  modules,
+  classInfo,
+  academicYear,
+  semester,
+}: ReleveProps) {
   const avg = student.filteredOverallAverage;
 
   return (
@@ -986,34 +1060,34 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester }: R
         <h2 className="text-lg font-bold text-slate-900">Relevé de Notes</h2>
         <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-600 pt-1">
           <span>
-            <span className="text-slate-400">Étudiant :</span>{' '}
+            <span className="text-slate-400">Étudiant :</span>{" "}
             <strong>{student.fullName}</strong>
           </span>
           <span>
-            <span className="text-slate-400">Code Massar :</span>{' '}
+            <span className="text-slate-400">Code Massar :</span>{" "}
             <strong>{student.codeMassar}</strong>
           </span>
           <span>
-            <span className="text-slate-400">Classe :</span>{' '}
+            <span className="text-slate-400">Classe :</span>{" "}
             <strong>
               {classInfo.name} ({classInfo.year})
             </strong>
           </span>
           {classInfo.filiere && (
             <span>
-              <span className="text-slate-400">Filière :</span>{' '}
+              <span className="text-slate-400">Filière :</span>{" "}
               <strong>{classInfo.filiere.name}</strong>
             </span>
           )}
           {academicYear && (
             <span>
-              <span className="text-slate-400">Année :</span>{' '}
+              <span className="text-slate-400">Année :</span>{" "}
               <strong>{academicYear}</strong>
             </span>
           )}
           {semester && (
             <span>
-              <span className="text-slate-400">Semestre :</span>{' '}
+              <span className="text-slate-400">Semestre :</span>{" "}
               <strong>{semester}</strong>
             </span>
           )}
@@ -1073,7 +1147,9 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester }: R
                   return (
                     <tr
                       key={el.id}
-                      className={elIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}
+                      className={
+                        elIdx % 2 === 0 ? "bg-white" : "bg-slate-50/50"
+                      }
                     >
                       {elIdx === 0 && (
                         <td
@@ -1087,8 +1163,10 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester }: R
                             </div>
                           )}
                           <div className="mt-2 text-xs text-slate-600">
-                            Moyenne générale du module :{' '}
-                            <span className={`font-bold ${mentionColor(modAvg)}`}>
+                            Moyenne générale du module :{" "}
+                            <span
+                              className={`font-bold ${mentionColor(modAvg)}`}
+                            >
                               {fmtAvg(modAvg)}
                             </span>
                           </div>
@@ -1105,7 +1183,13 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester }: R
                       </td>
                       <td className="border border-slate-200 px-3 py-2 text-center font-medium">
                         {g ? (
-                          <span className={(initial!.score / initial!.maxScore) < 0.5 ? 'text-red-600' : 'text-slate-800'}>
+                          <span
+                            className={
+                              initial!.score / initial!.maxScore < 0.5
+                                ? "text-red-600"
+                                : "text-slate-800"
+                            }
+                          >
                             {fmtScore(initial!.score, initial!.maxScore)}
                           </span>
                         ) : (
@@ -1114,8 +1198,19 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester }: R
                       </td>
                       <td className="border border-slate-200 px-3 py-2 text-center font-medium">
                         {g && hasRattrapage(g) ? (
-                          <span className={(g.rattrapageScore as number) / (g.rattrapageMaxScore ?? g.maxScore) < 0.5 ? 'text-red-600' : 'text-slate-800'}>
-                            {fmtScore(g.rattrapageScore as number, g.rattrapageMaxScore ?? g.maxScore)}
+                          <span
+                            className={
+                              (g.rattrapageScore as number) /
+                                (g.rattrapageMaxScore ?? g.maxScore) <
+                              0.5
+                                ? "text-red-600"
+                                : "text-slate-800"
+                            }
+                          >
+                            {fmtScore(
+                              g.rattrapageScore as number,
+                              g.rattrapageMaxScore ?? g.maxScore,
+                            )}
                           </span>
                         ) : (
                           <span className="text-slate-300">—</span>
@@ -1123,7 +1218,13 @@ function ReleveDeNote({ student, modules, classInfo, academicYear, semester }: R
                       </td>
                       <td className="border border-slate-200 px-3 py-2 text-center font-semibold">
                         {g ? (
-                          <span className={normalizedGradeScore(g) < 10 ? 'text-red-600' : 'text-slate-900'}>
+                          <span
+                            className={
+                              normalizedGradeScore(g) < 10
+                                ? "text-red-600"
+                                : "text-slate-900"
+                            }
+                          >
                             {fmtScore(final!.score, final!.maxScore)}
                           </span>
                         ) : (

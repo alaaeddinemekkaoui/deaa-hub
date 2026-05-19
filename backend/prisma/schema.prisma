@@ -314,6 +314,26 @@ model Document {
   @@index([bucket, objectKey])
 }
 
+model DocumentTemplate {
+  id             Int      @id @default(autoincrement())
+  name           String   @unique
+  type           String   @default("releve_note")
+  documentTypeId Int?     @unique
+  header         String
+  body           String
+  footer         String?
+  primaryColor   String?  @default("#0f766e")
+  signatureLabel String?  @default("Direction des Affaires Académiques")
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  documentType   DocumentType? @relation(fields: [documentTypeId], references: [id], onDelete: SetNull)
+
+  @@index([type])
+  @@index([isDefault])
+  @@index([documentTypeId])
+}
+
 model StudentGrade {
   id                 Int            @id @default(autoincrement())
   studentId          Int
@@ -362,6 +382,7 @@ model DocumentType {
   description String?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
+  template    DocumentTemplate?
   workflows   WorkflowTask[]
 }
 

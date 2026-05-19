@@ -17,6 +17,9 @@ import { memoryStorage } from 'multer';
 import type { Response } from 'express';
 import { DocumentsService } from './documents.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
+import { CreateDocumentTemplateDto } from './dto/create-document-template.dto';
+import { GenerateReleveDto } from './dto/generate-releve.dto';
+import { UpdateDocumentTemplateDto } from './dto/update-document-template.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -35,10 +38,48 @@ export class DocumentsController {
     return this.documentsService.findAll();
   }
 
-  @Get(':id')
+  @Get('templates')
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.documentsService.findOne(id);
+  listTemplates() {
+    return this.documentsService.listTemplates();
+  }
+
+  @Post('templates')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  createTemplate(@Body() dto: CreateDocumentTemplateDto) {
+    return this.documentsService.createTemplate(dto);
+  }
+
+  @Patch('templates/:id')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  updateTemplate(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDocumentTemplateDto,
+  ) {
+    return this.documentsService.updateTemplate(id, dto);
+  }
+
+  @Delete('templates/:id')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  deleteTemplate(@Param('id', ParseIntPipe) id: number) {
+    return this.documentsService.deleteTemplate(id);
+  }
+
+  @Post('generate/releve/:studentId')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.STUDENT,
+    UserRole.INSPECTOR,
+  )
+  generateReleve(
+    @Param('studentId', ParseIntPipe) studentId: number,
+    @Body() dto: GenerateReleveDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.documentsService.generateStudentRelevePdf(studentId, dto, user);
   }
 
   @Post('upload')
@@ -108,6 +149,12 @@ export class DocumentsController {
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
   missing(@Param('studentId', ParseIntPipe) studentId: number) {
     return this.documentsService.missingDocuments(studentId);
+  }
+
+  @Get(':id')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.documentsService.findOne(id);
   }
 
   @Patch(':id')

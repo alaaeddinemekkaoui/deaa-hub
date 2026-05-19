@@ -8,6 +8,8 @@ import { toast } from 'sonner';
 
 type ProfileDocumentType = { id: number; name: string; description?: string | null };
 type Document = { id: number; name: string; mimeType: string; category?: string | null; createdAt: string };
+type DocumentType = { id: number; name: string; description?: string | null };
+type DocumentTemplate = { id: number; name: string; documentTypeId?: number | null; type: string };
 
 interface ProfileDocsModalProps {
   open: boolean;
@@ -21,10 +23,13 @@ interface ProfileDocsModalProps {
 export function ProfileDocsModal({ open, onClose, entityType, entityId, entityName, canEdit }: ProfileDocsModalProps) {
   const [docTypes, setDocTypes] = useState<ProfileDocumentType[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [documentTypes, setDocumentTypes] = useState<DocumentType[]>([]);
+  const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [generatingTypeId, setGeneratingTypeId] = useState<number | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -57,12 +62,16 @@ export function ProfileDocsModal({ open, onClose, entityType, entityId, entityNa
     if (!open) return;
     setLoading(true);
     try {
-      const [typesRes, docsRes] = await Promise.all([
+      const [typesRes, docsRes, documentTypesRes, templatesRes] = await Promise.all([
         api.get<ProfileDocumentType[]>('/profile-document-types'),
         api.get<Document[]>(docsEndpoint),
+        entityType === 'student' ? api.get<DocumentType[]>('/document-types') : Promise.resolve({ data: [] as DocumentType[] }),
+        entityType === 'student' ? api.get<DocumentTemplate[]>('/documents/templates') : Promise.resolve({ data: [] as DocumentTemplate[] }),
       ]);
       setDocTypes(typesRes.data);
       setDocuments(docsRes.data);
+      setDocumentTypes(documentTypesRes.data);
+      setTemplates(templatesRes.data);
       setSelectedCategory((current) => current || typesRes.data[0]?.name || '');
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Chargement impossible'));
@@ -123,6 +132,28 @@ export function ProfileDocsModal({ open, onClose, entityType, entityId, entityNa
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const generateDocument = async (type: DocumentType) => {
+    const template = templates.find((item) => item.documentTypeId === type.id);
+    if (!template) {
+      toast.error(`Aucun modèle configuré pour ${type.name}`);
+      return;
+    }
+    setGeneratingTypeId(type.id);
+    try {
+      await api.post(`/documents/generate/releve/${entityId}`, {
+        templateId: template.id,
+        documentTypeId: type.id,
+      });
+      toast.success(`${type.name} généré`);
+      const docsRes = await api.get<Document[]>(docsEndpoint);
+      setDocuments(docsRes.data);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Génération impossible'));
+    } finally {
+      setGeneratingTypeId(null);
     }
   };
 
@@ -247,6 +278,29 @@ export function ProfileDocsModal({ open, onClose, entityType, entityId, entityNa
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadDocument(f); }}
                     />
                   </div>
+                </div>
+              </div>
+            )}
+
+            {entityType === 'student' && documentTypes.length > 0 && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                <h3 className="text-sm font-semibold text-slate-900">Générer des documents</h3>
+                <div className="flex flex-wrap gap-2">
+                  {documentTypes.map((type) => {
+                    const hasTemplate = templates.some((template) => template.documentTypeId === type.id);
+                    return (
+                      <button
+                        key={type.id}
+                        type="button"
+                        className="btn-outline"
+                        onClick={() => void generateDocument(type)}
+                        disabled={!hasTemplate || generatingTypeId === type.id}
+                        title={hasTemplate ? `Générer ${type.name}` : 'Aucun modèle lié à ce type'}
+                      >
+                        {generatingTypeId === type.id ? 'Génération...' : type.name}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

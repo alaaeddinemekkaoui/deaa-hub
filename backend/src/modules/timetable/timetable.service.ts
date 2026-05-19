@@ -20,6 +20,10 @@ const SESSION_INCLUDE = {
   teacher: { select: { id: true, firstName: true, lastName: true } },
   room: { select: { id: true, name: true } },
 } as const;
+type SessionWithInclude = Prisma.TimetableSessionGetPayload<{
+  include: typeof SESSION_INCLUDE;
+}>;
+type AutoSlot = { day: number; slot: readonly [string, string]; key: string };
 
 @Injectable()
 export class TimetableService {
@@ -127,6 +131,82 @@ export class TimetableService {
     await this.syncRoomReservationForSession(session);
 
     return session;
+  }
+
+  async autoAffectWeek(classId: number, weekStart: string) {
+    await this.ensureClassExists(classId);
+    const parsedWeekStart = this.parseRequiredDate(weekStart, 'weekStart');
+    const existing = await this.prisma.timetableSession.findMany({
+      where: { classId, weekStart: parsedWeekStart },
+      select: { elementId: true, dayOfWeek: true, startTime: true, endTime: true },
+    });
+    const scheduledElementIds = new Set(existing.map((item) => item.elementId));
+    const elements = await this.prisma.elementModule.findMany({
+      where: {
+        OR: [
+          { classId },
+          { module: { classes: { some: { classId } } } },
+        ],
+      },
+      include: { module: { select: { name: true } } },
+      orderBy: { id: 'asc' },
+    });
+    const teachers = await this.prisma.teacherClass.findMany({
+      where: { classId },
+      select: { teacherId: true },
+    });
+    const rooms = await this.prisma.room.findMany({
+      where: { availability: true },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+    });
+    const slots = [
+      ['08:00', '10:00'],
+      ['10:00', '12:00'],
+      ['14:00', '16:00'],
+      ['16:00', '18:00'],
+    ] as const;
+    const occupied = new Set(existing.map((item) => `${item.dayOfWeek}-${item.startTime}`));
+    let created = 0;
+    const sessions: SessionWithInclude[] = [];
+
+    for (const element of elements) {
+      if (scheduledElementIds.has(element.id)) continue;
+      const candidates: AutoSlot[] = [];
+      for (let day = 1; day <= 5; day++) {
+        for (const slot of slots) {
+          const key = `${day}-${slot[0]}`;
+          if (!occupied.has(key)) candidates.push({ day, slot, key });
+        }
+      }
+      if (candidates.length === 0) break;
+      const candidate = candidates[Math.floor(Math.random() * candidates.length)];
+      occupied.add(candidate.key);
+      const teacher = teachers.length
+        ? teachers[Math.floor(Math.random() * teachers.length)]
+        : null;
+      const room = rooms.length ? rooms[Math.floor(Math.random() * rooms.length)] : null;
+      const session = await this.prisma.timetableSession.create({
+        data: {
+          elementId: element.id,
+          classId,
+          teacherId: teacher?.teacherId ?? null,
+          roomId: room?.id ?? null,
+          dayOfWeek: candidate.day,
+          startTime: candidate.slot[0],
+          endTime: element.sessionDurationMinutes
+            ? this.addMinutes(candidate.slot[0], element.sessionDurationMinutes)
+            : candidate.slot[1],
+          weekStart: parsedWeekStart,
+        },
+        include: SESSION_INCLUDE,
+      });
+      await this.syncRoomReservationForSession(session);
+      sessions.push(session);
+      created++;
+    }
+
+    return { created, sessions, conflicts: this.detectConflicts(sessions) };
   }
 
   async update(id: number, dto: Partial<CreateSessionDto>) {
@@ -252,6 +332,12 @@ export class TimetableService {
       return h * 60 + m;
     };
     return toMin(s1) < toMin(e2) && toMin(s2) < toMin(e1);
+  }
+
+  private addMinutes(time: string, minutes: number) {
+    const [hours, mins] = time.split(':').map(Number);
+    const total = hours * 60 + mins + minutes;
+    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
   }
 
   private parseRequiredDate(value: string | null | undefined, field: string) {

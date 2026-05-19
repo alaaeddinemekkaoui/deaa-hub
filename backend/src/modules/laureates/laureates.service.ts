@@ -8,6 +8,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateLaureateDto } from './dto/create-laureate.dto';
 import { UpdateLaureateDto } from './dto/update-laureate.dto';
 import { UsersService } from '../users/users.service';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class LaureatesService {
@@ -16,16 +17,34 @@ export class LaureatesService {
     private readonly usersService: UsersService,
   ) {}
 
-  findAll() {
-    return this.prisma.laureate.findMany({
-      include: {
-        student: {
-          include: { filiere: true, academicClass: true },
+  async findAll(pagination: PaginationDto) {
+    const { page, limit } = pagination;
+    const [data, total] = await Promise.all([
+      this.prisma.laureate.findMany({
+        include: {
+          student: {
+            include: { filiere: true, academicClass: true },
+          },
+          proofDocument: true,
         },
-        proofDocument: true,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { graduationYear: 'desc' },
+      }),
+      this.prisma.laureate.count(),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+        hasNextPage: page * limit < total,
+        hasPreviousPage: page > 1,
       },
-      orderBy: { graduationYear: 'desc' },
-    });
+    };
   }
 
   findOne(id: number) {

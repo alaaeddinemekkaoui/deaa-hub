@@ -261,6 +261,7 @@ export default function TimetablePage() {
   const [addTeacherId, setAddTeacherId] = useState('');
   const [addRoomId, setAddRoomId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [autoAffecting, setAutoAffecting] = useState(false);
 
   // Unique module names from loaded elements — no extra request needed
   const moduleNames = useMemo(
@@ -439,6 +440,23 @@ export default function TimetablePage() {
       toast.error(getApiErrorMessage(err, 'Erreur lors de la planification'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const autoAffectWeek = async () => {
+    if (!selectedClassId) return;
+    setAutoAffecting(true);
+    try {
+      const response = await api.post<{ created: number }>('/timetable/auto-affect-week', {
+        classId: Number(selectedClassId),
+        weekStart,
+      });
+      toast.success(`${response.data.created} session(s) affectée(s) aléatoirement`);
+      await loadTimetable();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Affectation automatique impossible"));
+    } finally {
+      setAutoAffecting(false);
     }
   };
 
@@ -667,9 +685,14 @@ export default function TimetablePage() {
               </div>
 
               {selectedClassId && (
-                <button className="btn-outline self-end" type="button" onClick={() => openAddModal()}>
-                  + Session
-                </button>
+                <div className="flex self-end gap-2">
+                  <button className="btn-outline" type="button" onClick={autoAffectWeek} disabled={autoAffecting}>
+                    {autoAffecting ? 'Auto...' : 'Auto semaine test'}
+                  </button>
+                  <button className="btn-outline" type="button" onClick={() => openAddModal()}>
+                    + Session
+                  </button>
+                </div>
               )}
             </div>
           </div>

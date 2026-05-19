@@ -6,7 +6,7 @@ import { BookOpen, Download, NotebookPen, RefreshCw, Search, X } from 'lucide-re
 import { EmptyState } from '@/components/admin/empty-state';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
-import { PaginationControls } from '@/components/admin/pagination-controls';
+import { PaginationControls, type PageSizeValue } from '@/components/admin/pagination-controls';
 import { api, getApiErrorMessage, PaginatedResponse } from '@/services/api';
 import { toast } from 'sonner';
 
@@ -39,7 +39,11 @@ type Cours = {
   _count: { classes: number };
 };
 
-const PAGE_SIZE = 10;
+const DEFAULT_COURS_PAGE_SIZE: PageSizeValue = 10;
+const DEFAULT_ASSIGNMENTS_PAGE_SIZE: PageSizeValue = 10;
+const serverLimit = (pageSize: PageSizeValue) => (pageSize === 'all' ? 1000 : pageSize);
+const clientLimit = (pageSize: PageSizeValue, total: number) =>
+  pageSize === 'all' ? Math.max(total, 1) : pageSize;
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -60,11 +64,14 @@ export default function ClassesCoursPage() {
 
   // Cours list for selected class
   const [assignments, setAssignments] = useState<CoursAssignment[]>([]);
+  const [assignmentsPage, setAssignmentsPage] = useState(1);
+  const [assignmentsPageSize, setAssignmentsPageSize] = useState<PageSizeValue>(DEFAULT_ASSIGNMENTS_PAGE_SIZE);
   const [assignLoading, setAssignLoading] = useState(false);
 
   // All cours (for manual add)
   const [allCours, setAllCours] = useState<Cours[]>([]);
   const [coursPage, setCoursPage] = useState(1);
+  const [coursPageSize, setCoursPageSize] = useState<PageSizeValue>(DEFAULT_COURS_PAGE_SIZE);
   const [coursMeta, setCoursMeta] = useState({ total: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false });
   const [coursSearch, setCoursSearch] = useState('');
   const [coursQuery, setCoursQuery] = useState('');
@@ -120,6 +127,14 @@ export default function ClassesCoursPage() {
     [classes, selectedClassId],
   );
 
+  const assignmentLimit = clientLimit(assignmentsPageSize, assignments.length);
+  const assignmentTotalPages = Math.max(1, Math.ceil(assignments.length / assignmentLimit));
+  const assignmentRows = useMemo(() => {
+    if (assignmentsPageSize === 'all') return assignments;
+    const start = (assignmentsPage - 1) * assignmentLimit;
+    return assignments.slice(start, start + assignmentLimit);
+  }, [assignments, assignmentsPage, assignmentLimit, assignmentsPageSize]);
+
   // ─── Effects ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -158,6 +173,7 @@ export default function ClassesCoursPage() {
         setAssignLoading(true);
         const res = await api.get<CoursAssignment[]>(`/classes/${selectedClassId}/cours`);
         setAssignments(Array.isArray(res.data) ? res.data : []);
+        setAssignmentsPage(1);
       } catch {
         toast.error('Impossible de charger les cours de cette classe');
       } finally {
@@ -172,7 +188,7 @@ export default function ClassesCoursPage() {
     const load = async () => {
       try {
         const res = await api.get<PaginatedResponse<Cours>>('/cours', {
-          params: { page: coursPage, limit: PAGE_SIZE, search: coursQuery || undefined },
+          params: { page: coursPage, limit: serverLimit(coursPageSize), search: coursQuery || undefined },
         });
         setAllCours(res.data.data);
         setCoursMeta(res.data.meta);
@@ -181,7 +197,7 @@ export default function ClassesCoursPage() {
       }
     };
     void load();
-  }, [coursPage, coursQuery, coursRefreshKey]);
+  }, [coursPage, coursPageSize, coursQuery, coursRefreshKey]);
 
   // Load elements for the selected class's filière (for the create form)
   useEffect(() => {

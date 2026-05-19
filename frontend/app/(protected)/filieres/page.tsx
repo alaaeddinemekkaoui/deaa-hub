@@ -8,7 +8,7 @@ import { ImportDataButton } from '@/components/admin/import-data-button';
 import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
-import { PaginationControls } from '@/components/admin/pagination-controls';
+import { PaginationControls, type PageSizeValue } from '@/components/admin/pagination-controls';
 import { api, getApiErrorMessage, PaginatedResponse } from '@/services/api';
 import { toast } from 'sonner';
 
@@ -29,7 +29,8 @@ type Filiere = {
 
 type Department = { id: number; name: string };
 
-const PAGE_SIZE = 8;
+const DEFAULT_PAGE_SIZE: PageSizeValue = 10;
+const resolveLimit = (pageSize: PageSizeValue) => (pageSize === 'all' ? 1000 : pageSize);
 
 export default function FilieresPage() {
   const [rows, setRows] = useState<Filiere[]>([]);
@@ -43,6 +44,7 @@ export default function FilieresPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSizeValue>(DEFAULT_PAGE_SIZE);
   const [sortBy, setSortBy] = useState<'name' | 'code' | 'updatedAt'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [saving, setSaving] = useState(false);
@@ -50,7 +52,7 @@ export default function FilieresPage() {
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState({
     page: 1,
-    limit: PAGE_SIZE,
+    limit: resolveLimit(DEFAULT_PAGE_SIZE, 0),
     total: 0,
     totalPages: 1,
     hasNextPage: false,
@@ -93,7 +95,7 @@ export default function FilieresPage() {
           api.get<PaginatedResponse<Filiere>>('/filieres', {
             params: {
               page,
-              limit: PAGE_SIZE,
+              limit: resolveLimit(pageSize),
               search: query || undefined,
               departmentId: filterDepartmentId || undefined,
               sortBy,
@@ -124,7 +126,7 @@ export default function FilieresPage() {
     };
 
     void load();
-  }, [departmentId, filterDepartmentId, page, query, refreshKey, sortBy, sortOrder]);
+  }, [departmentId, filterDepartmentId, page, pageSize, query, refreshKey, sortBy, sortOrder, meta.total]);
 
   const onSubmit = async () => {
     if (!name.trim() || !code.trim() || !departmentId) return;
@@ -381,6 +383,11 @@ export default function FilieresPage() {
               totalPages={meta.totalPages}
               total={meta.total}
               onPageChange={setPage}
+              pageSize={pageSize}
+              onPageSizeChange={(value) => {
+                setPageSize(value);
+                setPage(1);
+              }}
             />
           </>
         )}

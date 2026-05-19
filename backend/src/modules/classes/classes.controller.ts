@@ -52,6 +52,12 @@ export class ClassesController {
     return this.classesService.importFromBuffer(file.buffer);
   }
 
+  @Post('import-from-modules')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER, UserRole.INSPECTOR)
+  importFromModules(@CurrentUser() user: JwtPayload) {
+    return this.classesService.importFromModules(user);
+  }
+
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   findOne(@Param('id', ParseIntPipe) id: number) {

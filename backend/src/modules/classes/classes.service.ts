@@ -679,4 +679,86 @@ export class ClassesService {
 
     return { imported, errors };
   }
+
+  async importFromModules(currentUser?: JwtPayload) {
+    const academicYear =
+      (await this.getCurrentAcademicYearLabel()) ??
+      `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`;
+    const classYear = new Date().getFullYear();
+    const modules = await this.prisma.module.findMany({
+      where: { filiereId: { not: null } },
+      include: {
+        filiere: { select: { id: true, name: true, code: true, departmentId: true } },
+        option: { select: { id: true, name: true, code: true } },
+        elements: { select: { id: true } },
+        classes: { select: { classId: true } },
+      },
+      orderBy: [{ filiereId: 'asc' }, { semestre: 'asc' }, { name: 'asc' }],
+    });
+
+    let created = 0;
+    let linkedModules = 0;
+    let linkedElements = 0;
+    const errors: string[] = [];
+
+    for (const module of modules) {
+      try {
+        if (!module.filiere) continue;
+        this.ensureCanManageDepartment(module.filiere.departmentId, currentUser);
+        const semester = module.semestre ?? 'S1';
+        const optionPart = module.option?.code ?? module.option?.name;
+        const baseName = [
+          module.filiere.code ?? module.filiere.name,
+          optionPart,
+          semester,
+        ].filter(Boolean).join('-');
+
+        const academicClass = await this.prisma.academicClass.upsert({
+          where: {
+            name_year_semestre_academicYear: {
+              name: baseName,
+              year: classYear,
+              semestre: semester,
+              academicYear,
+            },
+          },
+          update: {
+            filiereId: module.filiereId,
+            optionId: module.optionId,
+          },
+          create: {
+            name: baseName,
+            year: classYear,
+            academicYear,
+            semestre: semester,
+            filiereId: module.filiereId,
+            optionId: module.optionId,
+            classType: 'Auto',
+          },
+        });
+
+        if (!module.classes.some((item) => item.classId === academicClass.id)) {
+          await this.prisma.moduleClass.create({
+            data: { moduleId: module.id, classId: academicClass.id },
+          });
+          linkedModules++;
+        }
+
+        const result = await this.prisma.elementModule.updateMany({
+          where: { moduleId: module.id, classId: null },
+          data: { classId: academicClass.id },
+        });
+        linkedElements += result.count;
+        if (academicClass.createdAt.getTime() === academicClass.updatedAt.getTime()) {
+          created++;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(`${module.name}: ${message}`);
+      }
+    }
+
+    this.listCache.invalidate();
+    return { created, linkedModules, linkedElements, errors };
+  }
 }

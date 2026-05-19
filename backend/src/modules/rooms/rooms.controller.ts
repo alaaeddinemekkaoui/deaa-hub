@@ -8,6 +8,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -23,6 +24,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/types/role.type';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
 @Controller('rooms')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -39,7 +41,7 @@ export class RoomsController {
     UserRole.STUDENT,
     UserRole.INSPECTOR,
   )
-  findAll(@CurrentUser() user: JwtPayload) {
+  findAll(@CurrentUser() user: JwtPayload, @Query() query: PaginationDto) {
     const departmentScope =
       user.role === UserRole.TEACHER || user.role === UserRole.STUDENT
         ? undefined
@@ -48,7 +50,8 @@ export class RoomsController {
           ? user.departmentIds
           : undefined;
 
-    return this.roomsService.findAll(departmentScope);
+    const shouldPaginate = query.page !== 1 || query.limit !== 10;
+    return this.roomsService.findAll(departmentScope, shouldPaginate ? query : undefined);
   }
 
   @Get(':id')

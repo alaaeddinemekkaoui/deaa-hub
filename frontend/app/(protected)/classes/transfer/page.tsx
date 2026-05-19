@@ -12,7 +12,7 @@ import { SemesterSelect } from '@/components/academic/semester-select';
 import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
-import { PaginationControls } from '@/components/admin/pagination-controls';
+import { PaginationControls, type PageSizeValue } from '@/components/admin/pagination-controls';
 import { useAuth } from '@/features/auth/auth-context';
 import { api, fetchRef, getApiErrorMessage, PaginatedResponse } from '@/services/api';
 import { toast } from 'sonner';
@@ -32,7 +32,8 @@ type AcademicClass = {
 };
 type AcademicYear = { id: number; label: string; isCurrent: boolean };
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE: PageSizeValue = 10;
+const resolveLimit = (pageSize: PageSizeValue) => (pageSize === 'all' ? 1000 : pageSize);
 type TransferMode = 'duplicate' | 'existing';
 
 export default function ClassTransferPage() {
@@ -45,10 +46,11 @@ export default function ClassTransferPage() {
   const [query, setQuery] = useState('');
   const [filterAcademicYear, setFilterAcademicYear] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSizeValue>(DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState({
-    page: 1, limit: PAGE_SIZE, total: 0, totalPages: 1,
+    page: 1, limit: resolveLimit(DEFAULT_PAGE_SIZE), total: 0, totalPages: 1,
     hasNextPage: false, hasPreviousPage: false,
   });
   const [refreshKey, setRefreshKey] = useState(0);
@@ -146,10 +148,11 @@ export default function ClassTransferPage() {
     const load = async () => {
       try {
         setLoading(true); setError(null);
+        const limit = resolveLimit(pageSize);
         const [pageRes, allRes] = await Promise.all([
           api.get<PaginatedResponse<AcademicClass>>('/classes', {
             params: {
-              page, limit: PAGE_SIZE,
+              page, limit,
               search: query || undefined,
               academicYear: filterAcademicYear || undefined,
               departmentId: singleDepartmentId,
@@ -157,7 +160,7 @@ export default function ClassTransferPage() {
             },
           }),
           api.get<PaginatedResponse<AcademicClass>>('/classes', {
-            params: { page: 1, limit: 500, academicYear: filterAcademicYear || undefined, departmentId: singleDepartmentId, sortBy: 'name', sortOrder: 'asc' },
+            params: { page: 1, limit: 1000, academicYear: filterAcademicYear || undefined, departmentId: singleDepartmentId, sortBy: 'name', sortOrder: 'asc' },
           }),
         ]);
 
@@ -170,13 +173,18 @@ export default function ClassTransferPage() {
         const scopedPageRows = pageRes.data.data.filter(isClassInScope);
         const scopedAllRows = allRes.data.data.filter(isClassInScope);
 
-        setRows(scopedPageRows);
+        const pageRows = pageSize === 'all'
+          ? scopedAllRows
+          : scopedPageRows;
+        setRows(pageRows);
         setAllClasses(scopedAllRows);
         setMeta({
           ...pageRes.data.meta,
+          page,
+          limit,
           total: scopedAllRows.length,
-          totalPages: Math.max(1, Math.ceil(scopedAllRows.length / PAGE_SIZE)),
-          hasNextPage: page < Math.max(1, Math.ceil(scopedAllRows.length / PAGE_SIZE)),
+          totalPages: Math.max(1, Math.ceil(scopedAllRows.length / limit)),
+          hasNextPage: page < Math.max(1, Math.ceil(scopedAllRows.length / limit)),
           hasPreviousPage: page > 1,
         });
 
@@ -194,7 +202,7 @@ export default function ClassTransferPage() {
       }
     };
     void load();
-  }, [page, query, filterAcademicYear, refreshKey, searchParams, selected, sessionDepartmentIds, singleDepartmentId]);
+  }, [page, pageSize, query, filterAcademicYear, refreshKey, searchParams, selected, sessionDepartmentIds, singleDepartmentId]);
 
   const openModal = (item: AcademicClass, classPool = allClasses) => {
     setSelected(item);
@@ -409,7 +417,17 @@ export default function ClassTransferPage() {
                 </table>
               </div>
             </div>
-            <PaginationControls page={meta.page} totalPages={meta.totalPages} total={meta.total} onPageChange={setPage} />
+            <PaginationControls
+              page={meta.page}
+              totalPages={meta.totalPages}
+              total={meta.total}
+              pageSize={pageSize}
+              onPageSizeChange={(value) => {
+                setPageSize(value);
+                setPage(1);
+              }}
+              onPageChange={setPage}
+            />
           </>
         )}
       </section>

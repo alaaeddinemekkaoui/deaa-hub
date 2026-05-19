@@ -90,6 +90,14 @@ export class TimetableController {
     return this.service.create(dto);
   }
 
+  @Post('auto-affect-week')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  autoAffectWeek(
+    @Body() dto: { classId: number; weekStart: string },
+  ) {
+    return this.service.autoAffectWeek(dto.classId, dto.weekStart);
+  }
+
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   update(

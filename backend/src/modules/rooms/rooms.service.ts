@@ -9,29 +9,62 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 import { UserRole, isDeptScoped } from '../../common/types/role.type';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class RoomsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(departmentIds?: number[]) {
+  async findAll(departmentIds?: number[], pagination?: PaginationDto) {
     const where =
       departmentIds !== undefined
         ? { departmentId: { in: departmentIds } }
         : undefined;
 
-    return this.prisma.room.findMany({
-      where,
-      include: {
-        department: {
-          select: {
-            id: true,
-            name: true,
+    if (!pagination) {
+      return this.prisma.room.findMany({
+        where,
+        include: {
+          department: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
+        orderBy: { name: 'asc' },
+      });
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.room.findMany({
+        where,
+        include: {
+          department: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        skip: (pagination.page - 1) * pagination.limit,
+        take: pagination.limit,
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.room.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page: pagination.page,
+        limit: pagination.limit,
+        total,
+        totalPages: Math.ceil(total / pagination.limit) || 1,
+        hasNextPage: pagination.page * pagination.limit < total,
+        hasPreviousPage: pagination.page > 1,
       },
-      orderBy: { name: 'asc' },
-    });
+    };
   }
 
   findOne(id: number) {

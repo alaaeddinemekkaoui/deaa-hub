@@ -25,6 +25,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/types/role.type';
 import { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
 type AuthRequest = Request & { user: JwtPayload };
 
@@ -35,8 +36,8 @@ export class LaureatesController {
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
-  findAll() {
-    return this.laureatesService.findAll();
+  findAll(@Query() query: PaginationDto) {
+    return this.laureatesService.findAll(query);
   }
 
   @Get('non-laureates')

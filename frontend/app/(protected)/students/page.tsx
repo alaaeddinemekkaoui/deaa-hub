@@ -14,6 +14,7 @@ import { ImportDataButton } from '@/components/admin/import-data-button';
 import { MetricCard } from '@/components/admin/metric-card';
 import { CollapsibleMetrics } from '@/components/admin/collapsible-metrics';
 import { ModalShell } from '@/components/admin/modal-shell';
+import { PaginationControls, type PageSizeValue } from '@/components/admin/pagination-controls';
 import { ProfileDocsModal } from '@/components/profile/profile-docs-modal';
 import { PageHeader } from '@/components/admin/page-header';
 import { api, fetchRef, getApiErrorMessage, PaginatedResponse } from '@/services/api';
@@ -61,12 +62,24 @@ type Filiere = { id: number; name: string; departmentId?: number };
 type Department = { id: number; name: string };
 type AcademicClass = { id: number; name: string; year: number; filiereId?: number | null; academicYear?: string | null };
 type AcademicYear = { id: number; label: string; isCurrent: boolean };
+const DEFAULT_STUDENT_PAGE_SIZE: PageSizeValue = 25;
+const resolveLimit = (pageSize: PageSizeValue) => (pageSize === 'all' ? 1000 : pageSize);
+const initialStudentMeta: PaginatedResponse<Student>['meta'] = {
+  page: 1,
+  limit: resolveLimit(DEFAULT_STUDENT_PAGE_SIZE, 0),
+  total: 0,
+  totalPages: 1,
+  hasNextPage: false,
+  hasPreviousPage: false,
+};
 
 export default function StudentsPage() {
   const { user } = useAuth();
   const canDelete = user?.role === 'admin';
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
   const [students, setStudents] = useState<Student[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSizeValue>(DEFAULT_STUDENT_PAGE_SIZE);
+  const [meta, setMeta] = useState<PaginatedResponse<Student>['meta']>(initialStudentMeta);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [filieres, setFilieres] = useState<Filiere[]>([]);
   const [classes, setClasses] = useState<AcademicClass[]>([]);
@@ -203,7 +216,7 @@ export default function StudentsPage() {
       try {
         setLoading(true);
         setError(null);
-        const studentParams: Record<string, string | number> = { page: 1, limit: 100 };
+        const studentParams: Record<string, string | number> = { page, limit: resolveLimit(pageSize) };
         const normalizedQuery = query.trim();
         if (normalizedQuery) studentParams.search = normalizedQuery;
         if (filterAcademicYear) studentParams.academicYear = filterAcademicYear;
@@ -217,6 +230,7 @@ export default function StudentsPage() {
         if (filterLaureateStatus) studentParams.laureateStatus = filterLaureateStatus;
         const studentsRes = await api.get<PaginatedResponse<Student>>('/students', { params: studentParams });
         setStudents(studentsRes.data.data);
+        setMeta(studentsRes.data.meta);
       } catch (loadError) {
         setError(getApiErrorMessage(loadError, 'Failed to load students data'));
       } finally {
@@ -234,8 +248,26 @@ export default function StudentsPage() {
     filterFiliereId,
     filterGender,
     filterLaureateStatus,
+    page,
+    pageSize,
     query,
     refreshKey,
+    meta.total,
+  ]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    filterAcademicYear,
+    filterAccountStatus,
+    filterBirthYear,
+    filterClassId,
+    filterDepartmentId,
+    filterEntryYear,
+    filterFiliereId,
+    filterGender,
+    filterLaureateStatus,
+    query,
   ]);
 
   useEffect(() => {
@@ -657,7 +689,7 @@ export default function StudentsPage() {
       {!loading && students.length > 0 && (
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {students.map((student) => {
-            const photoUrl = `${apiBaseUrl}/students/${student.id}/photo`;
+            const photoUrl = `/api/students/${student.id}/photo`;
             const showPhoto = !photoErrors[student.id];
             const classLabel = student.academicClass
               ? `${student.academicClass.name} · Année ${student.academicClass.year}`
@@ -752,6 +784,20 @@ export default function StudentsPage() {
             );
           })}
         </section>
+      )}
+
+      {!loading && !error && meta.total > 0 && (
+        <PaginationControls
+          page={meta.page}
+          totalPages={meta.totalPages}
+          total={meta.total}
+          onPageChange={setPage}
+          pageSize={pageSize}
+          onPageSizeChange={(value) => {
+            setPageSize(value);
+            setPage(1);
+          }}
+        />
       )}
 
       {/* Add / Edit student modal */}

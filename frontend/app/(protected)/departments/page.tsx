@@ -8,7 +8,7 @@ import { ImportDataButton } from '@/components/admin/import-data-button';
 import { MetricCard } from '@/components/admin/metric-card';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { PageHeader } from '@/components/admin/page-header';
-import { PaginationControls } from '@/components/admin/pagination-controls';
+import { PaginationControls, type PageSizeValue } from '@/components/admin/pagination-controls';
 import { api, getApiErrorMessage, PaginatedResponse } from '@/services/api';
 import { toast } from 'sonner';
 
@@ -23,7 +23,8 @@ type Department = {
   };
 };
 
-const PAGE_SIZE = 8;
+const DEFAULT_PAGE_SIZE: PageSizeValue = 10;
+const resolveLimit = (pageSize: PageSizeValue) => (pageSize === 'all' ? 1000 : pageSize);
 
 export default function DepartmentsPage() {
   const [rows, setRows] = useState<Department[]>([]);
@@ -33,6 +34,7 @@ export default function DepartmentsPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSizeValue>(DEFAULT_PAGE_SIZE);
   const [sortBy, setSortBy] = useState<'name' | 'updatedAt'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [saving, setSaving] = useState(false);
@@ -41,7 +43,7 @@ export default function DepartmentsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [meta, setMeta] = useState({
     page: 1,
-    limit: PAGE_SIZE,
+    limit: resolveLimit(DEFAULT_PAGE_SIZE, 0),
     total: 0,
     totalPages: 1,
     hasNextPage: false,
@@ -80,7 +82,7 @@ export default function DepartmentsPage() {
         const response = await api.get<PaginatedResponse<Department>>('/departments', {
           params: {
             page,
-            limit: PAGE_SIZE,
+            limit: resolveLimit(pageSize),
             search: query || undefined,
             sortBy,
             sortOrder,
@@ -98,7 +100,7 @@ export default function DepartmentsPage() {
     };
 
     void load();
-  }, [page, query, refreshKey, sortBy, sortOrder]);
+  }, [page, pageSize, query, refreshKey, sortBy, sortOrder, meta.total]);
 
   const onSubmit = async () => {
     if (!name.trim()) return;
@@ -347,6 +349,11 @@ export default function DepartmentsPage() {
               totalPages={meta.totalPages}
               total={meta.total}
               onPageChange={setPage}
+              pageSize={pageSize}
+              onPageSizeChange={(value) => {
+                setPageSize(value);
+                setPage(1);
+              }}
             />
           </>
         )}

@@ -1,8 +1,13 @@
+export type PageSizeValue = number | 'all';
+
 type PaginationControlsProps = {
   page: number;
   totalPages: number;
   total: number;
   onPageChange: (page: number) => void;
+  pageSize?: PageSizeValue;
+  pageSizeOptions?: PageSizeValue[];
+  onPageSizeChange?: (pageSize: PageSizeValue) => void;
 };
 
 export function PaginationControls({
@@ -10,6 +15,9 @@ export function PaginationControls({
   totalPages,
   total,
   onPageChange,
+  pageSize,
+  pageSizeOptions = [5, 10, 25, 50, 100, 'all'],
+  onPageSizeChange,
 }: PaginationControlsProps) {
   const safeTotalPages = Math.max(totalPages, 1);
 
@@ -18,7 +26,26 @@ export function PaginationControls({
       <p className="text-sm text-slate-500">
         {total} record{total === 1 ? '' : 's'} • page {page} of {safeTotalPages}
       </p>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {onPageSizeChange && pageSize !== undefined ? (
+          <label className="flex items-center gap-2 text-sm text-slate-500">
+            <span>Par page</span>
+            <select
+              className="input h-9 w-24 py-1 text-sm"
+              value={String(pageSize)}
+              onChange={(event) => {
+                const value = event.target.value;
+                onPageSizeChange(value === 'all' ? 'all' : Number(value));
+              }}
+            >
+              {pageSizeOptions.map((option) => (
+                <option key={String(option)} value={String(option)}>
+                  {option === 'all' ? 'Tout' : option}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <button
           className="btn-outline"
           type="button"

@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ExportDataButton } from '@/components/admin/export-data-button';
 import { ImportDataButton } from '@/components/admin/import-data-button';
+import { PaginationControls, type PageSizeValue } from '@/components/admin/pagination-controls';
 import { PageHeader } from '@/components/admin/page-header';
-import { api } from '@/services/api';
+import { api, PaginatedResponse } from '@/services/api';
 import { toast } from 'sonner';
 
 type Department = { id: number; name: string };
@@ -18,9 +19,22 @@ type Room = {
   departmentId?: number | null;
   department?: { id: number; name: string } | null;
 };
+const DEFAULT_ROOM_PAGE_SIZE: PageSizeValue = 25;
+const resolveLimit = (pageSize: PageSizeValue) => (pageSize === 'all' ? 1000 : pageSize);
+const initialRoomMeta: PaginatedResponse<Room>['meta'] = {
+  page: 1,
+  limit: resolveLimit(DEFAULT_ROOM_PAGE_SIZE, 0),
+  total: 0,
+  totalPages: 1,
+  hasNextPage: false,
+  hasPreviousPage: false,
+};
 
 export default function RoomsPage() {
   const [rows, setRows] = useState<Room[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSizeValue>(DEFAULT_ROOM_PAGE_SIZE);
+  const [meta, setMeta] = useState<PaginatedResponse<Room>['meta']>(initialRoomMeta);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState('30');
@@ -40,12 +54,15 @@ export default function RoomsPage() {
 
   const load = () => {
     Promise.all([
-      api.get<Room[]>('/rooms'),
+      api.get<PaginatedResponse<Room>>('/rooms', {
+        params: { page, limit: resolveLimit(pageSize) },
+      }),
       api.get('/departments', {
         params: { page: 1, limit: 200, sortBy: 'name', sortOrder: 'asc' },
       }),
     ]).then(([roomsResponse, departmentsResponse]) => {
-      setRows(Array.isArray(roomsResponse.data) ? roomsResponse.data : []);
+      setRows(Array.isArray(roomsResponse.data.data) ? roomsResponse.data.data : []);
+      setMeta(roomsResponse.data.meta);
       setDepartments(
         Array.isArray(departmentsResponse.data?.data)
           ? departmentsResponse.data.data
@@ -56,7 +73,7 @@ export default function RoomsPage() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [page, pageSize, meta.total]);
 
   const onSubmit = async () => {
     if (!name.trim()) return;
@@ -254,6 +271,20 @@ export default function RoomsPage() {
           </table>
         </div>
       </div>
+
+      {meta.total > 0 && (
+        <PaginationControls
+          page={meta.page}
+          totalPages={meta.totalPages}
+          total={meta.total}
+          onPageChange={setPage}
+          pageSize={pageSize}
+          onPageSizeChange={(value) => {
+            setPageSize(value);
+            setPage(1);
+          }}
+        />
+      )}
     </div>
   );
 }
