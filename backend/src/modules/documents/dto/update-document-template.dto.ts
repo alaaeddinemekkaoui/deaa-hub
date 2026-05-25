@@ -2,9 +2,12 @@ import {
   IsBoolean,
   IsHexColor,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   MaxLength,
+  Max,
+  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -47,6 +50,53 @@ export class UpdateDocumentTemplateDto {
   @IsString()
   @MaxLength(160)
   signatureLabel?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  eSignatureEnabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  eSignatureSignerName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  eSignatureSignerTitle?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  eSignatureStampText?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  eSignaturePositionX?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  eSignaturePositionY?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.05)
+  @Max(1)
+  eSignatureWidth?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.03)
+  @Max(1)
+  eSignatureHeight?: number;
 
   @IsOptional()
   @IsBoolean()

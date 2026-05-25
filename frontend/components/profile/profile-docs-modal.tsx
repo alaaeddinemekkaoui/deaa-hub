@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, Download, Eye, FileText, Trash2, Upload, User } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Camera, Download, FilePlus2, Upload, User } from 'lucide-react';
 import { ModalShell } from '@/components/admin/modal-shell';
 import { api, getApiErrorMessage } from '@/services/api';
 import { toast } from 'sonner';
@@ -9,7 +9,13 @@ import { toast } from 'sonner';
 type ProfileDocumentType = { id: number; name: string; description?: string | null };
 type Document = { id: number; name: string; mimeType: string; category?: string | null; createdAt: string };
 type DocumentType = { id: number; name: string; description?: string | null };
-type DocumentTemplate = { id: number; name: string; documentTypeId?: number | null; type: string };
+type DocumentTemplate = { id: number; name: string; documentTypeId?: number | null; type: string; docxTemplateName?: string | null };
+type GenerationOption = {
+  id: string;
+  label: string;
+  template?: DocumentTemplate;
+  documentTypeId?: number | null;
+};
 
 interface ProfileDocsModalProps {
   open: boolean;
@@ -22,14 +28,15 @@ interface ProfileDocsModalProps {
 
 export function ProfileDocsModal({ open, onClose, entityType, entityId, entityName, canEdit }: ProfileDocsModalProps) {
   const [docTypes, setDocTypes] = useState<ProfileDocumentType[]>([]);
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const [, setDocuments] = useState<Document[]>([]);
   const [documentTypes, setDocumentTypes] = useState<DocumentType[]>([]);
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [generatingTypeId, setGeneratingTypeId] = useState<number | null>(null);
+  const [generatingTypeId, setGeneratingTypeId] = useState<string | null>(null);
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,6 +47,36 @@ export function ProfileDocsModal({ open, onClose, entityType, entityId, entityNa
   const docsEndpoint = entityType === 'student'
     ? `/documents/student/${entityId}`
     : `/documents/teacher/${entityId}`;
+
+  const generationOptions = useMemo(
+    () => {
+      const options: GenerationOption[] = documentTypes.map((type) => ({
+        id: `type-${type.id}`,
+        label: type.name,
+        documentTypeId: type.id,
+        template: templates.find((item) => item.documentTypeId === type.id),
+      }));
+      const releveTemplate = templates.find((item) => item.type === 'releve_note');
+      const alreadyLinked =
+        releveTemplate?.documentTypeId &&
+        options.some((option) => option.documentTypeId === releveTemplate.documentTypeId);
+      if (releveTemplate && !alreadyLinked) {
+        options.unshift({
+          id: `releve-${releveTemplate.id}`,
+          label: 'Relevé de notes',
+          documentTypeId: releveTemplate.documentTypeId ?? null,
+          template: releveTemplate,
+        });
+      }
+      return options;
+    },
+    [documentTypes, templates],
+  );
+
+  const templatedGenerationOptions = useMemo(
+    () => generationOptions.filter((item) => Boolean(item.template)),
+    [generationOptions],
+  );
 
   const setPhotoObjectUrl = useCallback((url: string | null) => {
     if (photoObjectUrlRef.current) {
@@ -78,7 +115,7 @@ export function ProfileDocsModal({ open, onClose, entityType, entityId, entityNa
     } finally {
       setLoading(false);
     }
-  }, [open, docsEndpoint]);
+  }, [open, docsEndpoint, entityType]);
 
   useEffect(() => {
     if (open) {
@@ -135,26 +172,44 @@ export function ProfileDocsModal({ open, onClose, entityType, entityId, entityNa
     }
   };
 
-  const generateDocument = async (type: DocumentType) => {
-    const template = templates.find((item) => item.documentTypeId === type.id);
+  const generateDocument = async (
+    option: GenerationOption,
+    format: 'pdf' | 'docx',
+    delivery: 'inline' | 'download',
+  ) => {
+    const template = option.template;
     if (!template) {
-      toast.error(`Aucun modèle configuré pour ${type.name}`);
+      toast.error(`Aucun modèle configuré pour ${option.label}`);
       return;
     }
-    setGeneratingTypeId(type.id);
+    if (format === 'docx' && !template.docxTemplateName) {
+      toast.error(`Aucun fichier DOCX lié au modèle ${template.name}`);
+      return;
+    }
+    setGeneratingTypeId(option.id);
     try {
-      await api.post(`/documents/generate/releve/${entityId}`, {
+      const endpoint =
+        format === 'docx'
+          ? `/documents/generate/student/${entityId}/docx`
+          : `/documents/generate/student/${entityId}`;
+      const generated = await api.post<Document>(endpoint, {
         templateId: template.id,
-        documentTypeId: type.id,
+        documentTypeId: option.documentTypeId || undefined,
       });
-      toast.success(`${type.name} généré`);
+      toast.success(`${option.label} généré en ${format.toUpperCase()}`);
       const docsRes = await api.get<Document[]>(docsEndpoint);
       setDocuments(docsRes.data);
+      setGenerateModalOpen(false);
+      await openDoc(generated.data, delivery);
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Génération impossible'));
     } finally {
       setGeneratingTypeId(null);
     }
+  };
+
+  const openGenerateModal = () => {
+    setGenerateModalOpen(true);
   };
 
   const openDoc = async (doc: Document, mode: 'inline' | 'download') => {
@@ -171,29 +226,18 @@ export function ProfileDocsModal({ open, onClose, entityType, entityId, entityNa
     }
   };
 
-  const deleteDoc = async (doc: Document) => {
-    if (!canEdit) return;
-    if (!window.confirm(`Supprimer "${doc.name}" ?`)) return;
-    try {
-      await api.delete(`/documents/${doc.id}`);
-      toast.success('Document supprimé');
-      setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, 'Suppression impossible'));
-    }
-  };
-
   return (
-    <ModalShell
-      open={open}
-      title={`Dossier — ${entityName}`}
-      description="Photo de profil et documents officiels."
-      onClose={onClose}
-      footer={
-        <button className="btn-outline" type="button" onClick={onClose}>Fermer</button>
-      }
-    >
-      <div className="space-y-5">
+    <>
+      <ModalShell
+        open={open}
+        title={`Dossier — ${entityName}`}
+        description="Photo de profil et documents officiels."
+        onClose={onClose}
+        footer={
+          <button className="btn-outline" type="button" onClick={onClose}>Fermer</button>
+        }
+      >
+        <div className="space-y-5">
         {loading ? (
           <p className="text-sm text-slate-500 text-center py-4">Chargement...</p>
         ) : (
@@ -261,15 +305,33 @@ export function ProfileDocsModal({ open, onClose, entityType, entityId, entityNa
                     )}
                   </div>
                   <div className="flex items-end">
-                    <button
-                      type="button"
-                      className="btn-outline flex items-center gap-1.5"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading || !selectedCategory || docTypes.length === 0}
-                    >
-                      <Upload size={14} />
-                      {uploading ? 'Upload...' : 'Choisir fichier'}
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn-outline flex items-center gap-1.5"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading || !selectedCategory || docTypes.length === 0}
+                      >
+                        <Upload size={14} />
+                        {uploading ? 'Upload...' : 'Choisir fichier'}
+                      </button>
+                      {entityType === 'student' && (
+                        <button
+                          type="button"
+                          className="btn-primary flex items-center gap-1.5"
+                          onClick={openGenerateModal}
+                          disabled={templatedGenerationOptions.length === 0}
+                          title={
+                            templatedGenerationOptions.length > 0
+                              ? 'Générer un document pour cet étudiant'
+                              : 'Aucun modèle de demande configuré'
+                          }
+                        >
+                          <FilePlus2 size={14} />
+                          Générer
+                        </button>
+                      )}
+                    </div>
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -282,75 +344,66 @@ export function ProfileDocsModal({ open, onClose, entityType, entityId, entityNa
               </div>
             )}
 
-            {entityType === 'student' && documentTypes.length > 0 && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-                <h3 className="text-sm font-semibold text-slate-900">Générer des documents</h3>
-                <div className="flex flex-wrap gap-2">
-                  {documentTypes.map((type) => {
-                    const hasTemplate = templates.some((template) => template.documentTypeId === type.id);
-                    return (
-                      <button
-                        key={type.id}
-                        type="button"
-                        className="btn-outline"
-                        onClick={() => void generateDocument(type)}
-                        disabled={!hasTemplate || generatingTypeId === type.id}
-                        title={hasTemplate ? `Générer ${type.name}` : 'Aucun modèle lié à ce type'}
-                      >
-                        {generatingTypeId === type.id ? 'Génération...' : type.name}
-                      </button>
-                    );
-                  })}
+            {entityType === 'student' ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">Générer un document</h3>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Choisissez le type dans la fenêtre suivante pour télécharger directement le document.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-primary flex items-center gap-1.5"
+                    onClick={openGenerateModal}
+                    disabled={templatedGenerationOptions.length === 0}
+                  >
+                    <FilePlus2 size={14} />
+                    Générer document
+                  </button>
                 </div>
               </div>
-            )}
-
-            {/* Documents list */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-slate-900">
-                Documents ({documents.length})
-              </h3>
-              {documents.length === 0 ? (
-                <p className="text-sm text-slate-400 py-2">Aucun document dans ce dossier.</p>
-              ) : (
-                <div className="rounded-xl border border-slate-200 divide-y divide-slate-100">
-                  {documents.map((doc) => (
-                    <div key={doc.id} className="flex items-center gap-3 px-3 py-2.5">
-                      <FileText size={15} className="shrink-0 text-emerald-600" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-800 truncate">{doc.name}</p>
-                        <div className="flex gap-2 mt-0.5">
-                          {doc.category && (
-                            <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
-                              {doc.category}
-                            </span>
-                          )}
-                          <span className="text-[11px] text-slate-400">
-                            {new Date(doc.createdAt).toLocaleDateString('fr-FR')}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 gap-1.5">
-                        <button type="button" className="btn-outline p-1.5" onClick={() => openDoc(doc, 'inline')} title="Lire">
-                          <Eye size={13} />
-                        </button>
-                        <button type="button" className="btn-outline p-1.5" onClick={() => openDoc(doc, 'download')} title="Télécharger">
-                          <Download size={13} />
-                        </button>
-                        {canEdit && (
-                          <button type="button" className="btn-outline p-1.5" onClick={() => void deleteDoc(doc)} title="Supprimer">
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            ) : null}
           </>
         )}
-      </div>
-    </ModalShell>
+        </div>
+      </ModalShell>
+
+      <ModalShell
+        open={generateModalOpen}
+        title="Générer un document"
+        description={`Sélectionnez un document pour ${entityName}. Le téléchargement démarre immédiatement.`}
+        onClose={() => setGenerateModalOpen(false)}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            {generationOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-3 text-left transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => void generateDocument(option, 'pdf', 'download')}
+                disabled={!option.template || generatingTypeId !== null}
+              >
+                <span>
+                  <span className="block text-sm font-semibold text-slate-900">{option.label}</span>
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    {option.template ? option.template.name : 'Aucun modèle configuré'}
+                  </span>
+                </span>
+                <Download size={15} className="text-slate-400" />
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-end">
+            <button type="button" className="btn-outline" onClick={() => setGenerateModalOpen(false)}>
+              Fermer
+            </button>
+          </div>
+        </div>
+      </ModalShell>
+    </>
   );
 }

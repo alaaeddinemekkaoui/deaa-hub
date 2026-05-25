@@ -25,7 +25,7 @@ export class UpdateClassDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(2100)
+  @Max(6)
   year?: number;
 
   @IsOptional()
@@ -44,6 +44,16 @@ export class UpdateClassDto {
   @ValidateIf((_, value) => value !== null && value !== '')
   @IsIn(['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'])
   semestre?: string | null;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === null || value === undefined || value === '') return null;
+    return Number(value);
+  })
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  departmentId?: number | null;
 
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => {

@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { KeyedTtlCache } from '../../common/utils/keyed-ttl-cache';
@@ -35,19 +36,30 @@ export class FilieresService {
             ? [departmentId]
             : undefined;
 
-    const where = {
-      ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: 'insensitive' as const } },
-              { code: { contains: search, mode: 'insensitive' as const } },
-            ],
-          }
-        : {}),
-      ...(effectiveDeptIds !== undefined
-        ? { departmentId: { in: effectiveDeptIds } }
-        : {}),
-    };
+    const filters: Prisma.FiliereWhereInput[] = [];
+    if (search) {
+      filters.push({
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { code: { contains: search, mode: 'insensitive' } },
+        ],
+      });
+    }
+    if (effectiveDeptIds !== undefined) {
+      filters.push({
+        OR: [
+          { departmentId: { in: effectiveDeptIds } },
+          {
+            departmentLinks: {
+              some: { departmentId: { in: effectiveDeptIds } },
+            },
+          },
+        ],
+      });
+    }
+    const where: Prisma.FiliereWhereInput = filters.length
+      ? { AND: filters }
+      : {};
 
     const cacheKey = JSON.stringify({
       page,
@@ -70,11 +82,18 @@ export class FilieresService {
                 name: true,
               },
             },
+            departmentLinks: {
+              include: {
+                department: { select: { id: true, name: true } },
+              },
+              orderBy: { department: { name: 'asc' } },
+            },
             _count: {
               select: {
                 students: true,
                 teachers: true,
                 classes: true,
+                departmentLinks: true,
               },
             },
           },
@@ -109,6 +128,12 @@ export class FilieresService {
             name: true,
           },
         },
+        departmentLinks: {
+          include: {
+            department: { select: { id: true, name: true } },
+          },
+          orderBy: { department: { name: 'asc' } },
+        },
         classes: {
           select: {
             id: true,
@@ -129,6 +154,7 @@ export class FilieresService {
             students: true,
             teachers: true,
             classes: true,
+            departmentLinks: true,
           },
         },
       },
@@ -143,10 +169,29 @@ export class FilieresService {
 
   async create(dto: CreateFiliereDto) {
     await this.ensureDepartmentExists(dto.departmentId);
+    for (const departmentId of dto.departmentIds ?? []) {
+      await this.ensureDepartmentExists(departmentId);
+    }
     await this.ensureNameAvailable(dto.name);
     await this.ensureCodeAvailable(dto.code);
 
-    const created = await this.prisma.filiere.create({ data: dto });
+    const departmentIds = Array.from(
+      new Set([dto.departmentId, ...(dto.departmentIds ?? [])]),
+    );
+    const created = await this.prisma.filiere.create({
+      data: {
+        name: dto.name,
+        code: dto.code,
+        departmentId: dto.departmentId,
+        departmentLinks: {
+          create: departmentIds.map((departmentId) => ({ departmentId })),
+        },
+      },
+      include: {
+        department: true,
+        departmentLinks: { include: { department: true } },
+      },
+    });
     this.listCache.invalidate();
     return created;
   }
@@ -157,6 +202,9 @@ export class FilieresService {
     if (dto.departmentId) {
       await this.ensureDepartmentExists(dto.departmentId);
     }
+    for (const departmentId of dto.departmentIds ?? []) {
+      await this.ensureDepartmentExists(departmentId);
+    }
     if (dto.name) {
       await this.ensureNameAvailable(dto.name, id);
     }
@@ -164,9 +212,42 @@ export class FilieresService {
       await this.ensureCodeAvailable(dto.code, id);
     }
 
-    const updated = await this.prisma.filiere.update({
-      where: { id },
-      data: dto,
+    const updateData = {
+      ...(dto.name !== undefined ? { name: dto.name } : {}),
+      ...(dto.code !== undefined ? { code: dto.code } : {}),
+      ...(dto.departmentId !== undefined ? { departmentId: dto.departmentId } : {}),
+    };
+    const shouldSyncDepartments =
+      dto.departmentIds !== undefined || dto.departmentId !== undefined;
+    const linkedDepartmentIds = Array.from(
+      new Set([
+        ...(dto.departmentId ? [dto.departmentId] : []),
+        ...(dto.departmentIds ?? []),
+      ]),
+    );
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (shouldSyncDepartments) {
+        await tx.filiereDepartment.deleteMany({ where: { filiereId: id } });
+        if (linkedDepartmentIds.length > 0) {
+          await tx.filiereDepartment.createMany({
+            data: linkedDepartmentIds.map((departmentId) => ({
+              filiereId: id,
+              departmentId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      return tx.filiere.update({
+        where: { id },
+        data: updateData,
+        include: {
+          department: true,
+          departmentLinks: { include: { department: true } },
+        },
+      });
     });
     this.listCache.invalidate();
     return updated;

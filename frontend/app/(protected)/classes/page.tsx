@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Download,
   GraduationCap,
+  Plus,
   Search,
   Users,
 } from 'lucide-react';
@@ -44,8 +45,10 @@ type AcademicClass = {
   cycleId?: number | null;
   optionId?: number | null;
   filiereId?: number | null;
+  departmentId?: number | null;
   createdAt: string;
   updatedAt: string;
+  department?: { id: number; name: string } | null;
   filiere?: {
     id?: number;
     name: string;
@@ -53,14 +56,44 @@ type AcademicClass = {
   } | null;
   academicOption?: { id: number; name: string } | null;
   cycle?: { id: number; name: string; code?: string | null } | null;
-  _count: { students: number; teachers: number; cours: number };
+  groups?: ClassGroup[];
+  _count: { students: number; teachers: number; cours: number; groups?: number };
 };
 
-type Filiere = { id: number; name: string; departmentId?: number };
-type Department = { id: number; name: string };
-type AcademicOption = { id: number; name: string; filiereId: number };
+type ClassGroup = { id: number; classId: number; name: string; type: string };
+type CursusModule = {
+  id: number;
+  name: string;
+  semestre?: string | null;
+  elements?: Array<{ id: number; name: string; type: string }>;
+};
+type CursusView = {
+  id: number;
+  name: string;
+  version: number;
+  sharedYearCount: number;
+  canEditDirectly: boolean;
+  modules: CursusModule[];
+};
+type Filiere = {
+  id: number;
+  name: string;
+  departmentId?: number;
+  departmentLinks?: Array<{ departmentId: number; department?: Department }>;
+};
+type Department = {
+  id: number;
+  name: string;
+  filiereLinks?: Array<{ filiereId: number }>;
+};
+type AcademicOption = {
+  id: number;
+  name: string;
+  filiereId: number;
+  departmentId?: number | null;
+};
 type Cycle = { id: number; name: string; code?: string | null };
-type AcademicYear = { id: number; label: string; isCurrent: boolean };
+type AcademicYear = { id: number; label: string; isCurrent: boolean; startYear?: number | null; endYear?: number | null };
 type Student = {
   id: number;
   fullName: string;
@@ -102,6 +135,14 @@ const CLASS_PAGE_SIZE = 50;
 const ROSTER_PAGE_SIZE = 50;
 const GRADE_PAGE_SIZE = 50;
 const CURRENT_YEAR = new Date().getFullYear();
+const CLASS_LEVELS = [
+  { value: 1, label: '1ère année' },
+  { value: 2, label: '2ème année' },
+  { value: 3, label: '3ème année' },
+  { value: 4, label: '4ème année' },
+  { value: 5, label: '5ème année' },
+  { value: 6, label: '6ème année' },
+];
 
 const initialMeta = (limit: number): PageMeta => ({
   page: 0,
@@ -133,6 +174,10 @@ function downloadCsv(filename: string, rows: Array<Array<unknown>>) {
   URL.revokeObjectURL(url);
 }
 
+function formatClassLevel(level: number) {
+  return CLASS_LEVELS.find((item) => item.value === level)?.label ?? `${level}ème année`;
+}
+
 export default function ClassesPage() {
   return <ClassesPageInner />;
 }
@@ -146,7 +191,7 @@ function ClassesPageInner() {
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
 
   const [name, setName] = useState('');
-  const [year, setYear] = useState(String(CURRENT_YEAR));
+  const [year, setYear] = useState('1');
   const [academicYear, setAcademicYear] = useState('');
   const [semestre, setSemestre] = useState('');
   const [createNextSemestre, setCreateNextSemestre] = useState(false);
@@ -200,42 +245,60 @@ function ClassesPageInner() {
     () => rows.reduce((sum, item) => sum + item._count.teachers, 0),
     [rows],
   );
-  const filieresByDepartment = useMemo(
-    () =>
-      departmentId
-        ? filieres.filter(
-            (filiere) => String(filiere.departmentId ?? '') === departmentId,
-          )
-        : filieres,
-    [departmentId, filieres],
-  );
-  const optionsByFiliere = useMemo(
+  const departmentsByFiliere = useMemo(
     () =>
       filiereId
-        ? options.filter((option) => String(option.filiereId) === filiereId)
-        : [],
-    [filiereId, options],
+        ? departments.filter((department) => {
+            const selected = Number(filiereId);
+            const filiere = filieres.find((item) => item.id === selected);
+            return (
+              department.filiereLinks?.some((link) => link.filiereId === selected) ||
+              filiere?.departmentId === department.id
+            );
+          })
+        : departments,
+    [departments, filiereId, filieres],
   );
-  const filterFilieresByDepartment = useMemo(
+  const optionsByStructure = useMemo(
     () =>
-      filterDepartmentId
-        ? filieres.filter(
-            (filiere) =>
-              String(filiere.departmentId ?? '') === filterDepartmentId,
+      filiereId
+        ? options.filter(
+            (option) =>
+              String(option.filiereId) === filiereId &&
+              (!departmentId ||
+                !option.departmentId ||
+                String(option.departmentId) === departmentId),
           )
-        : filieres,
-    [filterDepartmentId, filieres],
+        : [],
+    [departmentId, filiereId, options],
+  );
+  const filterDepartmentsByFiliere = useMemo(
+    () =>
+      filterFiliereId
+        ? departments.filter((department) => {
+            const selected = Number(filterFiliereId);
+            const filiere = filieres.find((item) => item.id === selected);
+            return (
+              department.filiereLinks?.some((link) => link.filiereId === selected) ||
+              filiere?.departmentId === department.id
+            );
+          })
+        : departments,
+    [departments, filterFiliereId, filieres],
   );
   const availableYears = useMemo(
-    () =>
-      Array.from(new Set(rows.map((row) => row.year))).sort((a, b) => b - a),
-    [rows],
+    () => CLASS_LEVELS.map((item) => item.value),
+    [],
   );
+  const activeAcademicYearId = useMemo(() => {
+    const selected = academicYears.find((item) => item.label === filterAcademicYear);
+    return selected?.id ?? academicYears.find((item) => item.isCurrent)?.id ?? academicYears[0]?.id ?? null;
+  }, [academicYears, filterAcademicYear]);
 
   const resetForm = () => {
     setEditingId(null);
     setName('');
-    setYear(String(CURRENT_YEAR));
+    setYear('1');
     const currentAcademicYear = academicYears.find((item) => item.isCurrent) ?? academicYears[0];
     setAcademicYear(currentAcademicYear?.label ?? `${CURRENT_YEAR}/${CURRENT_YEAR + 1}`);
     setSemestre('');
@@ -392,28 +455,24 @@ function ClassesPageInner() {
   }, [loading, meta.hasNextPage]);
 
   useEffect(() => {
-    if (!departmentId) return;
-    const valid = filieres.some(
-      (filiere) =>
-        String(filiere.id) === filiereId &&
-        String(filiere.departmentId ?? '') === departmentId,
+    if (!filiereId || !departmentId) return;
+    const valid = departmentsByFiliere.some(
+      (department) => String(department.id) === departmentId,
     );
-    if (!valid) setFiliereId('');
-  }, [departmentId, filiereId, filieres]);
+    if (!valid) setDepartmentId('');
+  }, [departmentId, departmentsByFiliere, filiereId]);
 
   useEffect(() => {
-    if (!filterDepartmentId) return;
-    const valid = filieres.some(
-      (filiere) =>
-        String(filiere.id) === filterFiliereId &&
-        String(filiere.departmentId ?? '') === filterDepartmentId,
+    if (!filterFiliereId || !filterDepartmentId) return;
+    const valid = filterDepartmentsByFiliere.some(
+      (department) => String(department.id) === filterDepartmentId,
     );
-    if (!valid) setFilterFiliereId('');
-  }, [filterDepartmentId, filterFiliereId, filieres]);
+    if (!valid) setFilterDepartmentId('');
+  }, [filterDepartmentId, filterDepartmentsByFiliere, filterFiliereId]);
 
   useEffect(() => {
     setOptionId('');
-  }, [filiereId]);
+  }, [departmentId, filiereId]);
 
   const loadRosterPage = useCallback(
     async (classId: number, nextPage: number) => {
@@ -669,7 +728,11 @@ function ClassesPageInner() {
   const onSubmit = async () => {
     if (!name.trim()) return;
     if (!year || Number.isNaN(Number(year))) {
-      toast.error("L'année est requise");
+      toast.error("Le niveau de classe est requis");
+      return;
+    }
+    if (Number(year) < 1 || Number(year) > 6) {
+      toast.error('Le niveau doit être compris entre 1ère et 6ème année.');
       return;
     }
     if (!academicYear) {
@@ -685,6 +748,7 @@ function ClassesPageInner() {
         semestre: semestre || null,
         createNextSemestre: !editingId && semestre === 'S1' ? createNextSemestre : false,
         classType: classType.trim() || null,
+        departmentId: departmentId ? Number(departmentId) : null,
         cycleId: cycleId ? Number(cycleId) : null,
         optionId: optionId ? Number(optionId) : null,
         filiereId: filiereId ? Number(filiereId) : null,
@@ -718,6 +782,25 @@ function ClassesPageInner() {
       setRefreshKey((value) => value + 1);
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Échec de la suppression de la classe'));
+    }
+  };
+
+  const onCreateGroup = async (item: AcademicClass) => {
+    const name = window.prompt('Nom du groupe (ex. TP A, TD 1, Groupe B)');
+    if (!name?.trim()) return;
+    const typeInput = window.prompt('Type de groupe: TP, TD ou GROUP', 'TD');
+    const type = (typeInput ?? 'TD').trim().toUpperCase();
+    if (!['TP', 'TD', 'GROUP'].includes(type)) {
+      toast.error('Type invalide. Utilisez TP, TD ou GROUP.');
+      return;
+    }
+    try {
+      await api.post(`/classes/${item.id}/groups`, { name: name.trim(), type });
+      toast.success('Groupe créé avec succès');
+      resetClassList();
+      setRefreshKey((value) => value + 1);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Impossible de créer le groupe.'));
     }
   };
 
@@ -867,28 +950,21 @@ function ClassesPageInner() {
               </div>
             </div>
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-              <AcademicYearSelect
-                className="xl:max-w-64"
-                value={filterAcademicYear}
-                years={academicYears}
-                includeAllOption
-                onChange={(value) => {
-                  setFilterAcademicYear(value);
-                  resetClassList();
-                }}
-              />
               <select
-                className="input xl:max-w-48"
-                value={filterYear}
+                className="input xl:max-w-56"
+                value={filterFiliereId}
                 onChange={(event) => {
-                  setFilterYear(event.target.value);
+                  setFilterFiliereId(event.target.value);
+                  setFilterDepartmentId('');
                   resetClassList();
                 }}
               >
-                <option value="">Toutes les années</option>
-                {availableYears.map((availableYear) => (
-                  <option key={availableYear} value={availableYear}>
-                    {availableYear}
+                <option value="">
+                  Toutes les filières ({filieres.length})
+                </option>
+                {filieres.map((filiere) => (
+                  <option key={filiere.id} value={filiere.id}>
+                    {filiere.name}
                   </option>
                 ))}
               </select>
@@ -900,30 +976,40 @@ function ClassesPageInner() {
                   resetClassList();
                 }}
               >
-                <option value="">Tous les départements ({departments.length})</option>
-                {departments.map((department) => (
+                <option value="">
+                  Tous les départements ({filterDepartmentsByFiliere.length})
+                </option>
+                {filterDepartmentsByFiliere.map((department) => (
                   <option key={department.id} value={department.id}>
                     {department.name}
                   </option>
                 ))}
               </select>
               <select
-                className="input xl:max-w-56"
-                value={filterFiliereId}
+                className="input xl:max-w-48"
+                value={filterYear}
                 onChange={(event) => {
-                  setFilterFiliereId(event.target.value);
+                  setFilterYear(event.target.value);
                   resetClassList();
                 }}
               >
-                <option value="">
-                  Toutes les filières ({filterFilieresByDepartment.length})
-                </option>
-                {filterFilieresByDepartment.map((filiere) => (
-                  <option key={filiere.id} value={filiere.id}>
-                    {filiere.name}
+                <option value="">Tous les niveaux</option>
+                {availableYears.map((availableYear) => (
+                  <option key={availableYear} value={availableYear}>
+                    {formatClassLevel(availableYear)}
                   </option>
                 ))}
               </select>
+              <AcademicYearSelect
+                className="xl:max-w-64"
+                value={filterAcademicYear}
+                years={academicYears}
+                includeAllOption
+                onChange={(value) => {
+                  setFilterAcademicYear(value);
+                  resetClassList();
+                }}
+              />
               <select
                 className="input xl:max-w-52"
                 value={sortBy}
@@ -957,6 +1043,7 @@ function ClassesPageInner() {
           error={error}
           meta={meta}
           loadMoreRef={loadMoreRef}
+          activeAcademicYearId={activeAcademicYearId}
           expandedClassId={expandedClassId}
           rosters={rosters}
           expandedStudentId={expandedStudentId}
@@ -974,10 +1061,11 @@ function ClassesPageInner() {
             setClassType(item.classType ?? '');
             setCycleId(String(item.cycleId ?? ''));
             setOptionId(String(item.optionId ?? ''));
-            setDepartmentId(String(item.filiere?.department?.id ?? ''));
+            setDepartmentId(String(item.departmentId ?? item.department?.id ?? item.filiere?.department?.id ?? ''));
             setFiliereId(String(item.filiereId ?? ''));
             setIsModalOpen(true);
           }}
+          onCreateGroup={onCreateGroup}
           onTransferClass={openTransferModal}
           onDeleteClass={onDelete}
           onRosterScroll={handleRosterScroll}
@@ -1001,9 +1089,9 @@ function ClassesPageInner() {
         optionId={optionId}
         cycles={cycles}
         academicYears={academicYears}
-        departments={departments}
-        filieres={filieresByDepartment}
-        options={optionsByFiliere}
+        departments={departmentsByFiliere}
+        filieres={filieres}
+        options={optionsByStructure}
         onClose={closeModal}
         onSubmit={onSubmit}
         onNameChange={setName}
@@ -1037,6 +1125,7 @@ type ClassesTableProps = {
   error: string | null;
   meta: PageMeta;
   loadMoreRef: RefObject<HTMLDivElement | null>;
+  activeAcademicYearId: number | null;
   expandedClassId: number | null;
   rosters: Record<number, RosterState>;
   expandedStudentId: number | null;
@@ -1046,6 +1135,7 @@ type ClassesTableProps = {
   onExportClass: (item: AcademicClass) => Promise<void>;
   onEditClass: (item: AcademicClass) => void;
   onTransferClass: (item: AcademicClass) => void;
+  onCreateGroup: (item: AcademicClass) => Promise<void>;
   onDeleteClass: (id: number) => Promise<void>;
   onRosterScroll: (classId: number, event: UIEvent<HTMLDivElement>) => void;
   onToggleStudent: (classId: number, studentId: number) => void;
@@ -1062,6 +1152,7 @@ function ClassesTable({
   error,
   meta,
   loadMoreRef,
+  activeAcademicYearId,
   expandedClassId,
   rosters,
   expandedStudentId,
@@ -1071,6 +1162,7 @@ function ClassesTable({
   onExportClass,
   onEditClass,
   onTransferClass,
+  onCreateGroup,
   onDeleteClass,
   onRosterScroll,
   onToggleStudent,
@@ -1102,13 +1194,14 @@ function ClassesTable({
               <tr>
                 <th>Classe</th>
                 <th>Année académique</th>
-                <th>Année</th>
+                <th>Niveau</th>
                 <th>Semestre</th>
                 <th>Filière</th>
                 <th>Département</th>
                 <th>Étudiants</th>
                 <th>Enseignants</th>
                 <th>Cours</th>
+                <th>Groupes</th>
                 <th>État</th>
                 <th>Actions</th>
               </tr>
@@ -1123,10 +1216,12 @@ function ClassesTable({
                   expandedStudentId={expandedStudentId}
                   studentGrades={studentGrades}
                   exporting={exportingClassId === item.id}
+                  activeAcademicYearId={activeAcademicYearId}
                   onToggleClass={onToggleClass}
                   onExportClass={onExportClass}
                   onEditClass={onEditClass}
                   onTransferClass={onTransferClass}
+                  onCreateGroup={onCreateGroup}
                   onDeleteClass={onDeleteClass}
                   onRosterScroll={onRosterScroll}
                   onToggleStudent={onToggleStudent}
@@ -1155,10 +1250,12 @@ type ClassTableRowsProps = {
   expandedStudentId: number | null;
   studentGrades: Record<string, StudentGradesState>;
   exporting: boolean;
+  activeAcademicYearId: number | null;
   onToggleClass: (classId: number) => void;
   onExportClass: (item: AcademicClass) => Promise<void>;
   onEditClass: (item: AcademicClass) => void;
   onTransferClass: (item: AcademicClass) => void;
+  onCreateGroup: (item: AcademicClass) => Promise<void>;
   onDeleteClass: (id: number) => Promise<void>;
   onRosterScroll: (classId: number, event: UIEvent<HTMLDivElement>) => void;
   onToggleStudent: (classId: number, studentId: number) => void;
@@ -1176,10 +1273,12 @@ function ClassTableRows({
   expandedStudentId,
   studentGrades,
   exporting,
+  activeAcademicYearId,
   onToggleClass,
   onExportClass,
   onEditClass,
   onTransferClass,
+  onCreateGroup,
   onDeleteClass,
   onRosterScroll,
   onToggleStudent,
@@ -1213,11 +1312,11 @@ function ClassTableRows({
           <span className="status-chip status-chip--muted">{item.academicYear ?? '—'}</span>
         </td>
         <td>
-          <span className="status-chip status-chip--ok">{item.year}</span>
+          <span className="status-chip status-chip--ok">{formatClassLevel(item.year)}</span>
         </td>
         <td>{item.semestre ? <span className="status-chip status-chip--muted">{item.semestre}</span> : '-'}</td>
         <td>{item.filiere?.name ?? 'Non assignée'}</td>
-        <td>{item.filiere?.department?.name ?? '-'}</td>
+        <td>{item.department?.name ?? item.filiere?.department?.name ?? '-'}</td>
         <td>{item._count.students}</td>
         <td>{item._count.teachers}</td>
         <td>
@@ -1228,6 +1327,26 @@ function ClassTableRows({
           >
             {item._count.cours}
           </span>
+        </td>
+        <td>
+          <div className="flex flex-wrap items-center gap-1">
+            {(item.groups ?? []).slice(0, 3).map((group) => (
+              <span key={group.id} className="status-chip status-chip--muted">
+                {group.type} · {group.name}
+              </span>
+            ))}
+            {(item.groups?.length ?? 0) > 3 ? (
+              <span className="text-xs text-slate-500">+{(item.groups?.length ?? 0) - 3}</span>
+            ) : null}
+            <button
+              type="button"
+              className="btn-outline px-2 py-1"
+              title="Créer un groupe TP/TD"
+              onClick={() => void onCreateGroup(item)}
+            >
+              <Plus size={14} />
+            </button>
+          </div>
         </td>
         <td>
           <span
@@ -1271,7 +1390,13 @@ function ClassTableRows({
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={11}>
+          <td colSpan={12}>
+            {activeAcademicYearId ? (
+              <ClassCursusPanel
+                classId={item.id}
+                academicYearId={activeAcademicYearId}
+              />
+            ) : null}
             <ClassRosterPanel
               classId={item.id}
               roster={roster}
@@ -1301,6 +1426,115 @@ type ClassRosterPanelProps = {
     event: UIEvent<HTMLDivElement>,
   ) => void;
 };
+
+function ClassCursusPanel({
+  classId,
+  academicYearId,
+}: {
+  classId: number;
+  academicYearId: number;
+}) {
+  const [cursus, setCursus] = useState<CursusView | null>(null);
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    api
+      .get<CursusView>(`/cursus/class/${classId}/year/${academicYearId}`)
+      .then((response) => {
+        if (!mounted) return;
+        setCursus(response.data);
+        setName(response.data.name);
+      })
+      .catch((err) => {
+        if (mounted) {
+          toast.error(getApiErrorMessage(err, 'Impossible de charger le cursus.'));
+        }
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [academicYearId, classId]);
+
+  const save = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const response = await api.patch<CursusView>(
+        `/cursus/class/${classId}/year/${academicYearId}`,
+        { name: name.trim() },
+      );
+      setCursus(response.data);
+      setName(response.data.name);
+      toast.success('Cursus enregistré pour cette année académique.');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Impossible d'enregistrer le cursus."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="mb-3 empty-note">Chargement du cursus...</div>;
+  }
+
+  if (!cursus) return null;
+
+  return (
+    <div className="mb-3 rounded-xl border border-slate-200 bg-white p-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-slate-900">Cursus</p>
+          <p className="text-xs text-slate-500">
+            Version {cursus.version} · {cursus.modules.length} module(s)
+          </p>
+          {!cursus.canEditDirectly ? (
+            <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              This cursus is used by multiple academic years. Editing it will create a new version for the selected year only.
+            </p>
+          ) : null}
+        </div>
+        <div className="flex w-full flex-col gap-2 lg:w-[360px]">
+          <input
+            className="input"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Nom du cursus"
+          />
+          <button
+            className="btn-primary justify-center"
+            type="button"
+            onClick={() => void save()}
+            disabled={saving}
+          >
+            {saving ? 'Enregistrement...' : 'Enregistrer le cursus'}
+          </button>
+        </div>
+      </div>
+      {cursus.modules.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {cursus.modules.slice(0, 8).map((module) => (
+            <span key={module.id} className="status-chip status-chip--muted">
+              {module.semestre ? `${module.semestre} · ` : ''}
+              {module.name}
+            </span>
+          ))}
+          {cursus.modules.length > 8 ? (
+            <span className="text-xs text-slate-500">
+              +{cursus.modules.length - 8} module(s)
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function ClassRosterPanel({
   classId,
@@ -1576,6 +1810,77 @@ function ClassFormModal({
     >
       <div className="form-grid md:grid-cols-1 xl:grid-cols-1">
         <div className="field-stack">
+          <label className="field-label">Filière</label>
+          <select
+            className="input"
+            value={filiereId}
+            onChange={(event) => {
+              onFiliereChange(event.target.value);
+              onDepartmentChange('');
+            }}
+          >
+            <option value="">Non assignée</option>
+            {filieres.map((filiere) => (
+              <option key={filiere.id} value={filiere.id}>
+                {filiere.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field-stack">
+          <label className="field-label">Département</label>
+          <select
+            className="input"
+            value={departmentId}
+            onChange={(event) => onDepartmentChange(event.target.value)}
+          >
+            <option value="">
+              {filiereId ? 'Tous les départements' : "Sélectionner une filière d'abord"}
+            </option>
+            {departments.map((department) => (
+              <option key={department.id} value={department.id}>
+                {department.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field-stack">
+          <label className="field-label">
+            Niveau <span className="text-red-500">*</span>
+          </label>
+          <select
+            className="input"
+            value={year}
+            onChange={(event) => onYearChange(event.target.value)}
+          >
+            {CLASS_LEVELS.map((level) => (
+              <option key={level.value} value={level.value}>
+                {level.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field-stack">
+          <label className="field-label">Option</label>
+          <select
+            className="input"
+            value={optionId}
+            onChange={(event) => onOptionChange(event.target.value)}
+            disabled={!filiereId}
+          >
+            <option value="">
+              {filiereId
+                ? 'Aucune option'
+                : "Sélectionner une filière d'abord"}
+            </option>
+            {options.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field-stack">
           <label className="field-label">
             Nom de la classe <span className="text-red-500">*</span>
           </label>
@@ -1583,7 +1888,7 @@ function ClassFormModal({
             className="input"
             value={name}
             onChange={(event) => onNameChange(event.target.value)}
-            placeholder="ex. GI-1, APESA-2"
+            placeholder="ex. IAV-GI-1"
           />
         </div>
         <AcademicYearSelect
@@ -1592,20 +1897,6 @@ function ClassFormModal({
           onChange={onAcademicYearChange}
           required
         />
-        <div className="field-stack">
-          <label className="field-label">
-            Année de classe <span className="text-red-500">*</span>
-          </label>
-          <input
-            className="input"
-            type="number"
-            min={1900}
-            max={2100}
-            value={year}
-            onChange={(event) => onYearChange(event.target.value)}
-            placeholder="ex. 2026"
-          />
-        </div>
         <SemesterSelect value={semestre} onChange={onSemestreChange} />
         {!editing && semestre === 'S1' ? (
           <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
@@ -1638,56 +1929,6 @@ function ClassFormModal({
               <option key={cycle.id} value={cycle.id}>
                 {cycle.name}
                 {cycle.code ? ` (${cycle.code})` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field-stack">
-          <label className="field-label">Département</label>
-          <select
-            className="input"
-            value={departmentId}
-            onChange={(event) => onDepartmentChange(event.target.value)}
-          >
-            <option value="">Tous les départements</option>
-            {departments.map((department) => (
-              <option key={department.id} value={department.id}>
-                {department.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field-stack">
-          <label className="field-label">Filière</label>
-          <select
-            className="input"
-            value={filiereId}
-            onChange={(event) => onFiliereChange(event.target.value)}
-          >
-            <option value="">Non assignée</option>
-            {filieres.map((filiere) => (
-              <option key={filiere.id} value={filiere.id}>
-                {filiere.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field-stack">
-          <label className="field-label">Option</label>
-          <select
-            className="input"
-            value={optionId}
-            onChange={(event) => onOptionChange(event.target.value)}
-            disabled={!filiereId}
-          >
-            <option value="">
-              {filiereId
-                ? 'Aucune option'
-                : "Sélectionner une filière d'abord"}
-            </option>
-            {options.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
               </option>
             ))}
           </select>

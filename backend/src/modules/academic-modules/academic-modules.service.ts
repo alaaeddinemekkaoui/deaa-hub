@@ -24,6 +24,7 @@ export class AcademicModulesService {
       optionId,
       classId,
       classYear,
+      academicYearId,
       sortBy,
       sortOrder,
     } = query;
@@ -38,6 +39,15 @@ export class AcademicModulesService {
     }
     if (classYear) {
       filters.push({ classes: { some: { class: { year: classYear } } } });
+    }
+    if (academicYearId) {
+      filters.push({
+        cursus: {
+          is: {
+            yearAssignments: { some: { academicYearId } },
+          },
+        },
+      });
     }
     if (departmentIds !== undefined) {
       filters.push({
@@ -55,6 +65,17 @@ export class AcademicModulesService {
         include: {
           filiere: { select: { id: true, name: true } },
           option: { select: { id: true, name: true } },
+          cursus: {
+            select: {
+              id: true,
+              name: true,
+              version: true,
+              yearAssignments: {
+                select: { academicYear: true },
+                orderBy: { academicYear: { startYear: 'asc' } },
+              },
+            },
+          },
           classes: {
             ...(classId ? { where: { classId } } : {}),
             include: {

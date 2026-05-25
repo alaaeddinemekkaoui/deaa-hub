@@ -38,6 +38,7 @@ import { ProfileDocumentTypesModule } from './modules/profile-document-types/pro
 import { AttendanceModule } from './modules/attendance/attendance.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { InternatModule } from './modules/internat/internat.module';
+import { CursusModule } from './modules/cursus/cursus.module';
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { InternatModule } from './modules/internat/internat.module';
     AttendanceModule,
     AnalyticsModule,
     InternatModule,
+    CursusModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

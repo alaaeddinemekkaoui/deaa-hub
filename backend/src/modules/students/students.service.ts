@@ -31,6 +31,7 @@ const STUDENT_LIST_SELECT = {
   dateNaissance: true,
   email: true,
   telephone: true,
+  linkedInUrl: true,
   bacType: true,
   firstYearEntry: true,
   anneeAcademique: true,
@@ -516,6 +517,9 @@ export class StudentsService {
       ...(dto.email !== undefined ? { email: dto.email ?? null } : {}),
       ...(dto.telephone !== undefined
         ? { telephone: dto.telephone ?? null }
+        : {}),
+      ...(dto.linkedInUrl !== undefined
+        ? { linkedInUrl: dto.linkedInUrl ?? null }
         : {}),
       ...(dto.cycle !== undefined ? { cycle: dto.cycle } : {}),
       ...(dto.bacType !== undefined ? { bacType: dto.bacType ?? null } : {}),

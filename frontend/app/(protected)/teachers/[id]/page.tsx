@@ -16,6 +16,7 @@ type TeacherProfile = {
   dateInscription?: string | null;
   email?: string | null;
   phoneNumber?: string | null;
+  linkedInUrl?: string | null;
   department?: { id: number; name: string };
   filiere?: { id: number; name: string } | null;
   role?: { id: number; name: string };
@@ -145,6 +146,32 @@ export default function TeacherProfilePage() {
     }
   };
 
+  const openDocument = async (doc: DocumentItem, mode: 'inline' | 'download' = 'inline') => {
+    try {
+      const response = await api.get<Blob>(`/documents/${doc.id}/file`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: doc.mimeType });
+      const url = URL.createObjectURL(blob);
+
+      if (mode === 'download') {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = doc.name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Ouverture impossible'));
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -199,6 +226,21 @@ export default function TeacherProfilePage() {
               <div className="field-stack">
                 <label className="field-label">Téléphone</label>
                 <p className="input bg-slate-50">{teacher.phoneNumber ?? '—'}</p>
+              </div>
+              <div className="field-stack">
+                <label className="field-label">LinkedIn</label>
+                {teacher.linkedInUrl ? (
+                  <a
+                    className="input bg-slate-50 text-blue-700 underline"
+                    href={teacher.linkedInUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {teacher.linkedInUrl}
+                  </a>
+                ) : (
+                  <p className="input bg-slate-50">—</p>
+                )}
               </div>
               <div className="field-stack">
                 <label className="field-label">Département</label>
@@ -336,19 +378,31 @@ export default function TeacherProfilePage() {
                           <td>{doc.category ? <span className="status-chip status-chip--muted">{doc.category}</span> : '—'}</td>
                           <td>{new Date(doc.createdAt).toLocaleDateString('fr-FR')}</td>
                           <td>
-                            {canDeleteDocuments ? (
-                            <button
-                              type="button"
-                              className="btn-outline text-xs"
-                              onClick={() => void handleDeleteDocument(doc.id)}
-                            >
-                              Supprimer
-                            </button>
-                            ) : (
-                              <a className="btn-outline text-xs" href={`/api/documents/${doc.id}/file`} target="_blank" rel="noreferrer">
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                className="btn-outline text-xs"
+                                onClick={() => void openDocument(doc)}
+                              >
                                 Ouvrir
-                              </a>
-                            )}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-outline text-xs"
+                                onClick={() => void openDocument(doc, 'download')}
+                              >
+                                Télécharger
+                              </button>
+                              {canDeleteDocuments ? (
+                                <button
+                                  type="button"
+                                  className="btn-outline text-xs"
+                                  onClick={() => void handleDeleteDocument(doc.id)}
+                                >
+                                  Supprimer
+                                </button>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                       ))}

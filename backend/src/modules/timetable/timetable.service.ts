@@ -19,10 +19,23 @@ const SESSION_INCLUDE = {
   class: { select: { id: true, name: true, year: true } },
   teacher: { select: { id: true, firstName: true, lastName: true } },
   room: { select: { id: true, name: true } },
+  groupAssignments: {
+    include: { group: { select: { id: true, name: true, type: true } } },
+  },
 } as const;
 type SessionWithInclude = Prisma.TimetableSessionGetPayload<{
   include: typeof SESSION_INCLUDE;
 }>;
+type ConflictSession = {
+  id: number;
+  classId: number;
+  teacherId: number | null;
+  roomId: number | null;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  groupAssignments?: { groupId: number }[];
+};
 type AutoSlot = { day: number; slot: readonly [string, string]; key: string };
 
 @Injectable()
@@ -113,6 +126,10 @@ export class TimetableService {
     await this.ensureClassExists(dto.classId);
     if (dto.teacherId) await this.ensureTeacherExists(dto.teacherId);
     if (dto.roomId) await this.ensureRoomExists(dto.roomId);
+    const groupIds = await this.ensureGroupsBelongToClass(
+      dto.classId,
+      dto.groupIds,
+    );
 
     const session = await this.prisma.timetableSession.create({
       data: {
@@ -124,6 +141,13 @@ export class TimetableService {
         startTime: dto.startTime,
         endTime: dto.endTime,
         weekStart: this.parseOptionalDate(dto.weekStart),
+        ...(groupIds.length
+          ? {
+              groupAssignments: {
+                create: groupIds.map((groupId) => ({ groupId })),
+              },
+            }
+          : {}),
       },
       include: SESSION_INCLUDE,
     });
@@ -210,11 +234,16 @@ export class TimetableService {
   }
 
   async update(id: number, dto: Partial<CreateSessionDto>) {
-    await this.ensureSessionExists(id);
+    const current = await this.ensureSessionExists(id);
     if (dto.elementId) await this.ensureElementExists(dto.elementId);
     if (dto.classId) await this.ensureClassExists(dto.classId);
     if (dto.teacherId) await this.ensureTeacherExists(dto.teacherId);
     if (dto.roomId) await this.ensureRoomExists(dto.roomId);
+    const classId = dto.classId ?? current.classId;
+    const groupIds =
+      dto.groupIds !== undefined
+        ? await this.ensureGroupsBelongToClass(classId, dto.groupIds)
+        : undefined;
 
     const updated = await this.prisma.timetableSession.update({
       where: { id },
@@ -230,6 +259,16 @@ export class TimetableService {
         ...(dto.endTime !== undefined ? { endTime: dto.endTime } : {}),
         ...(dto.weekStart !== undefined
           ? { weekStart: this.parseOptionalDate(dto.weekStart) }
+          : {}),
+        ...(groupIds !== undefined
+          ? {
+              groupAssignments: {
+                deleteMany: {},
+                ...(groupIds.length
+                  ? { create: groupIds.map((groupId) => ({ groupId })) }
+                  : {}),
+              },
+            }
           : {}),
       },
       include: SESSION_INCLUDE,
@@ -289,9 +328,7 @@ export class TimetableService {
     return this.prisma.timetableHoliday.delete({ where: { id } });
   }
 
-  private detectConflicts(
-    sessions: Awaited<ReturnType<typeof this.prisma.timetableSession.findMany>>,
-  ) {
+  private detectConflicts(sessions: ConflictSession[]) {
     const conflicts: { sessionIds: number[]; reason: string }[] = [];
 
     for (let i = 0; i < sessions.length; i++) {
@@ -314,16 +351,25 @@ export class TimetableService {
             reason: 'Même salle en même temps',
           });
         }
-        if (a.classId === b.classId) {
+        if (this.sessionsShareClassScope(a, b)) {
           conflicts.push({
             sessionIds: [a.id, b.id],
-            reason: 'Même classe en même temps',
+            reason: 'Même classe/groupe en même temps',
           });
         }
       }
     }
 
     return conflicts;
+  }
+
+  private sessionsShareClassScope(a: ConflictSession, b: ConflictSession) {
+    if (a.classId !== b.classId) return false;
+    const aGroupIds = a.groupAssignments?.map((item) => item.groupId) ?? [];
+    const bGroupIds = b.groupAssignments?.map((item) => item.groupId) ?? [];
+    if (aGroupIds.length === 0 || bGroupIds.length === 0) return true;
+    const bSet = new Set(bGroupIds);
+    return aGroupIds.some((groupId) => bSet.has(groupId));
   }
 
   private timesOverlap(s1: string, e1: string, s2: string, e2: string) {
@@ -358,9 +404,10 @@ export class TimetableService {
   private async ensureSessionExists(id: number) {
     const s = await this.prisma.timetableSession.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, classId: true },
     });
     if (!s) throw new NotFoundException(`Session ${id} not found`);
+    return s;
   }
   private async ensureElementExists(id: number) {
     const e = await this.prisma.elementModule.findUnique({
@@ -391,6 +438,27 @@ export class TimetableService {
     if (!r) throw new NotFoundException(`Room ${id} not found`);
   }
 
+  private async ensureGroupsBelongToClass(
+    classId: number,
+    groupIds?: number[] | null,
+  ) {
+    const normalized = Array.from(
+      new Set((groupIds ?? []).map((value) => Number(value)).filter(Boolean)),
+    );
+    if (normalized.length === 0) return [];
+
+    const groups = await this.prisma.classGroup.findMany({
+      where: { id: { in: normalized }, classId },
+      select: { id: true },
+    });
+    if (groups.length !== normalized.length) {
+      throw new BadRequestException(
+        'Un ou plusieurs groupes ne correspondent pas à la classe sélectionnée',
+      );
+    }
+    return normalized;
+  }
+
   private async syncRoomReservationForSession(
     session: {
       id: number;
@@ -404,6 +472,9 @@ export class TimetableService {
       class?: { name: string; year: number } | null;
       teacher?: { firstName: string; lastName: string } | null;
       element?: { name: string; module?: { name: string } | null } | null;
+      groupAssignments?: {
+        group?: { name: string; type: string } | null;
+      }[];
     },
   ) {
     await this.removeRoomReservationForSession(session.id);
@@ -446,8 +517,19 @@ export class TimetableService {
     id: number;
     class?: { name: string; year: number } | null;
     element?: { name: string; module?: { name: string } | null } | null;
+    groupAssignments?: {
+      group?: { name: string; type: string } | null;
+    }[];
   }) {
-    return `[TIMETABLE_SESSION:${session.id}] Réservation automatique emploi du temps · ${session.class?.name ?? 'Classe'} · ${session.element?.module?.name ?? ''} ${session.element?.name ?? ''}`.trim();
+    const groupLabel = session.groupAssignments?.length
+      ? session.groupAssignments
+          .map((item) =>
+            item.group ? `${item.group.type} ${item.group.name}` : null,
+          )
+          .filter(Boolean)
+          .join(', ')
+      : 'Toute la classe';
+    return `[TIMETABLE_SESSION:${session.id}] Réservation automatique emploi du temps · ${session.class?.name ?? 'Classe'} · ${groupLabel} · ${session.element?.module?.name ?? ''} ${session.element?.name ?? ''}`.trim();
   }
 
   private dateFromWeekStart(weekStart: Date, dayOfWeek: number) {

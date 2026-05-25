@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 type Department = { id: number; name: string };
 type Filiere = { id: number; name: string; department: Department };
 type AcademicOption = { id: number; name: string; code: string };
+type ClassGroup = { id: number; name: string; type: string };
 type AcademicClass = {
   id: number;
   name: string;
@@ -22,6 +23,7 @@ type AcademicClass = {
   optionId: number | null;
   filiere?: Filiere | null;
   academicOption?: AcademicOption | null;
+  groups?: ClassGroup[];
 };
 type Room = { id: number; name: string };
 type Teacher = { id: number; firstName: string; lastName: string };
@@ -41,6 +43,7 @@ type Session = {
   class: { id: number; name: string; year: number };
   teacher?: { id: number; firstName: string; lastName: string } | null;
   room?: { id: number; name: string } | null;
+  groupAssignments?: { groupId: number; group: ClassGroup }[];
 };
 
 type Conflict = { sessionIds: number[]; reason: string };
@@ -66,6 +69,12 @@ const TYPE_BADGE: Record<string, string> = {
   CM: 'bg-blue-100 text-blue-700',
   TD: 'bg-teal-100 text-teal-700',
   TP: 'bg-amber-100 text-amber-700',
+};
+
+const TYPE_LABEL: Record<'CM' | 'TD' | 'TP', string> = {
+  CM: 'Cours',
+  TD: 'TD',
+  TP: 'TP',
 };
 
 function formatDateInput(date: Date): string {
@@ -109,6 +118,22 @@ function formatDuration(minutes?: number | null) {
   const hours = Math.floor(minutes / 60);
   const remainder = minutes % 60;
   return `${hours}h${remainder ? `${remainder}min` : ''}`;
+}
+
+function formatGroupName(group: ClassGroup) {
+  return `${group.type} ${group.name}`.trim();
+}
+
+function formatSessionGroups(session: Session) {
+  const groups = session.groupAssignments ?? [];
+  if (!groups.length) return 'Toute la classe';
+  return groups.map((item) => formatGroupName(item.group)).join(', ');
+}
+
+function toggleSelectedId(current: string[], id: string) {
+  return current.includes(id)
+    ? current.filter((item) => item !== id)
+    : [...current, id];
 }
 
 function getSessionDate(weekStart: string, dayOfWeek: number): string {
@@ -235,6 +260,13 @@ export default function TimetablePage() {
     });
   }, [classes, filterDeptId, filterFiliereId, filterOptionId]);
 
+  const selectedClass = useMemo(
+    () => classes.find((c) => String(c.id) === selectedClassId),
+    [classes, selectedClassId],
+  );
+
+  const selectedClassGroups = selectedClass?.groups ?? [];
+
   const changeDept = (id: string) => {
     setFilterDeptId(id);
     setFilterFiliereId('');
@@ -260,6 +292,7 @@ export default function TimetablePage() {
   const [addElementId, setAddElementId] = useState('');
   const [addTeacherId, setAddTeacherId] = useState('');
   const [addRoomId, setAddRoomId] = useState('');
+  const [addGroupIds, setAddGroupIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [autoAffecting, setAutoAffecting] = useState(false);
 
@@ -299,6 +332,7 @@ export default function TimetablePage() {
   const [moveEnd, setMoveEnd] = useState('10:00');
   const [moveTeacherId, setMoveTeacherId] = useState('');
   const [moveRoomId, setMoveRoomId] = useState('');
+  const [moveGroupIds, setMoveGroupIds] = useState<string[]>([]);
   const [savingMove, setSavingMove] = useState(false);
 
   // ── Week navigation with animation ──────────────────────────────────────────
@@ -405,14 +439,21 @@ export default function TimetablePage() {
     void loadTimetable();
   }, [loadTimetable, selectedClassId]);
 
+  useEffect(() => {
+    setAddGroupIds([]);
+    setMoveGroupIds([]);
+  }, [selectedClassId]);
+
   // ── Grid ─────────────────────────────────────────────────────────────────────
 
   const grid = useMemo(() => {
-    const g: Record<number, Record<number, Session>> = {};
+    const g: Record<number, Record<number, Session[]>> = {};
     for (let d = 1; d <= 7; d++) g[d] = {};
     for (const s of sessions) {
       const row = timeToRow(s.startTime);
-      if (row >= 0 && row < 11) g[s.dayOfWeek][row] = s;
+      if (row >= 0 && row < 11) {
+        g[s.dayOfWeek][row] = [...(g[s.dayOfWeek][row] ?? []), s];
+      }
     }
     return g;
   }, [sessions]);
@@ -432,6 +473,7 @@ export default function TimetablePage() {
         startTime: addStart,
         endTime: addEnd,
         weekStart,
+        groupIds: addGroupIds.map(Number),
       });
       toast.success('Session planifiée');
       setAddModal(false);
@@ -487,6 +529,7 @@ export default function TimetablePage() {
     }
     setAddTeacherId('');
     setAddRoomId('');
+    setAddGroupIds([]);
     setAddModal(true);
   };
 
@@ -498,6 +541,7 @@ export default function TimetablePage() {
     setMoveEnd(addHoursToTime(session.startTime, 2));
     setMoveTeacherId(session.teacher?.id ? String(session.teacher.id) : '');
     setMoveRoomId(session.room?.id ? String(session.room.id) : '');
+    setMoveGroupIds((session.groupAssignments ?? []).map((item) => String(item.groupId)));
     setMoveModal(true);
   };
 
@@ -519,6 +563,7 @@ export default function TimetablePage() {
         startTime: moveStart,
         endTime: moveEnd,
         weekStart: getWeekStart(toLocalDate(moveDate)),
+        groupIds: moveGroupIds.map(Number),
       });
       toast.success('Session déplacée');
       setMoveModal(false);
@@ -568,8 +613,6 @@ export default function TimetablePage() {
       toast.error(getApiErrorMessage(err, 'Suppression impossible'));
     }
   };
-
-  const selectedClass = classes.find((c) => String(c.id) === selectedClassId);
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -695,6 +738,16 @@ export default function TimetablePage() {
                 </div>
               )}
             </div>
+            {selectedClassId && selectedClassGroups.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Groupes</span>
+                {selectedClassGroups.map((group) => (
+                  <span key={group.id} className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm">
+                    {formatGroupName(group)}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           ) : (
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -912,19 +965,24 @@ export default function TimetablePage() {
                             {String(hour).padStart(2, '0')}h
                           </td>
                           {DAY_NUMBERS.map((day) => {
-                            const session = grid[day]?.[hour - 8];
-                            const isConflict = session && conflictSessionIds.has(session.id);
+                            const sessionsAtSlot = grid[day]?.[hour - 8] ?? [];
+                            const hasSessions = sessionsAtSlot.length > 0;
                             const dayDateStr = formatDateInput(toLocalDate(addDays(weekStart, day - 1)));
                             const holiday = holidaysByDate.get(dayDateStr);
 
-                            const coveredByAbove = !session && HOURS.slice(0, hour - 8).some((h) => {
-                              const s = grid[day]?.[h - 8];
-                              return s && timeToRow(s.startTime) < hour - 8 && timeToRow(s.startTime) + rowSpan(s.startTime, s.endTime) > hour - 8;
+                            const coveredByAbove = !hasSessions && HOURS.slice(0, hour - 8).some((h) => {
+                              const previousSessions = grid[day]?.[h - 8] ?? [];
+                              return previousSessions.some((s) => (
+                                timeToRow(s.startTime) < hour - 8
+                                && timeToRow(s.startTime) + rowSpan(s.startTime, s.endTime) > hour - 8
+                              ));
                             });
 
                             if (coveredByAbove) return null;
 
-                            const span = session ? rowSpan(session.startTime, session.endTime) : 1;
+                            const span = hasSessions
+                              ? Math.max(...sessionsAtSlot.map((session) => rowSpan(session.startTime, session.endTime)))
+                              : 1;
                             const isTodayCol = dayDateStr === todayStr;
 
                             return (
@@ -932,66 +990,75 @@ export default function TimetablePage() {
                                 key={day}
                                 rowSpan={span > 1 ? span : undefined}
                                 className={`border-b border-r border-slate-100 p-1 align-top transition-colors ${
-                                  !session
+                                  !hasSessions
                                     ? `cursor-pointer ${holiday ? 'bg-amber-50/40 hover:bg-amber-50' : isTodayCol ? 'hover:bg-blue-50' : 'hover:bg-slate-50'}`
                                     : ''
-                                } ${isTodayCol && !session && !holiday ? 'bg-blue-50/30' : ''}`}
-                                onClick={!session && !isStudent ? () => openAddModal(day, hour) : undefined}
-                                onDragOver={!session && !isStudent ? (event) => event.preventDefault() : undefined}
-                                onDrop={!session && !isStudent ? (event) => {
+                                } ${isTodayCol && !hasSessions && !holiday ? 'bg-blue-50/30' : ''}`}
+                                onClick={!hasSessions && !isStudent ? () => openAddModal(day, hour) : undefined}
+                                onDragOver={!hasSessions && !isStudent ? (event) => event.preventDefault() : undefined}
+                                onDrop={!hasSessions && !isStudent ? (event) => {
                                   event.preventDefault();
                                   const elementId = event.dataTransfer.getData('text/plain');
                                   if (elementId) openAddModal(day, hour, elementId);
                                 } : undefined}
                               >
-                                {session && (
-                                  <div
-                                    className={`relative h-full rounded-lg border-l-4 p-2 ${TYPE_STYLE[session.element.type]} ${isConflict ? '!border-red-400 !bg-red-50' : ''}`}
-                                    style={{ minHeight: `${span * 3}rem` }}
-                                  >
-                                    {isConflict && (
-                                      <div className="absolute right-1 top-1">
-                                        <AlertTriangle size={12} className="text-red-500" />
-                                      </div>
-                                    )}
-                                    <p className="text-xs font-bold leading-tight">{session.element.name}</p>
-                                    <p className="mt-0.5 text-[10px] text-slate-500">{session.element.module.name}</p>
-                                    <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${TYPE_BADGE[session.element.type]}`}>
-                                      {session.element.type}
-                                    </span>
-                                    {session.teacher && (
-                                      <p className="mt-1 text-[10px] text-slate-500">{session.teacher.firstName} {session.teacher.lastName}</p>
-                                    )}
-                                    {session.room && (
-                                      <p className="inline-block rounded-full bg-white/60 px-1.5 py-0.5 text-[10px] text-slate-600">{session.room.name}</p>
-                                    )}
-                                    <div className="mt-2 flex items-center gap-2">
-                                      {session.element.cours?.id && (
-                                        <Link
-                                          href={`/cours/${session.element.cours.id}${session.class?.id ? `?classId=${session.class.id}` : ''}`}
-                                          className="rounded bg-white/70 px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-white"
-                                          onClick={(e) => e.stopPropagation()}
+                                {hasSessions && (
+                                  <div className="space-y-1">
+                                    {sessionsAtSlot.map((session) => {
+                                      const isConflict = conflictSessionIds.has(session.id);
+                                      return (
+                                        <div
+                                          key={session.id}
+                                          className={`relative h-full rounded-lg border-l-4 p-2 ${TYPE_STYLE[session.element.type]} ${isConflict ? '!border-red-400 !bg-red-50' : ''}`}
+                                          style={{ minHeight: `${Math.max(1, rowSpan(session.startTime, session.endTime)) * 3}rem` }}
                                         >
-                                          Détails
-                                        </Link>
-                                      )}
-                                      {!isStudent ? (
-                                        <>
-                                          <button
-                                            type="button"
-                                            className="rounded bg-white/70 px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-white"
-                                            onClick={(e) => { e.stopPropagation(); openMoveModal(session); }}
-                                          >
-                                            Déplacer
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className="absolute bottom-1 right-1 text-[10px] text-slate-400 hover:text-red-500"
-                                            onClick={(e) => { e.stopPropagation(); void deleteSession(session.id); }}
-                                          >✕</button>
-                                        </>
-                                      ) : null}
-                                    </div>
+                                          {isConflict && (
+                                            <div className="absolute right-1 top-1">
+                                              <AlertTriangle size={12} className="text-red-500" />
+                                            </div>
+                                          )}
+                                          <p className="text-xs font-bold leading-tight">{session.element.name}</p>
+                                          <p className="mt-0.5 text-[10px] text-slate-500">{session.element.module.name}</p>
+                                          <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${TYPE_BADGE[session.element.type]}`}>
+                                            {TYPE_LABEL[session.element.type]}
+                                          </span>
+                                          <p className="mt-1 text-[10px] font-medium text-slate-600">{formatSessionGroups(session)}</p>
+                                          {session.teacher && (
+                                            <p className="mt-1 text-[10px] text-slate-500">{session.teacher.firstName} {session.teacher.lastName}</p>
+                                          )}
+                                          {session.room && (
+                                            <p className="inline-block rounded-full bg-white/60 px-1.5 py-0.5 text-[10px] text-slate-600">{session.room.name}</p>
+                                          )}
+                                          <div className="mt-2 flex items-center gap-2">
+                                            {session.element.cours?.id && (
+                                              <Link
+                                                href={`/cours/${session.element.cours.id}${session.class?.id ? `?classId=${session.class.id}` : ''}`}
+                                                className="rounded bg-white/70 px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-white"
+                                                onClick={(e) => e.stopPropagation()}
+                                              >
+                                                Détails
+                                              </Link>
+                                            )}
+                                            {!isStudent ? (
+                                              <>
+                                                <button
+                                                  type="button"
+                                                  className="rounded bg-white/70 px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-white"
+                                                  onClick={(e) => { e.stopPropagation(); openMoveModal(session); }}
+                                                >
+                                                  Déplacer
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  className="absolute bottom-1 right-1 text-[10px] text-slate-400 hover:text-red-500"
+                                                  onClick={(e) => { e.stopPropagation(); void deleteSession(session.id); }}
+                                                >✕</button>
+                                              </>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </td>
@@ -1032,7 +1099,7 @@ export default function TimetablePage() {
                         <p className="text-sm font-medium text-slate-800">{el.name}</p>
                         <p className="text-xs text-slate-500">{el.module.name}</p>
                         <div className="flex items-center gap-2">
-                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${TYPE_BADGE[el.type]}`}>{el.type}</span>
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${TYPE_BADGE[el.type]}`}>{TYPE_LABEL[el.type]}</span>
                           {el.volumeHoraire && <span className="text-[10px] text-slate-400">{el.volumeHoraire}h</span>}
                           {el.sessionDurationMinutes && <span className="text-[10px] text-slate-400">{formatDuration(el.sessionDurationMinutes)}</span>}
                         </div>
@@ -1111,7 +1178,7 @@ export default function TimetablePage() {
                   </option>
                   {filteredElements.map((el) => (
                     <option key={el.id} value={el.id}>
-                      {el.name} ({el.type}){el.volumeHoraire ? ` · ${el.volumeHoraire}h` : ''}{el.sessionDurationMinutes ? ` · ${formatDuration(el.sessionDurationMinutes)}` : ''}
+                      {el.name} ({TYPE_LABEL[el.type]}){el.volumeHoraire ? ` · ${el.volumeHoraire}h` : ''}{el.sessionDurationMinutes ? ` · ${formatDuration(el.sessionDurationMinutes)}` : ''}
                     </option>
                   ))}
                 </select>
@@ -1139,6 +1206,35 @@ export default function TimetablePage() {
                   {TIME_OPTIONS.slice(1).map((time) => <option key={time} value={time}>{time.replace(':', 'h')}</option>)}
                 </select>
               </div>
+            </div>
+            <div className="field-stack">
+              <label className="field-label">Groupe</label>
+              {selectedClassGroups.length > 0 ? (
+                <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
+                    <input
+                      type="checkbox"
+                      checked={addGroupIds.length === 0}
+                      onChange={() => setAddGroupIds([])}
+                    />
+                    Toute la classe
+                  </label>
+                  {selectedClassGroups.map((group) => (
+                    <label key={group.id} className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
+                      <input
+                        type="checkbox"
+                        checked={addGroupIds.includes(String(group.id))}
+                        onChange={() => setAddGroupIds((current) => toggleSelectedId(current, String(group.id)))}
+                      />
+                      {formatGroupName(group)}
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                  Toute la classe
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="field-stack">
@@ -1224,6 +1320,35 @@ export default function TimetablePage() {
                   {rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </div>
+            </div>
+            <div className="field-stack">
+              <label className="field-label">Groupe</label>
+              {selectedClassGroups.length > 0 ? (
+                <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
+                    <input
+                      type="checkbox"
+                      checked={moveGroupIds.length === 0}
+                      onChange={() => setMoveGroupIds([])}
+                    />
+                    Toute la classe
+                  </label>
+                  {selectedClassGroups.map((group) => (
+                    <label key={group.id} className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
+                      <input
+                        type="checkbox"
+                        checked={moveGroupIds.includes(String(group.id))}
+                        onChange={() => setMoveGroupIds((current) => toggleSelectedId(current, String(group.id)))}
+                      />
+                      {formatGroupName(group)}
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                  Toute la classe
+                </div>
+              )}
             </div>
             <p className="text-xs text-slate-400">La durée est initialisée à 2h par défaut lors du déplacement.</p>
           </div>

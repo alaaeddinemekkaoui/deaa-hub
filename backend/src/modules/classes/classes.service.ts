@@ -13,6 +13,7 @@ import { CreateClassDto } from './dto/create-class.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
 import { ClassQueryDto } from './dto/class-query.dto';
 import { TransferClassDto } from './dto/transfer-class.dto';
+import { CreateClassGroupDto } from './dto/create-class-group.dto';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 import { UserRole, isDeptScoped } from '../../common/types/role.type';
 
@@ -57,7 +58,11 @@ export class ClassesService {
     if (academicYear) filters.push({ academicYear });
     if (semestre) filters.push({ semestre });
     if (filiereId) filters.push({ filiereId });
-    if (departmentId) filters.push({ filiere: { is: { departmentId } } });
+    if (departmentId) {
+      filters.push({
+        OR: [{ departmentId }, { filiere: { is: { departmentId } } }],
+      });
+    }
     if (cycleId) filters.push({ cycleId });
     if (optionId) filters.push({ optionId });
     // JWT-scoped department filter
@@ -91,12 +96,21 @@ export class ClassesService {
         this.prisma.academicClass.findMany({
           where,
           include: {
+            department: { select: { id: true, name: true } },
             filiere: {
               include: { department: { select: { id: true, name: true } } },
             },
             academicOption: { select: { id: true, name: true, code: true } },
             cycle: { select: { id: true, name: true, code: true } },
-            _count: { select: { students: true, teachers: true, cours: true } },
+            groups: { orderBy: [{ type: 'asc' }, { name: 'asc' }] },
+            _count: {
+              select: {
+                students: true,
+                teachers: true,
+                cours: true,
+                groups: true,
+              },
+            },
           },
           skip: (page - 1) * limit,
           take: limit,
@@ -126,9 +140,11 @@ export class ClassesService {
     const academicClass = await this.prisma.academicClass.findUnique({
       where: { id },
       include: {
+        department: true,
         filiere: { include: { department: true } },
         academicOption: true,
         cycle: true,
+        groups: { orderBy: [{ type: 'asc' }, { name: 'asc' }] },
         students: {
           select: {
             id: true,
@@ -169,15 +185,85 @@ export class ClassesService {
     });
   }
 
+  async findGroups(id: number) {
+    await this.ensureClassExists(id);
+    return this.prisma.classGroup.findMany({
+      where: { classId: id },
+      orderBy: [{ type: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  async createGroup(
+    classId: number,
+    dto: CreateClassGroupDto,
+    currentUser?: JwtPayload,
+  ) {
+    const departmentId = await this.getDepartmentIdFromClassId(classId);
+    this.ensureCanManageDepartment(departmentId, currentUser);
+
+    try {
+      return await this.prisma.classGroup.create({
+        data: {
+          classId,
+          name: dto.name,
+          type: dto.type,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('A group with this name already exists for this class');
+      }
+      throw error;
+    }
+  }
+
+  async removeGroup(
+    classId: number,
+    groupId: number,
+    currentUser?: JwtPayload,
+  ) {
+    const group = await this.prisma.classGroup.findUnique({
+      where: { id: groupId },
+      select: {
+        id: true,
+        classId: true,
+        class: {
+          select: {
+            departmentId: true,
+            filiere: { select: { departmentId: true } },
+          },
+        },
+      },
+    });
+    if (!group || group.classId !== classId) {
+      throw new NotFoundException(`Group ${groupId} not found`);
+    }
+    this.ensureCanManageDepartment(
+      group.class.departmentId ?? group.class.filiere?.departmentId,
+      currentUser,
+    );
+    return this.prisma.classGroup.delete({ where: { id: groupId } });
+  }
+
   async create(dto: CreateClassDto, currentUser?: JwtPayload) {
+    if (dto.departmentId) await this.ensureDepartmentExists(dto.departmentId);
     if (dto.filiereId) await this.ensureFiliereExists(dto.filiereId);
     if (dto.cycleId) await this.ensureCycleExists(dto.cycleId);
     if (dto.optionId) await this.ensureOptionExists(dto.optionId);
     if (dto.academicYear) await this.ensureAcademicYearExists(dto.academicYear);
 
-    const departmentId = dto.filiereId
-      ? await this.getDepartmentIdFromFiliereId(dto.filiereId)
-      : null;
+    const departmentId = await this.resolveClassDepartmentId(
+      dto.departmentId ?? null,
+      dto.filiereId ?? null,
+    );
+    await this.ensureOptionMatchesClassStructure(
+      dto.optionId ?? null,
+      dto.filiereId ?? null,
+      departmentId,
+    );
     this.ensureCanManageDepartment(departmentId, currentUser);
 
     const academicYear =
@@ -196,6 +282,7 @@ export class ClassesService {
         academicYear,
         semestre: dto.semestre ?? null,
         classType: dto.classType ?? null,
+        departmentId,
         cycleId: dto.cycleId ?? null,
         optionId: dto.optionId ?? null,
         filiereId: dto.filiereId ?? null,
@@ -234,13 +321,24 @@ export class ClassesService {
   async update(id: number, dto: UpdateClassDto, currentUser?: JwtPayload) {
     const existing = await this.prisma.academicClass.findUnique({
       where: { id },
-      select: { id: true, name: true, year: true, academicYear: true, semestre: true, filiereId: true },
+      select: {
+        id: true,
+        name: true,
+        year: true,
+        academicYear: true,
+        semestre: true,
+        departmentId: true,
+        filiereId: true,
+        optionId: true,
+      },
     });
 
     if (!existing) throw new NotFoundException(`Class ${id} not found`);
 
     if (typeof dto.filiereId === 'number')
       await this.ensureFiliereExists(dto.filiereId);
+    if (typeof dto.departmentId === 'number')
+      await this.ensureDepartmentExists(dto.departmentId);
     if (typeof dto.cycleId === 'number')
       await this.ensureCycleExists(dto.cycleId);
     if (typeof dto.optionId === 'number')
@@ -249,9 +347,19 @@ export class ClassesService {
 
     const nextFiliereId =
       dto.filiereId !== undefined ? dto.filiereId : existing.filiereId;
-    const departmentId = nextFiliereId
-      ? await this.getDepartmentIdFromFiliereId(nextFiliereId)
-      : null;
+    const nextDepartmentId =
+      dto.departmentId !== undefined ? dto.departmentId : existing.departmentId;
+    const nextOptionId =
+      dto.optionId !== undefined ? dto.optionId : existing.optionId;
+    const departmentId = await this.resolveClassDepartmentId(
+      nextDepartmentId ?? null,
+      nextFiliereId ?? null,
+    );
+    await this.ensureOptionMatchesClassStructure(
+      nextOptionId ?? null,
+      nextFiliereId ?? null,
+      departmentId,
+    );
     this.ensureCanManageDepartment(departmentId, currentUser);
 
     const nextName = dto.name ?? existing.name;
@@ -278,6 +386,9 @@ export class ClassesService {
         ...(dto.classType !== undefined
           ? { classType: dto.classType ?? null }
           : {}),
+        ...(dto.departmentId !== undefined || dto.filiereId !== undefined
+          ? { departmentId }
+          : {}),
         ...(dto.cycleId !== undefined ? { cycleId: dto.cycleId ?? null } : {}),
         ...(dto.optionId !== undefined
           ? { optionId: dto.optionId ?? null }
@@ -296,6 +407,7 @@ export class ClassesService {
       where: { id },
       select: {
         id: true,
+        departmentId: true,
         filiere: { select: { departmentId: true } },
         _count: { select: { students: true, teachers: true } },
       },
@@ -304,7 +416,7 @@ export class ClassesService {
     if (!academicClass) throw new NotFoundException(`Class ${id} not found`);
 
     this.ensureCanManageDepartment(
-      academicClass.filiere?.departmentId,
+      academicClass.departmentId ?? academicClass.filiere?.departmentId,
       currentUser,
     );
 
@@ -408,6 +520,7 @@ export class ClassesService {
           academicYear: targetAcademicYear,
           semestre: targetSemestre,
           classType: source.classType,
+          departmentId: source.departmentId,
           cycleId: source.cycleId,
           optionId: source.optionId,
           filiereId: source.filiereId,
@@ -504,9 +617,13 @@ export class ClassesService {
           filiere: {
             include: { department: { select: { id: true, name: true } } },
           },
+          department: { select: { id: true, name: true } },
           academicOption: { select: { id: true, name: true } },
           cycle: { select: { id: true, name: true } },
-          _count: { select: { students: true, teachers: true, cours: true } },
+          groups: { orderBy: [{ type: 'asc' }, { name: 'asc' }] },
+          _count: {
+            select: { students: true, teachers: true, cours: true, groups: true },
+          },
         },
       });
       return {
@@ -528,6 +645,22 @@ export class ClassesService {
     if (!f) throw new NotFoundException(`Filiere ${id} not found`);
   }
 
+  private async ensureDepartmentExists(id: number) {
+    const department = await this.prisma.department.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!department) throw new NotFoundException(`Department ${id} not found`);
+  }
+
+  private async ensureClassExists(id: number) {
+    const academicClass = await this.prisma.academicClass.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!academicClass) throw new NotFoundException(`Class ${id} not found`);
+  }
+
   private async ensureCycleExists(id: number) {
     const c = await this.prisma.cycle.findUnique({
       where: { id },
@@ -542,6 +675,33 @@ export class ClassesService {
       select: { id: true },
     });
     if (!o) throw new NotFoundException(`Option ${id} not found`);
+  }
+
+  private async ensureOptionMatchesClassStructure(
+    optionId: number | null,
+    filiereId: number | null,
+    departmentId: number | null,
+  ) {
+    if (!optionId) return;
+    const option = await this.prisma.option.findUnique({
+      where: { id: optionId },
+      select: { id: true, filiereId: true, departmentId: true },
+    });
+    if (!option) throw new NotFoundException(`Option ${optionId} not found`);
+    if (filiereId && option.filiereId !== filiereId) {
+      throw new BadRequestException(
+        'Selected option must belong to the selected filière',
+      );
+    }
+    if (
+      departmentId &&
+      option.departmentId &&
+      option.departmentId !== departmentId
+    ) {
+      throw new BadRequestException(
+        'Selected option must belong to the selected department',
+      );
+    }
   }
 
   private async ensureAcademicYearExists(label: string) {
@@ -613,14 +773,40 @@ export class ClassesService {
   ): Promise<number | null> {
     const academicClass = await this.prisma.academicClass.findUnique({
       where: { id: classId },
-      select: { filiere: { select: { departmentId: true } } },
+      select: {
+        departmentId: true,
+        filiere: { select: { departmentId: true } },
+      },
     });
 
     if (!academicClass) {
       throw new NotFoundException(`Class ${classId} not found`);
     }
 
-    return academicClass.filiere?.departmentId ?? null;
+    return academicClass.departmentId ?? academicClass.filiere?.departmentId ?? null;
+  }
+
+  private async resolveClassDepartmentId(
+    departmentId: number | null,
+    filiereId: number | null,
+  ): Promise<number | null> {
+    if (!filiereId) return departmentId;
+
+    const filiereDepartmentId =
+      await this.getDepartmentIdFromFiliereId(filiereId);
+    if (departmentId !== null) {
+      const link = await this.prisma.filiereDepartment.findFirst({
+        where: { filiereId, departmentId },
+        select: { id: true },
+      });
+      if (!link && filiereDepartmentId !== departmentId) {
+        throw new BadRequestException(
+          'Selected department must be linked to the selected filière',
+        );
+      }
+    }
+
+    return departmentId ?? filiereDepartmentId;
   }
 
   private ensureCanManageDepartment(
@@ -723,6 +909,7 @@ export class ClassesService {
             },
           },
           update: {
+            departmentId: module.filiere.departmentId,
             filiereId: module.filiereId,
             optionId: module.optionId,
           },
@@ -731,6 +918,7 @@ export class ClassesService {
             year: classYear,
             academicYear,
             semestre: semester,
+            departmentId: module.filiere.departmentId,
             filiereId: module.filiereId,
             optionId: module.optionId,
             classType: 'Auto',

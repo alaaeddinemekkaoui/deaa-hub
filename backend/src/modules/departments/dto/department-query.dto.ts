@@ -1,5 +1,12 @@
-import { Transform } from 'class-transformer';
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 export class DepartmentQueryDto extends PaginationDto {
@@ -10,6 +17,12 @@ export class DepartmentQueryDto extends PaginationDto {
   @IsString()
   @MaxLength(80)
   search?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  filiereId?: number;
 
   @IsOptional()
   @IsIn(['name', 'createdAt', 'updatedAt'])

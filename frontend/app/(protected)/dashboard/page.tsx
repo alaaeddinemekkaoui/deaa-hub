@@ -4,6 +4,10 @@ import Link from 'next/link';
 import {
   BarChart2,
   ChevronRight,
+  FileCheck2,
+  FilePlus2,
+  FileSignature,
+  FileText,
 } from 'lucide-react';
 import { PageHeader } from '@/components/admin/page-header';
 import { filterNavigationForRole } from '@/components/layout/navigation';
@@ -21,6 +25,33 @@ const sectionStyles = [
   {
     accent: 'bg-[#f5f5f5] text-slate-800 border-b border-slate-200',
     cardColor: 'hover:border-slate-300 hover:bg-slate-50/90 hover:shadow-slate-100',
+  },
+] as const;
+
+const documentActions = [
+  {
+    href: '/documents',
+    label: 'Générer documents',
+    caption: 'PDF et DOCX par étudiant',
+    icon: FilePlus2,
+  },
+  {
+    href: '/settings/document-types',
+    label: 'Modèles DOCX',
+    caption: 'Types et modèles de documents',
+    icon: FileText,
+  },
+  {
+    href: '/settings/esignature',
+    label: 'E-signature',
+    caption: 'Signature officielle',
+    icon: FileSignature,
+  },
+  {
+    href: '/workflows',
+    label: 'Demandes',
+    caption: 'Suivi des demandes de documents',
+    icon: FileCheck2,
   },
 ] as const;
 
@@ -45,6 +76,45 @@ export default function DashboardPage() {
           </Link>
         ) : undefined}
       />
+
+      {['admin', 'staff'].includes(role) ? (
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">
+              Documents & e-signature
+            </h2>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Accès direct à la génération, aux modèles DOCX et à la signature.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {documentActions.map((action) => (
+              <Link
+                key={action.label}
+                href={action.href}
+                prefetch={false}
+                className="group flex min-h-28 flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50/40 hover:shadow-md"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                  <action.icon size={18} strokeWidth={1.8} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold leading-snug text-slate-900">
+                    {action.label}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-snug text-slate-500">
+                    {action.caption}
+                  </p>
+                </div>
+                <ChevronRight
+                  size={13}
+                  className="self-end text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-slate-500"
+                />
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* ── Section navigation ── */}
       <section className="space-y-3">

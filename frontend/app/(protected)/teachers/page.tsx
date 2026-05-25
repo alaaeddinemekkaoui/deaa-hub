@@ -46,6 +46,7 @@ type Teacher = {
   dateInscription?: string | null;
   email?: string | null;
   phoneNumber?: string | null;
+  linkedInUrl?: string | null;
   departmentId: number;
   filiereId?: number | null;
   roleId: number;
@@ -82,6 +83,7 @@ export default function TeachersPage() {
   const [dateInscription, setDateInscription] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [linkedInUrl, setLinkedInUrl] = useState('');
   const [departmentId, setDepartmentId] = useState('');
   const [filiereId, setFiliereId] = useState('');
   const [roleId, setRoleId] = useState('');
@@ -176,6 +178,7 @@ export default function TeachersPage() {
     setDateInscription('');
     setEmail('');
     setPhoneNumber('');
+    setLinkedInUrl('');
     setDepartmentId('');
     setFiliereId('');
     setRoleId('');
@@ -207,6 +210,7 @@ export default function TeachersPage() {
     setDateInscription(teacher.dateInscription ? teacher.dateInscription.slice(0, 10) : '');
     setEmail(teacher.email ?? '');
     setPhoneNumber(teacher.phoneNumber ?? '');
+    setLinkedInUrl(teacher.linkedInUrl ?? '');
     setDepartmentId(String(teacher.departmentId));
     setFiliereId(String(teacher.filiereId ?? ''));
     setRoleId(String(teacher.roleId));
@@ -348,6 +352,12 @@ export default function TeachersPage() {
         payload.phoneNumber = phoneNumber.trim();
       } else if (editingId) {
         payload.phoneNumber = null;
+      }
+
+      if (linkedInUrl.trim()) {
+        payload.linkedInUrl = linkedInUrl.trim();
+      } else if (editingId) {
+        payload.linkedInUrl = null;
       }
 
       if (filiereId) {
@@ -844,6 +854,15 @@ export default function TeachersPage() {
               value={phoneNumber}
               onChange={(event) => setPhoneNumber(event.target.value)}
               placeholder="+212 ..."
+            />
+          </div>
+          <div className="field-stack">
+            <label className="field-label">LinkedIn</label>
+            <input
+              className="input"
+              value={linkedInUrl}
+              onChange={(event) => setLinkedInUrl(event.target.value)}
+              placeholder="https://www.linkedin.com/in/..."
             />
           </div>
           <div className="field-stack">

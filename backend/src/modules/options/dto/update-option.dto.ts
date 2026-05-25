@@ -33,4 +33,10 @@ export class UpdateOptionDto {
   @IsInt()
   @Min(1)
   filiereId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  departmentId?: number | null;
 }

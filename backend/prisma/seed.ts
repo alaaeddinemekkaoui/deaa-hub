@@ -4244,6 +4244,10 @@ async function main() {
         'Moyenne générale: {{average}} / 20. Document généré le {{generatedAt}}.',
       primaryColor: '#0f766e',
       signatureLabel: 'Direction des Affaires Académiques',
+      eSignatureEnabled: true,
+      eSignatureSignerName: 'DEAA Hub',
+      eSignatureSignerTitle: 'Direction des Affaires Académiques',
+      eSignatureStampText: 'Signé électroniquement',
       isDefault: true,
     },
     create: {
@@ -4257,6 +4261,10 @@ async function main() {
         'Moyenne générale: {{average}} / 20. Document généré le {{generatedAt}}.',
       primaryColor: '#0f766e',
       signatureLabel: 'Direction des Affaires Académiques',
+      eSignatureEnabled: true,
+      eSignatureSignerName: 'DEAA Hub',
+      eSignatureSignerTitle: 'Direction des Affaires Académiques',
+      eSignatureStampText: 'Signé électroniquement',
       isDefault: true,
     },
   });
@@ -4278,6 +4286,10 @@ async function main() {
         footer: 'Document généré le {{generatedAt}}.',
         primaryColor: '#0f766e',
         signatureLabel: 'Service scolarité',
+        eSignatureEnabled: true,
+        eSignatureSignerName: 'Service scolarité',
+        eSignatureSignerTitle: 'Direction des Affaires Académiques',
+        eSignatureStampText: 'Signé électroniquement',
       },
       create: {
         name: `Modèle - ${documentType.name}`,
@@ -4289,6 +4301,10 @@ async function main() {
         footer: 'Document généré le {{generatedAt}}.',
         primaryColor: '#0f766e',
         signatureLabel: 'Service scolarité',
+        eSignatureEnabled: true,
+        eSignatureSignerName: 'Service scolarité',
+        eSignatureSignerTitle: 'Direction des Affaires Académiques',
+        eSignatureStampText: 'Signé électroniquement',
       },
     });
   }

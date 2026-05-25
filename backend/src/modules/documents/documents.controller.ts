@@ -65,6 +65,70 @@ export class DocumentsController {
     return this.documentsService.deleteTemplate(id);
   }
 
+  @Post('templates/:id/docx')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      fileFilter: (_, file, callback) => {
+        callback(
+          null,
+          file.mimetype ===
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        );
+      },
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  uploadTemplateDocx(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.documentsService.uploadTemplateDocx(id, file, user);
+  }
+
+  @Get('e-signature')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  getESignature() {
+    return this.documentsService.getESignature();
+  }
+
+  @Post('e-signature/upload')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      fileFilter: (_, file, callback) => {
+        callback(
+          null,
+          ['image/png', 'image/jpeg', 'image/jpg'].includes(file.mimetype),
+        );
+      },
+      limits: { fileSize: 2 * 1024 * 1024 },
+    }),
+  )
+  uploadESignature(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.documentsService.uploadESignature(file, user);
+  }
+
+  @Get('e-signature/image')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.TEACHER,
+    UserRole.STUDENT,
+    UserRole.INSPECTOR,
+  )
+  streamESignatureImage(@Res({ passthrough: true }) res: Response) {
+    return this.documentsService.streamESignatureImage(res);
+  }
+
   @Post('generate/releve/:studentId')
   @Roles(
     UserRole.ADMIN,
@@ -80,6 +144,44 @@ export class DocumentsController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.documentsService.generateStudentRelevePdf(studentId, dto, user);
+  }
+
+  @Post('generate/student/:studentId')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.STUDENT,
+    UserRole.INSPECTOR,
+  )
+  generateStudentDocument(
+    @Param('studentId', ParseIntPipe) studentId: number,
+    @Body() dto: GenerateReleveDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.documentsService.generateStudentRelevePdf(studentId, dto, user);
+  }
+
+  @Post('generate/student/:studentId/docx')
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.STAFF,
+    UserRole.VIEWER,
+    UserRole.USER,
+    UserRole.STUDENT,
+    UserRole.INSPECTOR,
+  )
+  generateStudentDocumentDocx(
+    @Param('studentId', ParseIntPipe) studentId: number,
+    @Body() dto: GenerateReleveDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.documentsService.generateStudentDocumentDocx(
+      studentId,
+      dto,
+      user,
+    );
   }
 
   @Post('upload')

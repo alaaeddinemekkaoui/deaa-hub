@@ -5,6 +5,7 @@ import {
   FileStack,
   GraduationCap,
   History,
+  PenTool,
   Settings,
   Users,
 } from 'lucide-react';
@@ -16,10 +17,12 @@ import RestaurationSettingsPage from '@/app/(protected)/settings/restauration/pa
 import TeacherGradesPage from '@/app/(protected)/settings/teacher-grades/page';
 import TeacherRolesPage from '@/app/(protected)/settings/teacher-roles/page';
 import ActivityLogsPage from '@/app/(protected)/activity-logs/page';
+import ESignatureSettingsPage from '@/app/(protected)/settings/esignature/page';
 
 const SETTINGS = [
   { key: 'logs', label: 'Logs / Historique', icon: History, description: 'Historique des opérations sensibles.', component: ActivityLogsPage },
   { key: 'documents', label: 'Types de Documents', icon: FileStack, description: 'Documents administratifs et pièces du profil.', component: DocumentTypesPage },
+  { key: 'esignature', label: 'E-signature', icon: PenTool, description: 'Image officielle utilisée dans les documents générés.', component: ESignatureSettingsPage },
   { key: 'teacher-roles', label: 'Rôles Enseignants', icon: Users, description: 'Fonctions : permanent, vacataire, intervenant.', component: TeacherRolesPage },
   { key: 'teacher-grades', label: 'Grades Enseignants', icon: GraduationCap, description: 'PH, PA, assistant, doctorant.', component: TeacherGradesPage },
   { key: 'restauration', label: 'Types de Repas', icon: Settings, description: 'Repas, prix et options de restauration.', component: RestaurationSettingsPage },

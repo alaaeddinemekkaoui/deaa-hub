@@ -11,6 +11,7 @@ const USER_SELECT = {
   fullName: true,
   email: true,
   role: true,
+  linkedInUrl: true,
   createdAt: true,
   departments: {
     select: {
@@ -26,6 +27,7 @@ type UserWithDepts = {
   fullName: string;
   email: string;
   role: string;
+  linkedInUrl: string | null;
   createdAt: Date;
   departments: { department: { id: number; name: string } }[];
 };
@@ -168,6 +170,7 @@ export class UsersService {
           fullName: dto.fullName,
           email: dto.email,
           role: dto.role,
+          linkedInUrl: dto.linkedInUrl ?? null,
           passwordHash,
           departments: dto.departmentIds?.length
             ? {

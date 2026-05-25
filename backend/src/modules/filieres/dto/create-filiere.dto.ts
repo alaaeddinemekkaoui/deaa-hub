@@ -1,5 +1,13 @@
 import { Transform, Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsString, MaxLength, Min } from 'class-validator';
+import {
+  IsArray,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateFiliereDto {
   @Transform(({ value }: { value: unknown }) =>
@@ -22,4 +30,11 @@ export class CreateFiliereDto {
   @IsInt()
   @Min(1)
   departmentId: number;
+
+  @IsOptional()
+  @IsArray()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  departmentIds?: number[];
 }

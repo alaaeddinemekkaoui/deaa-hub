@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { PrepaYear, Sex, StudentCycle } from '@prisma/client';
 import {
   IsDateString,
@@ -7,8 +7,10 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
   Max,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreateStudentDto {
@@ -47,6 +49,16 @@ export class CreateStudentDto {
   @IsOptional()
   @IsString()
   telephone?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @ValidateIf((_, value) => value !== null && value !== '')
+  @Matches(/^https:\/\/([a-z]{2,3}\.)?linkedin\.com\/.+$/i, {
+    message: 'linkedInUrl must be a valid LinkedIn URL',
+  })
+  linkedInUrl?: string | null;
 
   @IsOptional()
   @IsEnum(StudentCycle)

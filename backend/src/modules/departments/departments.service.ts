@@ -23,13 +23,21 @@ export class DepartmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: DepartmentQueryDto, departmentIds?: number[]) {
-    const { page, limit, search, sortBy, sortOrder } = query;
+    const { page, limit, search, filiereId, sortBy, sortOrder } = query;
 
     const filters: Prisma.DepartmentWhereInput[] = [];
     if (search)
       filters.push({ name: { contains: search, mode: 'insensitive' } });
     if (departmentIds !== undefined)
       filters.push({ id: { in: departmentIds } });
+    if (filiereId) {
+      filters.push({
+        OR: [
+          { filiereLinks: { some: { filiereId } } },
+          { filieres: { some: { id: filiereId } } },
+        ],
+      });
+    }
 
     const where: Prisma.DepartmentWhereInput =
       filters.length > 1 ? { AND: filters } : (filters[0] ?? {});
@@ -38,6 +46,7 @@ export class DepartmentsService {
       page,
       limit,
       search: search ?? null,
+      filiereId: filiereId ?? null,
       sortBy,
       sortOrder,
       departmentIds: departmentIds ?? null,
@@ -52,9 +61,14 @@ export class DepartmentsService {
             name: true,
             createdAt: true,
             updatedAt: true,
+            filiereLinks: {
+              select: { filiereId: true },
+            },
             _count: {
               select: {
                 filieres: true,
+                filiereLinks: true,
+                options: true,
                 teachers: true,
               },
             },
@@ -98,9 +112,21 @@ export class DepartmentsService {
           },
           orderBy: { name: 'asc' },
         },
+        filiereLinks: {
+          include: {
+            filiere: { select: { id: true, name: true, code: true } },
+          },
+          orderBy: { filiere: { name: 'asc' } },
+        },
+        options: {
+          select: { id: true, name: true, code: true, filiereId: true },
+          orderBy: { name: 'asc' },
+        },
         _count: {
           select: {
             filieres: true,
+            filiereLinks: true,
+            options: true,
             teachers: true,
           },
         },

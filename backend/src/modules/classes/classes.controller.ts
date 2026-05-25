@@ -19,6 +19,7 @@ import { ClassesService } from './classes.service';
 import { CreateClassDto } from './dto/create-class.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
 import { TransferClassDto } from './dto/transfer-class.dto';
+import { CreateClassGroupDto } from './dto/create-class-group.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -68,6 +69,32 @@ export class ClassesController {
   @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
   findCours(@Param('id', ParseIntPipe) id: number) {
     return this.classesService.findCours(id);
+  }
+
+  @Get(':id/groups')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.TEACHER, UserRole.INSPECTOR)
+  findGroups(@Param('id', ParseIntPipe) id: number) {
+    return this.classesService.findGroups(id);
+  }
+
+  @Post(':id/groups')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER, UserRole.INSPECTOR)
+  createGroup(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateClassGroupDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.classesService.createGroup(id, dto, user);
+  }
+
+  @Delete(':id/groups/:groupId')
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER, UserRole.INSPECTOR)
+  removeGroup(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('groupId', ParseIntPipe) groupId: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.classesService.removeGroup(id, groupId, user);
   }
 
   @Post()

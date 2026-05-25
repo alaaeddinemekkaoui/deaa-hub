@@ -13,6 +13,7 @@ model User {
   email                 String               @unique
   passwordHash          String
   role                  UserRole
+  linkedInUrl           String?
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
   activityLogs          ActivityLog[]
@@ -30,6 +31,15 @@ model User {
   departments           UserDepartment[]
   assignedWorkflows     WorkflowTask[]
   validatedAttendances  AttendanceRecord[]   @relation("AttendanceValidatedBy")
+  responsibleModules    Module[]             @relation("ModuleResponsable")
+  housingReviews        HousingRequest[]     @relation("HousingRequestReviewer")
+  housingStatusChanges  HousingStatusHistory[] @relation("HousingStatusChangedBy")
+  documentApprovals     DocumentRequest[]    @relation("DocumentRequestApprover")
+  documentGenerations   DocumentGeneration[] @relation("DocumentGenerationActor")
+  apesaChoiceReviews    ApesaStudentChoice[] @relation("ApesaChoiceReviewer")
+  apesaAssignments      ApesaAssignment[]    @relation("ApesaAssignmentActor")
+  onlineExamsCreated    OnlineExam[]         @relation("OnlineExamCreator")
+  validationUpdates     ValidationParameter[] @relation("ValidationParameterUpdater")
 }
 
 model UserDepartment {
@@ -44,14 +54,21 @@ model UserDepartment {
 }
 
 model Department {
-  id              Int              @id @default(autoincrement())
-  name            String           @unique
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id              Int                 @id @default(autoincrement())
+  name            String              @unique
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
   filieres        Filiere[]
+  filiereLinks    FiliereDepartment[]
+  classes         AcademicClass[]
+  options         Option[]
   rooms           Room[]
   teachers        Teacher[]
   userDepartments UserDepartment[]
+  housingQuotas   HousingQuota[]
+  validationParameters ValidationParameter[]
+  apesaOrientations ApesaOrientation[]
+  onlineExams     OnlineExam[]
 
   @@index([name])
 }
@@ -67,55 +84,79 @@ model Filiere {
   classes            AcademicClass[]
   accreditationPlans AccreditationPlan[]
   department         Department          @relation(fields: [departmentId], references: [id])
+  departmentLinks    FiliereDepartment[]
   modules            Module[]
   options            Option[]
   students           Student[]
   teachers           Teacher[]
+  validationParameters ValidationParameter[]
+  apesaOrientations ApesaOrientation[]
+  onlineExams        OnlineExam[]
 
   @@index([departmentId])
 }
 
-model Student {
-  id               Int                   @id @default(autoincrement())
-  firstName        String?
-  lastName         String?
-  fullName         String
-  sex              Sex
-  cin              String                @unique
-  codeMassar       String                @unique
-  dateNaissance    DateTime
-  email            String?               @unique
-  telephone        String?
-  cycle            StudentCycle
-  prepaYear        PrepaYear?
-  prepaTrack       String?
-  entryLevel       Int?
-  filiereId        Int?
-  classId          Int?
-  bacType          String?
-  firstYearEntry   Int
-  anneeAcademique  String
-  dateInscription  DateTime              @default(now())
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
-  codeEtudiant     String?               @unique
-  userId           Int?                  @unique
-  documents        Document[]
-  laureate         Laureate?
-  academicClass    AcademicClass?        @relation(fields: [classId], references: [id])
-  filiere          Filiere?              @relation(fields: [filiereId], references: [id])
-  user             User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
-  classHistory     StudentClassHistory[]
-  grades           StudentGrade[]
-  mealReservations MealReservation[]
-  mealTransactions MealTransaction[]
-  mealWallet       MealWallet?
-  internatAssignment InternatAssignment?
-  observations     StudentObservation[]
-  workflows        WorkflowTask[]
-  attendances      AttendanceRecord[]
+model FiliereDepartment {
+  id           Int        @id @default(autoincrement())
+  filiereId    Int
+  departmentId Int
+  createdAt    DateTime   @default(now())
+  filiere      Filiere    @relation(fields: [filiereId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
 
-  photoPath        String?
+  @@unique([filiereId, departmentId])
+  @@index([filiereId])
+  @@index([departmentId])
+}
+
+model Student {
+  id                 Int                   @id @default(autoincrement())
+  firstName          String?
+  lastName           String?
+  fullName           String
+  sex                Sex
+  cin                String                @unique
+  codeMassar         String                @unique
+  dateNaissance      DateTime
+  email              String?               @unique
+  telephone          String?
+  linkedInUrl        String?
+  cycle              StudentCycle
+  prepaYear          PrepaYear?
+  prepaTrack         String?
+  entryLevel         Int?
+  filiereId          Int?
+  classId            Int?
+  bacType            String?
+  firstYearEntry     Int
+  anneeAcademique    String
+  dateInscription    DateTime              @default(now())
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  codeEtudiant       String?               @unique
+  userId             Int?                  @unique
+  documents          Document[]
+  laureate           Laureate?
+  academicClass      AcademicClass?        @relation(fields: [classId], references: [id])
+  filiere            Filiere?              @relation(fields: [filiereId], references: [id])
+  user               User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  classHistory       StudentClassHistory[]
+  grades             StudentGrade[]
+  mealReservations   MealReservation[]
+  mealTransactions   MealTransaction[]
+  mealWallet         MealWallet?
+  internatAssignment InternatAssignment?
+  observations       StudentObservation[]
+  workflows          WorkflowTask[]
+  attendances        AttendanceRecord[]
+  housingRequests    HousingRequest[]
+  documentRequests   DocumentRequest[]
+  academicEvents     StudentAcademicEvent[]
+  apesaChoices       ApesaStudentChoice[]
+  apesaAssignments   ApesaAssignment[]
+  examAttempts       OnlineExamAttempt[]
+
+  photoPath String?
 
   @@index([codeMassar])
   @@index([filiereId])
@@ -163,6 +204,7 @@ model Teacher {
   cin             String?            @unique
   email           String?            @unique
   phoneNumber     String?
+  linkedInUrl     String?
   dateInscription DateTime           @default(now())
   departmentId    Int
   filiereId       Int?
@@ -182,8 +224,9 @@ model Teacher {
   user            User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
   taughtClasses   TeacherClass[]
   sessions        TimetableSession[]
+  workloads       TeacherWorkload[]
 
-  photoPath       String?
+  photoPath String?
 
   @@index([departmentId])
   @@index([filiereId])
@@ -220,13 +263,18 @@ model Cycle {
 }
 
 model AcademicYear {
-  id        Int      @id @default(autoincrement())
-  label     String   @unique
-  isCurrent Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                Int                    @id @default(autoincrement())
+  label             String                 @unique
+  startYear         Int?
+  endYear           Int?
+  isCurrent         Boolean                @default(false)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  cursusAssignments CursusYearAssignment[]
 
   @@index([isCurrent])
+  @@index([startYear])
+  @@index([endYear])
 }
 
 model AcademicClass {
@@ -235,6 +283,7 @@ model AcademicClass {
   year                         Int
   academicYear                 String?
   semestre                     String?
+  departmentId                 Int?
   filiereId                    Int?
   classType                    String?
   cycleId                      Int?
@@ -243,8 +292,12 @@ model AcademicClass {
   createdAt                    DateTime                       @default(now())
   updatedAt                    DateTime                       @updatedAt
   cycle                        Cycle?                         @relation(fields: [cycleId], references: [id])
+  department                   Department?                    @relation(fields: [departmentId], references: [id])
   filiere                      Filiere?                       @relation(fields: [filiereId], references: [id])
   academicOption               Option?                        @relation(fields: [optionId], references: [id])
+  groups                       ClassGroup[]
+  cursuses                     Cursus[]
+  cursusAssignments            CursusYearAssignment[]
   ClassAccreditationAssignment ClassAccreditationAssignment[]
   cours                        CoursClass[]
   elements                     ElementModule[]
@@ -256,14 +309,68 @@ model AcademicClass {
   grades                       StudentGrade[]
   teachers                     TeacherClass[]
   sessions                     TimetableSession[]
+  onlineExams                  OnlineExam[]
 
   @@unique([name, year, semestre, academicYear])
   @@index([year])
   @@index([academicYear])
   @@index([semestre])
+  @@index([departmentId])
   @@index([filiereId])
   @@index([optionId])
   @@index([cycleId])
+}
+
+model ClassGroup {
+  id                Int                     @id @default(autoincrement())
+  classId           Int
+  name              String
+  type              String                  @default("TD")
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  class             AcademicClass           @relation(fields: [classId], references: [id], onDelete: Cascade)
+  timetableSessions TimetableSessionGroup[]
+
+  @@unique([classId, name])
+  @@index([classId])
+  @@index([type])
+}
+
+model Cursus {
+  id              Int                    @id @default(autoincrement())
+  name            String
+  classId         Int?
+  version         Int                    @default(1)
+  isActive        Boolean                @default(true)
+  clonedFromId    Int?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  class           AcademicClass?         @relation(fields: [classId], references: [id], onDelete: SetNull)
+  clonedFrom      Cursus?                @relation("CursusClone", fields: [clonedFromId], references: [id], onDelete: SetNull)
+  clones          Cursus[]               @relation("CursusClone")
+  yearAssignments CursusYearAssignment[]
+  modules         Module[]
+
+  @@index([classId])
+  @@index([isActive])
+  @@index([clonedFromId])
+}
+
+model CursusYearAssignment {
+  id             Int           @id @default(autoincrement())
+  classId        Int
+  academicYearId Int
+  cursusId       Int
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  class          AcademicClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  cursus         Cursus        @relation(fields: [cursusId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, academicYearId])
+  @@index([classId])
+  @@index([academicYearId])
+  @@index([cursusId])
 }
 
 model ModuleClass {
@@ -291,22 +398,23 @@ model TeacherClass {
 }
 
 model Document {
-  id            Int        @id @default(autoincrement())
-  name          String
-  mimeType      String
-  path          String
-  storageProvider String?  @default("local")
-  bucket        String?
-  objectKey     String?
-  fileHash      String?
-  size          Int?
-  studentId     Int?
-  teacherId     Int?
-  category      String?
-  createdAt     DateTime   @default(now())
-  student       Student?   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  teacher       Teacher?   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  laureateProof Laureate[]
+  id              Int        @id @default(autoincrement())
+  name            String
+  mimeType        String
+  path            String
+  storageProvider String?    @default("local")
+  bucket          String?
+  objectKey       String?
+  fileHash        String?
+  size            Int?
+  studentId       Int?
+  teacherId       Int?
+  category        String?
+  createdAt       DateTime   @default(now())
+  student         Student?   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher         Teacher?   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  laureateProof   Laureate[]
+  generatedForRequest DocumentRequest? @relation("GeneratedDocumentForRequest")
 
   @@index([studentId])
   @@index([teacherId])
@@ -315,23 +423,58 @@ model Document {
 }
 
 model DocumentTemplate {
-  id             Int      @id @default(autoincrement())
-  name           String   @unique
-  type           String   @default("releve_note")
-  documentTypeId Int?     @unique
-  header         String
-  body           String
-  footer         String?
-  primaryColor   String?  @default("#0f766e")
-  signatureLabel String?  @default("Direction des Affaires Académiques")
-  isDefault      Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  documentType   DocumentType? @relation(fields: [documentTypeId], references: [id], onDelete: SetNull)
+  id                          Int           @id @default(autoincrement())
+  name                        String        @unique
+  type                        String        @default("releve_note")
+  documentTypeId              Int?          @unique
+  header                      String
+  body                        String
+  footer                      String?
+  primaryColor                String?       @default("#0f766e")
+  signatureLabel              String?       @default("Direction des Affaires Académiques")
+  eSignatureEnabled           Boolean       @default(true)
+  eSignatureSignerName        String?       @default("DEAA Hub")
+  eSignatureSignerTitle       String?       @default("Direction des Affaires Académiques")
+  eSignatureStampText         String?       @default("Signé électroniquement")
+  eSignaturePositionX         Float         @default(0.62)
+  eSignaturePositionY         Float         @default(0.82)
+  eSignatureWidth             Float         @default(0.24)
+  eSignatureHeight            Float         @default(0.08)
+  docxTemplatePath            String?
+  docxTemplateName            String?
+  docxTemplateMimeType        String?
+  docxTemplateStorageProvider String?
+  docxTemplateBucket          String?
+  docxTemplateObjectKey       String?
+  docxTemplateFileHash        String?
+  docxTemplateSize            Int?
+  isDefault                   Boolean       @default(false)
+  createdAt                   DateTime      @default(now())
+  updatedAt                   DateTime      @updatedAt
+  documentType                DocumentType? @relation(fields: [documentTypeId], references: [id], onDelete: SetNull)
+  generations                 DocumentGeneration[]
 
   @@index([type])
   @@index([isDefault])
   @@index([documentTypeId])
+}
+
+model ESignatureAsset {
+  id              Int      @id @default(autoincrement())
+  name            String   @default("Signature officielle")
+  mimeType        String
+  path            String
+  storageProvider String?  @default("minio")
+  bucket          String?
+  objectKey       String?
+  fileHash        String?
+  size            Int?
+  active          Boolean  @default(true)
+  uploadedAt      DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([active])
+  @@index([uploadedAt])
 }
 
 model StudentGrade {
@@ -377,13 +520,14 @@ model StudentGrade {
 }
 
 model DocumentType {
-  id          Int            @id @default(autoincrement())
-  name        String         @unique
+  id          Int               @id @default(autoincrement())
+  name        String            @unique
   description String?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
   template    DocumentTemplate?
   workflows   WorkflowTask[]
+  requests    DocumentRequest[]
 }
 
 model ProfileDocumentType {
@@ -510,12 +654,12 @@ model InternatRoom {
 }
 
 model InternatAssignment {
-  id        Int         @id @default(autoincrement())
-  studentId Int         @unique
+  id        Int          @id @default(autoincrement())
+  studentId Int          @unique
   roomId    Int
   comment   String?
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
   room      InternatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
   student   Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
@@ -592,6 +736,7 @@ model Cours {
   classes               CoursClass[]
   resources             CoursResource[]
   attendanceRecords     AttendanceRecord[]
+  workloads             CourseWorkload[]
 
   @@index([name])
   @@index([elementModuleId])
@@ -602,81 +747,102 @@ model Option {
   name               String
   code               String?
   filiereId          Int
+  departmentId       Int?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   classes            AcademicClass[]
   accreditationPlans AccreditationPlan[]
   modules            Module[]
+  department         Department?         @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   filiere            Filiere             @relation(fields: [filiereId], references: [id])
 
-  @@unique([name, filiereId])
+  @@unique([name, filiereId, departmentId])
   @@index([filiereId])
+  @@index([departmentId])
 }
 
 model Module {
   id                    Int                     @id @default(autoincrement())
   name                  String
   semestre              String?
+  cursusId              Int?
   filiereId             Int?
   optionId              Int?
+  responsableId         Int?
+  coefficient           Float                   @default(1)
+  credits               Float                   @default(0)
+  volumeHoraire         Int?
+  cmHours               Int                     @default(0)
+  tdHours               Int                     @default(0)
+  tpHours               Int                     @default(0)
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
   AccreditationPlanLine AccreditationPlanLine[]
+  cursus                Cursus?                 @relation(fields: [cursusId], references: [id], onDelete: SetNull)
   elements              ElementModule[]
   filiere               Filiere?                @relation(fields: [filiereId], references: [id])
   option                Option?                 @relation(fields: [optionId], references: [id])
+  responsable           User?                   @relation("ModuleResponsable", fields: [responsableId], references: [id], onDelete: SetNull)
   classes               ModuleClass[]
   grades                StudentGrade[]
+  onlineExams           OnlineExam[]
 
+  @@index([cursusId])
   @@index([filiereId])
   @@index([optionId])
+  @@index([responsableId])
 }
 
 model ElementModule {
-  id                    Int                     @id @default(autoincrement())
-  name                  String
-  moduleId              Int
-  classId               Int?
-  volumeHoraire         Int?
+  id                     Int                     @id @default(autoincrement())
+  name                   String
+  moduleId               Int
+  classId                Int?
+  volumeHoraire          Int?
+  credits                Float                   @default(0)
+  cmHours                Int                     @default(0)
+  tdHours                Int                     @default(0)
+  tpHours                Int                     @default(0)
   sessionDurationMinutes Int?
-  type                  ElementType             @default(CM)
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
-  ponderation           Float                   @default(1)
-  coefficient           Float                   @default(1)
-  AccreditationPlanLine AccreditationPlanLine[]
-  cours                 Cours?
-  class                 AcademicClass?          @relation(fields: [classId], references: [id])
-  module                Module                  @relation(fields: [moduleId], references: [id])
-  grades                StudentGrade[]
-  sessions              TimetableSession[]
+  type                   ElementType             @default(CM)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  ponderation            Float                   @default(1)
+  coefficient            Float                   @default(1)
+  AccreditationPlanLine  AccreditationPlanLine[]
+  cours                  Cours?
+  class                  AcademicClass?          @relation(fields: [classId], references: [id])
+  module                 Module                  @relation(fields: [moduleId], references: [id])
+  grades                 StudentGrade[]
+  sessions               TimetableSession[]
 
   @@index([moduleId])
   @@index([classId])
 }
 
 model TimetableSession {
-  id        Int           @id @default(autoincrement())
-  elementId Int
-  classId   Int
-  teacherId Int?
-  roomId    Int?
-  dayOfWeek Int
-  startTime String
-  endTime   String
-  weekStart DateTime?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  attendanceEnabled Boolean @default(false)
-  attendanceTokenHash String? @unique
+  id                  Int                     @id @default(autoincrement())
+  elementId           Int
+  classId             Int
+  teacherId           Int?
+  roomId              Int?
+  dayOfWeek           Int
+  startTime           String
+  endTime             String
+  weekStart           DateTime?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  attendanceEnabled   Boolean                 @default(false)
+  attendanceTokenHash String?                 @unique
   attendanceEnabledAt DateTime?
-  attendanceDeadline DateTime?
-  attendanceClosedAt DateTime?
-  class     AcademicClass @relation(fields: [classId], references: [id], onDelete: Cascade)
-  element   ElementModule @relation(fields: [elementId], references: [id], onDelete: Cascade)
-  room      Room?         @relation(fields: [roomId], references: [id])
-  teacher   Teacher?      @relation(fields: [teacherId], references: [id])
-  attendanceRecords AttendanceRecord[]
+  attendanceDeadline  DateTime?
+  attendanceClosedAt  DateTime?
+  class               AcademicClass           @relation(fields: [classId], references: [id], onDelete: Cascade)
+  element             ElementModule           @relation(fields: [elementId], references: [id], onDelete: Cascade)
+  room                Room?                   @relation(fields: [roomId], references: [id])
+  teacher             Teacher?                @relation(fields: [teacherId], references: [id])
+  attendanceRecords   AttendanceRecord[]
+  groupAssignments    TimetableSessionGroup[]
 
   @@index([classId])
   @@index([teacherId])
@@ -686,6 +852,16 @@ model TimetableSession {
   @@index([weekStart])
   @@index([attendanceEnabled])
   @@index([attendanceDeadline])
+}
+
+model TimetableSessionGroup {
+  sessionId Int
+  groupId   Int
+  session   TimetableSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  group     ClassGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, groupId])
+  @@index([groupId])
 }
 
 model TimetableHoliday {
@@ -743,25 +919,25 @@ model CoursClass {
 }
 
 model CoursResource {
-  id           Int           @id @default(autoincrement())
-  coursId      Int
-  classId      Int
-  teacherId    Int?
-  uploadedById Int
-  title        String
-  fileName     String
-  mimeType     String
-  path         String
-  storageProvider String?  @default("local")
-  bucket       String?
-  objectKey    String?
-  fileHash     String?
-  size         Int
-  createdAt    DateTime      @default(now())
-  class        AcademicClass @relation(fields: [classId], references: [id], onDelete: Cascade)
-  cours        Cours         @relation(fields: [coursId], references: [id], onDelete: Cascade)
-  teacher      Teacher?      @relation(fields: [teacherId], references: [id])
-  uploadedBy   User          @relation(fields: [uploadedById], references: [id])
+  id              Int           @id @default(autoincrement())
+  coursId         Int
+  classId         Int
+  teacherId       Int?
+  uploadedById    Int
+  title           String
+  fileName        String
+  mimeType        String
+  path            String
+  storageProvider String?       @default("local")
+  bucket          String?
+  objectKey       String?
+  fileHash        String?
+  size            Int
+  createdAt       DateTime      @default(now())
+  class           AcademicClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  cours           Cours         @relation(fields: [coursId], references: [id], onDelete: Cascade)
+  teacher         Teacher?      @relation(fields: [teacherId], references: [id])
+  uploadedBy      User          @relation(fields: [uploadedById], references: [id])
 
   @@index([coursId])
   @@index([classId])
@@ -773,15 +949,15 @@ model CoursResource {
 }
 
 model Meal {
-  id           Int               @id @default(autoincrement())
-  name         String
-  price        Float
-  active       Boolean           @default(true)
+  id               Int               @id @default(autoincrement())
+  name             String
+  price            Float
+  active           Boolean           @default(true)
   serviceStartTime String?
   serviceEndTime   String?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  reservations MealReservation[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  reservations     MealReservation[]
 
   @@index([active])
 }
@@ -915,6 +1091,381 @@ model ClassAccreditationAssignment {
   @@index([academicYear])
 }
 
+model HousingQuota {
+  id           Int        @id @default(autoincrement())
+  name         String
+  residence    String
+  building     String?
+  capacity     Int
+  academicYear String
+  departmentId Int?
+  gender       Sex?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@unique([residence, building, academicYear, gender])
+  @@index([academicYear])
+  @@index([departmentId])
+}
+
+model HousingRequest {
+  id              Int                    @id @default(autoincrement())
+  studentId       Int
+  academicYear    String
+  status          HousingRequestStatus   @default(pending)
+  scholarship     Boolean                @default(false)
+  city            String?
+  requestedResidence String?
+  observations    String?
+  reviewedById    Int?
+  reviewedAt      DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  student         Student                @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  reviewedBy      User?                  @relation("HousingRequestReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  documents       HousingDocument[]
+  history         HousingStatusHistory[]
+
+  @@unique([studentId, academicYear])
+  @@index([academicYear])
+  @@index([status])
+  @@index([studentId])
+  @@index([reviewedById])
+}
+
+model HousingDocument {
+  id              Int            @id @default(autoincrement())
+  requestId       Int
+  name            String
+  documentType    String
+  mimeType        String?
+  path            String?
+  storageProvider String?        @default("local")
+  bucket          String?
+  objectKey       String?
+  fileHash        String?
+  size            Int?
+  createdAt       DateTime       @default(now())
+  request         HousingRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@index([documentType])
+}
+
+model HousingStatusHistory {
+  id          Int                  @id @default(autoincrement())
+  requestId   Int
+  fromStatus  HousingRequestStatus?
+  toStatus    HousingRequestStatus
+  comment     String?
+  changedById Int?
+  changedAt   DateTime             @default(now())
+  request     HousingRequest       @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  changedBy   User?                @relation("HousingStatusChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([requestId])
+  @@index([changedById])
+  @@index([changedAt])
+}
+
+model DocumentRequest {
+  id                  Int                   @id @default(autoincrement())
+  studentId           Int
+  documentTypeId      Int?
+  type                String
+  academicYear        String
+  semester            String?
+  status              DocumentRequestStatus @default(pending)
+  requestPayload      Json?
+  qrVerificationCode  String?               @unique
+  generatedDocumentId Int?                  @unique
+  approvedById        Int?
+  approvedAt          DateTime?
+  rejectedReason      String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  student             Student               @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  documentType        DocumentType?         @relation(fields: [documentTypeId], references: [id], onDelete: SetNull)
+  generatedDocument   Document?             @relation("GeneratedDocumentForRequest", fields: [generatedDocumentId], references: [id], onDelete: SetNull)
+  approvedBy          User?                 @relation("DocumentRequestApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  generations         DocumentGeneration[]
+
+  @@index([studentId])
+  @@index([documentTypeId])
+  @@index([academicYear])
+  @@index([semester])
+  @@index([status])
+}
+
+model DocumentGeneration {
+  id           Int              @id @default(autoincrement())
+  requestId    Int?
+  actorUserId  Int?
+  outputFormat String           @default("pdf")
+  templateId   Int?
+  status       String           @default("generated")
+  variables    Json?
+  generatedAt  DateTime         @default(now())
+  request      DocumentRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  actor        User?            @relation("DocumentGenerationActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  template     DocumentTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([requestId])
+  @@index([actorUserId])
+  @@index([templateId])
+  @@index([generatedAt])
+}
+
+model StudentAcademicEvent {
+  id           Int      @id @default(autoincrement())
+  studentId    Int
+  academicYear String
+  semester     String?
+  eventType    String
+  title        String
+  description  String?
+  metadata     Json?
+  occurredAt   DateTime @default(now())
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([academicYear])
+  @@index([semester])
+  @@index([eventType])
+  @@index([occurredAt])
+}
+
+model ValidationParameter {
+  id                         Int       @id @default(autoincrement())
+  academicYear               String
+  filiereId                  Int?
+  departmentId               Int?
+  semester                   String?
+  moduleValidationThreshold  Float     @default(10)
+  semesterValidationThreshold Float    @default(10)
+  compensationEnabled        Boolean   @default(true)
+  minimumCredits             Float?
+  eliminationGrade           Float?
+  absenceLimit               Int?
+  apesaOrientationRules      Json?
+  effectiveFrom              DateTime?
+  archivedAt                 DateTime?
+  updatedById                Int?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+  filiere                    Filiere?  @relation(fields: [filiereId], references: [id], onDelete: SetNull)
+  department                 Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  updatedBy                  User?     @relation("ValidationParameterUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([academicYear])
+  @@index([filiereId])
+  @@index([departmentId])
+  @@index([semester])
+  @@index([archivedAt])
+}
+
+model ApesaOrientation {
+  id             Int       @id @default(autoincrement())
+  name           String
+  code           String
+  academicYear   String
+  filiereId      Int?
+  departmentId   Int?
+  capacity       Int
+  prerequisites  Json?
+  minimumGrade   Float?
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  filiere        Filiere?  @relation(fields: [filiereId], references: [id], onDelete: SetNull)
+  department     Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  choices        ApesaStudentChoice[]
+  assignments    ApesaAssignment[]
+
+  @@unique([code, academicYear])
+  @@index([academicYear])
+  @@index([filiereId])
+  @@index([departmentId])
+  @@index([active])
+}
+
+model ApesaStudentChoice {
+  id            Int               @id @default(autoincrement())
+  studentId     Int
+  orientationId Int
+  academicYear  String
+  priority      Int
+  status        ApesaChoiceStatus @default(submitted)
+  reviewedById  Int?
+  reviewedAt    DateTime?
+  comment       String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  student       Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  orientation   ApesaOrientation  @relation(fields: [orientationId], references: [id], onDelete: Cascade)
+  reviewedBy    User?             @relation("ApesaChoiceReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([studentId, academicYear, priority])
+  @@unique([studentId, academicYear, orientationId])
+  @@index([academicYear])
+  @@index([status])
+  @@index([reviewedById])
+}
+
+model ApesaAssignment {
+  id            Int              @id @default(autoincrement())
+  studentId     Int
+  orientationId Int
+  academicYear  String
+  assignedById  Int?
+  assignedAt    DateTime         @default(now())
+  comment       String?
+  student       Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  orientation   ApesaOrientation @relation(fields: [orientationId], references: [id], onDelete: Cascade)
+  assignedBy    User?            @relation("ApesaAssignmentActor", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([studentId, academicYear])
+  @@index([orientationId])
+  @@index([academicYear])
+  @@index([assignedById])
+}
+
+model ApesaParameter {
+  id           Int      @id @default(autoincrement())
+  academicYear String
+  key          String
+  value        Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([academicYear, key])
+  @@index([academicYear])
+}
+
+model OnlineExam {
+  id             Int              @id @default(autoincrement())
+  title          String
+  description    String?
+  academicYear   String
+  semester       String?
+  moduleId       Int?
+  classId        Int?
+  filiereId      Int?
+  departmentId   Int?
+  createdById    Int
+  startsAt       DateTime?
+  endsAt         DateTime?
+  durationMinutes Int?
+  status         OnlineExamStatus @default(draft)
+  randomizeQuestions Boolean      @default(false)
+  antiCheatEnabled Boolean        @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  module         Module?          @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  class          AcademicClass?   @relation(fields: [classId], references: [id], onDelete: SetNull)
+  filiere        Filiere?         @relation(fields: [filiereId], references: [id], onDelete: SetNull)
+  department     Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdBy      User             @relation("OnlineExamCreator", fields: [createdById], references: [id])
+  questions      OnlineExamQuestion[]
+  attempts       OnlineExamAttempt[]
+
+  @@index([academicYear])
+  @@index([semester])
+  @@index([moduleId])
+  @@index([classId])
+  @@index([filiereId])
+  @@index([departmentId])
+  @@index([createdById])
+  @@index([status])
+}
+
+model OnlineExamQuestion {
+  id             Int          @id @default(autoincrement())
+  examId         Int
+  type           QuestionType @default(mcq)
+  prompt         String
+  options        Json?
+  correctAnswer  Json?
+  points         Float        @default(1)
+  orderIndex     Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  exam           OnlineExam   @relation(fields: [examId], references: [id], onDelete: Cascade)
+  answers        OnlineExamAnswer[]
+
+  @@index([examId])
+  @@index([type])
+}
+
+model OnlineExamAttempt {
+  id          Int               @id @default(autoincrement())
+  examId      Int
+  studentId   Int
+  status      ExamAttemptStatus @default(in_progress)
+  startedAt   DateTime          @default(now())
+  submittedAt DateTime?
+  score       Float?
+  metadata    Json?
+  exam        OnlineExam        @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student     Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  answers     OnlineExamAnswer[]
+
+  @@unique([examId, studentId])
+  @@index([examId])
+  @@index([studentId])
+  @@index([status])
+}
+
+model OnlineExamAnswer {
+  id          Int                @id @default(autoincrement())
+  attemptId   Int
+  questionId  Int
+  answer      Json?
+  score       Float?
+  feedback    String?
+  correctedAt DateTime?
+  attempt     OnlineExamAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question    OnlineExamQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@index([questionId])
+}
+
+model TeacherWorkload {
+  id           Int      @id @default(autoincrement())
+  teacherId    Int
+  academicYear String
+  semester     String?
+  totalHours   Int      @default(0)
+  cmHours      Int      @default(0)
+  tdHours      Int      @default(0)
+  tpHours      Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  teacher      Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, academicYear, semester])
+  @@index([academicYear])
+  @@index([semester])
+}
+
+model CourseWorkload {
+  id             Int      @id @default(autoincrement())
+  coursId        Int
+  academicYear   String
+  semester       String?
+  plannedHours   Int      @default(0)
+  completedHours Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  cours          Cours    @relation(fields: [coursId], references: [id], onDelete: Cascade)
+
+  @@unique([coursId, academicYear, semester])
+  @@index([academicYear])
+  @@index([semester])
+}
+
 enum UserRole {
   admin
   staff
@@ -1015,4 +1566,48 @@ enum AttendanceStatus {
 enum AttendanceMethod {
   qr
   manual
+}
+
+enum HousingRequestStatus {
+  pending
+  under_review
+  accepted
+  rejected
+  waiting_list
+}
+
+enum DocumentRequestStatus {
+  pending
+  under_review
+  approved
+  generated
+  rejected
+  archived
+}
+
+enum ApesaChoiceStatus {
+  submitted
+  under_review
+  validated
+  rejected
+}
+
+enum OnlineExamStatus {
+  draft
+  scheduled
+  published
+  closed
+  archived
+}
+
+enum QuestionType {
+  mcq
+  short_answer
+}
+
+enum ExamAttemptStatus {
+  in_progress
+  submitted
+  corrected
+  cancelled
 }

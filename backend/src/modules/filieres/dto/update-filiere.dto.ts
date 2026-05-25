@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  IsArray,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -32,4 +33,11 @@ export class UpdateFiliereDto {
   @IsInt()
   @Min(1)
   departmentId?: number;
+
+  @IsOptional()
+  @IsArray()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  departmentIds?: number[];
 }

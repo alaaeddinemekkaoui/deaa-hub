@@ -28,7 +28,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.INSPECTOR)
   findAll() {
     return this.usersService.findAll();
   }
@@ -48,13 +48,13 @@ export class UsersController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.INSPECTOR)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.findOne(id);
   }
 
   @Post()
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.INSPECTOR)
   create(@Body() dto: CreateUserDto) {
     return this.usersService.create(dto);
   }
@@ -72,7 +72,7 @@ export class UsersController {
   }
 
   @Get('unlinked-profiles')
-  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.INSPECTOR)
   getUnlinkedProfiles() {
     return this.usersService.getUnlinkedProfiles();
   }

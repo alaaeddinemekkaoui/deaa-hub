@@ -36,6 +36,7 @@ export class AcademicYearsService {
 
   async create(dto: CreateAcademicYearDto) {
     await this.ensureLabelAvailable(dto.label);
+    const years = this.resolveYearRange(dto.label, dto.startYear, dto.endYear);
 
     // If marking as current, unset other current years first
     if (dto.isCurrent) {
@@ -46,14 +47,19 @@ export class AcademicYearsService {
     }
 
     const created = await this.prisma.academicYear.create({
-      data: { label: dto.label.trim(), isCurrent: dto.isCurrent ?? false },
+      data: {
+        label: dto.label.trim(),
+        startYear: years.startYear,
+        endYear: years.endYear,
+        isCurrent: dto.isCurrent ?? false,
+      },
     });
     this.listCache.invalidate();
     return created;
   }
 
   async update(id: number, dto: UpdateAcademicYearDto) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
     if (dto.label) await this.ensureLabelAvailable(dto.label, id);
 
     if (dto.isCurrent) {
@@ -67,6 +73,15 @@ export class AcademicYearsService {
       where: { id },
       data: {
         ...(dto.label !== undefined ? { label: dto.label.trim() } : {}),
+        ...(dto.label !== undefined ||
+        dto.startYear !== undefined ||
+        dto.endYear !== undefined
+          ? this.resolveYearRange(
+              dto.label ?? existing.label,
+              dto.startYear ?? existing.startYear ?? undefined,
+              dto.endYear ?? existing.endYear ?? undefined,
+            )
+          : {}),
         ...(dto.isCurrent !== undefined ? { isCurrent: dto.isCurrent } : {}),
       },
     });
@@ -92,5 +107,19 @@ export class AcademicYearsService {
     if (existing) {
       throw new ConflictException(`Année académique "${label}" already exists`);
     }
+  }
+
+  private resolveYearRange(
+    label?: string,
+    startYear?: number,
+    endYear?: number,
+  ) {
+    const match = (label ?? '').trim().match(/^(\d{4})\/(\d{4})$/);
+    const resolvedStart = startYear ?? (match ? Number(match[1]) : undefined);
+    const resolvedEnd = endYear ?? (match ? Number(match[2]) : undefined);
+    return {
+      startYear: resolvedStart ?? null,
+      endYear: resolvedEnd ?? null,
+    };
   }
 }

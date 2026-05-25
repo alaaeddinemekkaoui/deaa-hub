@@ -44,13 +44,13 @@ export class TeachersController {
   ) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.INSPECTOR)
   findAll(@Query() query: TeacherQueryDto) {
     return this.teachersService.findAll(query);
   }
 
   @Get('roles')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.INSPECTOR)
   findRoles() {
     return this.teachersService.findRoles();
   }
@@ -77,7 +77,7 @@ export class TeachersController {
   }
 
   @Get('grades')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.INSPECTOR)
   findGrades() {
     return this.teachersService.findGrades();
   }
@@ -104,7 +104,7 @@ export class TeachersController {
   }
 
   @Post('bulk-create-accounts')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER, UserRole.INSPECTOR)
   bulkCreateAccounts(
     @Body() body: { teacherIds: number[]; defaultPassword: string },
     @CurrentUser() user: JwtPayload,
@@ -175,13 +175,13 @@ export class TeachersController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.INSPECTOR)
   create(@Body() dto: CreateTeacherDto, @CurrentUser() user: JwtPayload) {
     return this.teachersService.create(dto, user);
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.INSPECTOR)
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateTeacherDto,
@@ -200,7 +200,7 @@ export class TeachersController {
   }
 
   @Post(':id/create-account')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER, UserRole.INSPECTOR)
   createAccount(
     @Param('id', ParseIntPipe) id: number,
     @Body('password') password: string,

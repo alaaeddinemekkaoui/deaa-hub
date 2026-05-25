@@ -1,5 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayUnique,
+  IsArray,
   IsDateString,
   IsInt,
   IsOptional,
@@ -58,4 +60,12 @@ export class CreateSessionDto {
   @IsOptional()
   @IsDateString()
   weekStart?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  groupIds?: number[];
 }

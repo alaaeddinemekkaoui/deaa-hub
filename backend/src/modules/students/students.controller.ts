@@ -45,7 +45,7 @@ export class StudentsController {
   ) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.INSPECTOR)
   findAll(@Query() query: StudentsQueryDto, @CurrentUser() user: JwtPayload) {
     const departmentIds = isDeptScoped(user.role)
       ? user.departmentIds
@@ -69,7 +69,7 @@ export class StudentsController {
   }
 
   @Get('by-class/:classId')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.INSPECTOR)
   findByClass(
     @Param('classId', ParseIntPipe) classId: number,
     @Query() query: StudentsQueryDto,
@@ -155,13 +155,13 @@ export class StudentsController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.INSPECTOR)
   create(@Body() dto: CreateStudentDto, @CurrentUser() user: JwtPayload) {
     return this.studentsService.create(dto, user);
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.VIEWER, UserRole.USER, UserRole.INSPECTOR)
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateStudentDto,
@@ -181,7 +181,7 @@ export class StudentsController {
 
   /** Create a User account for a single student */
   @Post(':id/create-account')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER, UserRole.INSPECTOR)
   createAccount(
     @Param('id', ParseIntPipe) id: number,
     @Body('password') password: string,
@@ -195,7 +195,7 @@ export class StudentsController {
 
   /** Bulk-create accounts for multiple students with a shared default password */
   @Post('bulk-create-accounts')
-  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER)
+  @Roles(UserRole.ADMIN, UserRole.STAFF, UserRole.USER, UserRole.INSPECTOR)
   bulkCreateAccounts(
     @Body() body: { studentIds: number[]; defaultPassword: string },
     @CurrentUser() user: JwtPayload,

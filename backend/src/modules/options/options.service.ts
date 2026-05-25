@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -33,7 +34,14 @@ export class OptionsService {
         ],
       });
     if (filiereId) filters.push({ filiereId });
-    if (departmentId) filters.push({ filiere: { is: { departmentId } } });
+    if (departmentId) {
+      filters.push({
+        OR: [
+          { departmentId },
+          { filiere: { is: { departmentId } } },
+        ],
+      });
+    }
 
     const where: Prisma.OptionWhereInput = filters.length
       ? { AND: filters }
@@ -57,6 +65,7 @@ export class OptionsService {
             filiere: {
               include: { department: { select: { id: true, name: true } } },
             },
+            department: { select: { id: true, name: true } },
             _count: { select: { classes: true, modules: true } },
           },
           skip: (page - 1) * limit,
@@ -85,6 +94,7 @@ export class OptionsService {
       where: { id },
       include: {
         filiere: { include: { department: true } },
+        department: true,
         modules: { include: { _count: { select: { elements: true } } } },
         _count: { select: { classes: true, modules: true } },
       },
@@ -95,12 +105,19 @@ export class OptionsService {
 
   async create(dto: CreateOptionDto) {
     await this.ensureFiliereExists(dto.filiereId);
-    await this.ensureNameAvailable(dto.name, dto.filiereId);
+    if (dto.departmentId) {
+      await this.ensureFiliereDepartmentLinkExists(
+        dto.filiereId,
+        dto.departmentId,
+      );
+    }
+    await this.ensureNameAvailable(dto.name, dto.filiereId, dto.departmentId);
     const created = await this.prisma.option.create({
       data: {
         name: dto.name,
         code: dto.code ?? null,
         filiereId: dto.filiereId,
+        departmentId: dto.departmentId ?? null,
       },
     });
     this.listCache.invalidate();
@@ -110,18 +127,36 @@ export class OptionsService {
   async update(id: number, dto: UpdateOptionDto) {
     const existing = await this.prisma.option.findUnique({
       where: { id },
-      select: { id: true, name: true, filiereId: true },
+      select: { id: true, name: true, filiereId: true, departmentId: true },
     });
     if (!existing) throw new NotFoundException(`Option ${id} not found`);
     const nextFiliereId = dto.filiereId ?? existing.filiereId;
+    const nextDepartmentId =
+      dto.departmentId !== undefined ? dto.departmentId : existing.departmentId;
     if (dto.filiereId) await this.ensureFiliereExists(dto.filiereId);
-    if (dto.name) await this.ensureNameAvailable(dto.name, nextFiliereId, id);
+    if (nextDepartmentId) {
+      await this.ensureFiliereDepartmentLinkExists(
+        nextFiliereId,
+        nextDepartmentId,
+      );
+    }
+    if (dto.name || dto.filiereId || dto.departmentId !== undefined) {
+      await this.ensureNameAvailable(
+        dto.name ?? existing.name,
+        nextFiliereId,
+        nextDepartmentId,
+        id,
+      );
+    }
     const updated = await this.prisma.option.update({
       where: { id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.code !== undefined ? { code: dto.code ?? null } : {}),
         ...(dto.filiereId !== undefined ? { filiereId: dto.filiereId } : {}),
+        ...(dto.departmentId !== undefined
+          ? { departmentId: dto.departmentId ?? null }
+          : {}),
       },
     });
     this.listCache.invalidate();
@@ -153,12 +188,14 @@ export class OptionsService {
   private async ensureNameAvailable(
     name: string,
     filiereId: number,
+    departmentId?: number | null,
     excludeId?: number,
   ) {
     const ex = await this.prisma.option.findFirst({
       where: {
         name: { equals: name, mode: 'insensitive' },
         filiereId,
+        departmentId: departmentId ?? null,
         ...(excludeId ? { id: { not: excludeId } } : {}),
       },
       select: { id: true },
@@ -167,5 +204,29 @@ export class OptionsService {
       throw new ConflictException(
         `Option "${name}" already exists in this filière`,
       );
+  }
+
+  private async ensureFiliereDepartmentLinkExists(
+    filiereId: number,
+    departmentId: number,
+  ) {
+    const link = await this.prisma.filiereDepartment.findFirst({
+      where: {
+        filiereId,
+        departmentId,
+      },
+      select: { id: true },
+    });
+    if (link) return;
+
+    const legacy = await this.prisma.filiere.findFirst({
+      where: { id: filiereId, departmentId },
+      select: { id: true },
+    });
+    if (legacy) return;
+
+    throw new BadRequestException(
+      'Selected department is not linked to the selected filière',
+    );
   }
 }

@@ -43,6 +43,12 @@ export class ModuleQueryDto extends PaginationDto {
   classYear?: number;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  academicYearId?: number;
+
+  @IsOptional()
   @IsIn(['name', 'semestre', 'createdAt', 'updatedAt'])
   sortBy: 'name' | 'semestre' | 'createdAt' | 'updatedAt' = 'name';
 

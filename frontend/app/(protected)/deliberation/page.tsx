@@ -102,6 +102,12 @@ type DeliberationData = {
   };
 };
 
+type GeneratedDocument = {
+  id: number;
+  name: string;
+  mimeType: string;
+};
+
 // ─── Computed student row with filtered averages ──────────────────────────────
 
 type ComputedStudent = StudentRow & {
@@ -346,6 +352,7 @@ export default function DeliberationPage() {
   );
 
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingReleve, setExportingReleve] = useState(false);
 
   const exportDeliberation = () => {
     if (!data || !tableExportRef.current) return;
@@ -408,6 +415,40 @@ export default function DeliberationPage() {
       printWindow.print();
     } finally {
       setExportingPdf(false);
+    }
+  };
+
+  const downloadGeneratedDocument = async (document: GeneratedDocument) => {
+    const response = await api.get<Blob>(`/documents/${document.id}/file`, {
+      responseType: "blob",
+    });
+    const blob = new Blob([response.data], { type: document.mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = window.document.createElement("a");
+    link.href = url;
+    link.download = document.name;
+    window.document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportSelectedReleve = async () => {
+    if (!selectedStudent) {
+      toast.error("Sélectionnez un étudiant.");
+      return;
+    }
+    setExportingReleve(true);
+    try {
+      const generated = await api.post<GeneratedDocument>(
+        `/documents/generate/student/${selectedStudent.id}`,
+      );
+      await downloadGeneratedDocument(generated.data);
+      toast.success("Relevé de notes téléchargé");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Export du relevé impossible."));
+    } finally {
+      setExportingReleve(false);
     }
   };
 
@@ -979,6 +1020,15 @@ export default function DeliberationPage() {
                     relevé.
                   </p>
                 </div>
+                <button
+                  className="btn-primary flex items-center gap-2"
+                  type="button"
+                  onClick={() => void exportSelectedReleve()}
+                  disabled={!selectedStudent || exportingReleve}
+                >
+                  <Download size={14} />
+                  {exportingReleve ? "Export..." : "Exporter relevé signé"}
+                </button>
               </div>
 
               {/* Student selector */}
@@ -1243,7 +1293,7 @@ function ReleveDeNote({
                 colSpan={6}
                 className="border border-slate-300 px-4 py-3 text-right text-slate-800"
               >
-                Moyenne générale de l'étudiant
+                Moyenne générale de l&apos;étudiant
               </td>
               <td
                 className={`border border-slate-300 px-3 py-3 text-center text-base ${mentionColor(avg)}`}

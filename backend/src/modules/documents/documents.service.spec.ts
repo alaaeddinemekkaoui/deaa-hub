@@ -116,6 +116,7 @@ describe('DocumentsService', () => {
           },
         ]),
       },
+      eSignatureAsset: { findFirst: jest.fn().mockResolvedValue(null) },
       document: {
         create: jest.fn().mockResolvedValue({
           id: 22,
@@ -152,7 +153,7 @@ describe('DocumentsService', () => {
       expect.objectContaining({
         bucketName: 'signedDocuments',
         mimeType: 'application/pdf',
-        folder: 'generated/releves/M123',
+        folder: 'generated/releve-de-notes/M123',
         buffer: expect.any(Buffer),
       }),
     );

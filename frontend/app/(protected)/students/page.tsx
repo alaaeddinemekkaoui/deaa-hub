@@ -1,9 +1,8 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { BookOpen, CalendarRange, Eye, FolderOpen, GraduationCap, KeyRound, MoreHorizontal, Pencil, Search, Trash2, UserPlus, Users } from 'lucide-react';
+import { BookOpen, CalendarRange, Eye, FolderOpen, GraduationCap, KeyRound, MoreHorizontal, Pencil, Search, Trash2, User, UserPlus, Users } from 'lucide-react';
 import {
   AcademicYearSelect,
   sortAcademicYearsCurrentFirst,
@@ -46,6 +45,7 @@ type Student = {
   dateNaissance?: string;
   email?: string;
   telephone?: string;
+  linkedInUrl?: string | null;
   anneeAcademique: string;
   dateInscription?: string;
   bacType?: string | null;
@@ -72,6 +72,44 @@ const initialStudentMeta: PaginatedResponse<Student>['meta'] = {
   hasNextPage: false,
   hasPreviousPage: false,
 };
+
+function StudentPhoto({ studentId, fullName }: { studentId: number; fullName: string }) {
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    void api
+      .get<Blob>(`/students/${studentId}/photo`, { responseType: 'blob' })
+      .then((response) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(response.data);
+        setPhotoUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setPhotoUrl(null);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [studentId]);
+
+  if (!photoUrl) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-slate-100 text-slate-400">
+        <User size={26} />
+      </div>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={photoUrl} alt={fullName} className="h-full w-full object-cover" />
+  );
+}
 
 export default function StudentsPage() {
   const { user } = useAuth();
@@ -113,6 +151,7 @@ export default function StudentsPage() {
   const [dateNaissance, setDateNaissance] = useState('2000-01-01');
   const [email, setEmail] = useState('');
   const [telephone, setTelephone] = useState('');
+  const [linkedInUrl, setLinkedInUrl] = useState('');
   const [filiereId, setFiliereId] = useState('');
   const [classId, setClassId] = useState('');
   const [bacType, setBacType] = useState('');
@@ -129,7 +168,6 @@ export default function StudentsPage() {
   const [accountStudentName, setAccountStudentName] = useState('');
   const [accountPassword, setAccountPassword] = useState('');
   const [accountSaving, setAccountSaving] = useState(false);
-  const [photoErrors, setPhotoErrors] = useState<Record<number, boolean>>({});
 
   // Bulk create-accounts modal
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
@@ -142,14 +180,6 @@ export default function StudentsPage() {
     const parsed = Number(trimmed);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
   };
-
-  const getInitials = (fullName: string) =>
-    fullName
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() ?? '')
-      .join('') || 'ET';
 
   const filteredFilieres = useMemo(
     () =>
@@ -295,6 +325,7 @@ export default function StudentsPage() {
     setDateNaissance('2000-01-01');
     setEmail('');
     setTelephone('');
+    setLinkedInUrl('');
     setFiliereId('');
     setClassId('');
     setBacType('');
@@ -349,6 +380,7 @@ export default function StudentsPage() {
     setDateNaissance(student.dateNaissance ? student.dateNaissance.split('T')[0] : '2000-01-01');
     setEmail(student.email ?? '');
     setTelephone(student.telephone ?? '');
+    setLinkedInUrl(student.linkedInUrl ?? '');
     setFiliereId(String(student.filiereId ?? ''));
     setClassId(String(student.classId ?? student.academicClass?.id ?? ''));
     setBacType(student.bacType ?? '');
@@ -391,6 +423,7 @@ export default function StudentsPage() {
         dateNaissance,
         email: email.trim() || undefined,
         telephone: telephone.trim() || undefined,
+        linkedInUrl: linkedInUrl.trim() || null,
         anneeAcademique: anneeAcademique.trim(),
         dateInscription,
         classId: Number(classId),
@@ -639,7 +672,7 @@ export default function StudentsPage() {
             </select>
           </div>
           <div className="field-stack">
-            <label className="field-label">Année d'entrée</label>
+            <label className="field-label">Année d&apos;entrée</label>
             <input
               className="input"
               inputMode="numeric"
@@ -689,8 +722,6 @@ export default function StudentsPage() {
       {!loading && students.length > 0 && (
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {students.map((student) => {
-            const photoUrl = `/api/students/${student.id}/photo`;
-            const showPhoto = !photoErrors[student.id];
             const classLabel = student.academicClass
               ? `${student.academicClass.name} · Année ${student.academicClass.year}`
               : 'Classe non affectée';
@@ -698,20 +729,7 @@ export default function StudentsPage() {
               <article key={student.id} className="flex min-h-[18rem] flex-col rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-start gap-4">
                   <div className="relative h-18 w-18 shrink-0 overflow-hidden rounded-[1.4rem] border border-slate-200 bg-slate-100">
-                    {showPhoto ? (
-                      <Image
-                        src={photoUrl}
-                        alt={student.fullName}
-                        fill
-                        unoptimized
-                        className="object-cover"
-                        onError={() => setPhotoErrors((current) => ({ ...current, [student.id]: true }))}
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-[#f3f5f4] text-lg font-semibold text-[#8f1d22]">
-                        {getInitials(student.fullName)}
-                      </div>
-                    )}
+                    <StudentPhoto studentId={student.id} fullName={student.fullName} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <Link
@@ -926,6 +944,15 @@ export default function StudentsPage() {
           <div className="field-stack xl:col-span-2">
             <label className="field-label">Téléphone</label>
             <input className="input" value={telephone} onChange={(event) => setTelephone(event.target.value)} />
+          </div>
+          <div className="field-stack xl:col-span-2">
+            <label className="field-label">LinkedIn</label>
+            <input
+              className="input"
+              value={linkedInUrl}
+              onChange={(event) => setLinkedInUrl(event.target.value)}
+              placeholder="https://www.linkedin.com/in/..."
+            />
           </div>
 
           {/* Laureate section */}

@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Camera } from 'lucide-react';
+import { Camera, Download, FilePlus2 } from 'lucide-react';
 import { api, fetchRef, getApiErrorMessage } from '@/services/api';
 import {
   AcademicYearSelect,
@@ -48,6 +48,26 @@ type ProfileDocumentType = {
   description?: string | null;
 };
 
+type DocumentType = {
+  id: number;
+  name: string;
+  description?: string | null;
+};
+
+type DocumentTemplate = {
+  id: number;
+  name: string;
+  documentTypeId?: number | null;
+  type: string;
+};
+
+type GenerationOption = {
+  id: string;
+  label: string;
+  template?: DocumentTemplate;
+  documentTypeId?: number | null;
+};
+
 type GradeItem = {
   id: number;
   subject: string;
@@ -82,6 +102,7 @@ type StudentProfile = {
   dateNaissance?: string;
   email?: string;
   telephone?: string;
+  linkedInUrl?: string | null;
   anneeAcademique: string;
   dateInscription?: string;
   bacType?: string | null;
@@ -97,8 +118,10 @@ export default function StudentProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
-  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [, setDocuments] = useState<DocumentItem[]>([]);
   const [profileDocumentTypes, setProfileDocumentTypes] = useState<ProfileDocumentType[]>([]);
+  const [documentTypes, setDocumentTypes] = useState<DocumentType[]>([]);
+  const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplate[]>([]);
   const [grades, setGrades] = useState<GradeItem[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYearOption[]>([]);
   const [selectedAcademicYear, setSelectedAcademicYear] = useState('');
@@ -112,13 +135,39 @@ export default function StudentProfilePage() {
   const [profileSection, setProfileSection] = useState<'overview' | 'notes'>('overview');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
+  const [generatingDocumentTypeId, setGeneratingDocumentTypeId] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const photoObjectUrlRef = useRef<string | null>(null);
   const profileId = Number(params.id);
   const isStudentOwner = user?.role === 'student' && user.studentProfile?.id === profileId;
   const canUseDirectAdminActions = Boolean(user && user.role !== 'student');
   const canUploadDocuments = canUseDirectAdminActions || isStudentOwner;
-  const canDeleteDocuments = user?.role === 'admin' || user?.role === 'staff';
+  const generationOptions = useMemo(
+    () => {
+      const options: GenerationOption[] = documentTypes.map((type) => ({
+        id: `type-${type.id}`,
+        label: type.name,
+        documentTypeId: type.id,
+        template: documentTemplates.find((template) => template.documentTypeId === type.id),
+      }));
+      const releveTemplate = documentTemplates.find((template) => template.type === 'releve_note');
+      const alreadyLinked =
+        releveTemplate?.documentTypeId &&
+        options.some((option) => option.documentTypeId === releveTemplate.documentTypeId);
+      if (releveTemplate && !alreadyLinked) {
+        options.unshift({
+          id: `releve-${releveTemplate.id}`,
+          label: 'Relevé de notes',
+          documentTypeId: releveTemplate.documentTypeId ?? null,
+          template: releveTemplate,
+        });
+      }
+      return options;
+    },
+    [documentTemplates, documentTypes],
+  );
+  const hasGenerationTemplate = generationOptions.some((item) => Boolean(item.template));
   const visibleGrades = selectedAcademicYear
     ? grades.filter((grade) => grade.academicYear === selectedAcademicYear)
     : grades;
@@ -195,7 +244,16 @@ export default function StudentProfilePage() {
       try {
         setLoading(true);
         setError(null);
-        const [profileRes, obsRes, docsRes, gradesRes, yearsRes, profileDocTypesRes] = await Promise.all([
+        const [
+          profileRes,
+          obsRes,
+          docsRes,
+          gradesRes,
+          yearsRes,
+          profileDocTypesRes,
+          documentTypesRes,
+          templatesRes,
+        ] = await Promise.all([
           api.get<StudentProfile>(`/students/${id}`),
           api.get<Observation[]>(`/students/${id}/observations`),
           api.get<DocumentItem[]>(`/documents/student/${id}`),
@@ -204,6 +262,8 @@ export default function StudentProfilePage() {
             : api.get<GradeItem[]>(`/grades/student/${id}`),
           fetchRef<AcademicYearOption[]>('/academic-years'),
           fetchRef<ProfileDocumentType[]>('/profile-document-types'),
+          api.get<DocumentType[]>('/document-types'),
+          api.get<DocumentTemplate[]>('/documents/templates'),
         ]);
         if (isCancelled) return;
         const sortedYears = sortAcademicYearsCurrentFirst(yearsRes);
@@ -214,6 +274,8 @@ export default function StudentProfilePage() {
         setObservations(Array.isArray(obsRes.data) ? obsRes.data : []);
         setDocuments(Array.isArray(docsRes.data) ? docsRes.data : []);
         setProfileDocumentTypes(Array.isArray(profileDocTypesRes) ? profileDocTypesRes : []);
+        setDocumentTypes(Array.isArray(documentTypesRes.data) ? documentTypesRes.data : []);
+        setDocumentTemplates(Array.isArray(templatesRes.data) ? templatesRes.data : []);
         if (isStudentOwner || user.role === 'student') {
           const data = gradesRes.data as StudentGradesMeResponse;
           setGrades([
@@ -319,15 +381,52 @@ export default function StudentProfilePage() {
     }
   };
 
-  const handleDeleteDocument = async (documentId: number) => {
-    if (!window.confirm('Supprimer ce document ?')) return;
-
+  const openDocument = async (doc: DocumentItem, mode: 'inline' | 'download' = 'inline') => {
     try {
-      await api.delete(`/documents/${documentId}`);
-      setDocuments((prev) => prev.filter((doc) => doc.id !== documentId));
-      toast.success('Document supprimé');
+      const response = await api.get<Blob>(`/documents/${doc.id}/file`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: doc.mimeType });
+      const url = URL.createObjectURL(blob);
+
+      if (mode === 'download') {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = doc.name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (err) {
-      toast.error(getApiErrorMessage(err, 'Échec de la suppression'));
+      toast.error(getApiErrorMessage(err, 'Ouverture impossible'));
+    }
+  };
+
+  const generateAndDownloadDocument = async (option: GenerationOption) => {
+    const template = option.template;
+    if (!template) {
+      toast.error(`Aucun modèle configuré pour ${option.label}`);
+      return;
+    }
+    setGeneratingDocumentTypeId(option.id);
+    try {
+      const generated = await api.post<DocumentItem>(`/documents/generate/student/${profileId}`, {
+        templateId: template.id,
+        documentTypeId: option.documentTypeId || undefined,
+      });
+      setGenerateModalOpen(false);
+      setDocuments((prev) => [generated.data, ...prev]);
+      await openDocument(generated.data, 'download');
+      toast.success(`${option.label} téléchargé`);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Génération impossible'));
+    } finally {
+      setGeneratingDocumentTypeId(null);
     }
   };
 
@@ -462,6 +561,21 @@ export default function StudentProfilePage() {
             <div className="field-stack">
               <label className="field-label">Téléphone</label>
               <p className="input bg-slate-50">{student.telephone ?? '-'}</p>
+            </div>
+            <div className="field-stack">
+              <label className="field-label">LinkedIn</label>
+              {student.linkedInUrl ? (
+                <a
+                  className="input bg-slate-50 text-blue-700 underline"
+                  href={student.linkedInUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {student.linkedInUrl}
+                </a>
+              ) : (
+                <p className="input bg-slate-50">-</p>
+              )}
             </div>
             <div className="field-stack">
               <label className="field-label">Première année d’entrée</label>
@@ -646,12 +760,21 @@ export default function StudentProfilePage() {
           <div className="panel-header">
             <div>
               <h2 className="panel-title">Documents</h2>
-              <p className="panel-copy">{documents.length} document{documents.length !== 1 ? 's' : ''} lié{documents.length !== 1 ? 's' : ''} à cet étudiant</p>
+              <p className="panel-copy">Générez et téléchargez directement les documents configurés pour cet étudiant.</p>
             </div>
+            <button
+              type="button"
+              className="btn-primary flex items-center gap-2"
+              onClick={() => setGenerateModalOpen(true)}
+              disabled={!hasGenerationTemplate}
+            >
+              <FilePlus2 size={14} />
+              Générer document
+            </button>
           </div>
 
           {canUploadDocuments ? (
-            <div className="grid gap-3 md:grid-cols-[minmax(180px,260px)_1fr_auto]">
+            <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(180px,260px)_1fr_auto]">
               <div className="field-stack">
                 <label className="field-label">Type de document</label>
                 <select
@@ -683,60 +806,52 @@ export default function StudentProfilePage() {
                   onClick={() => void handleUploadDocument()}
                   disabled={!uploadFile || !uploadCategory || uploadingFile}
                 >
-                  {uploadingFile ? 'Téléversement...' : 'Téléverser'}
+                  {uploadingFile ? 'Téléversement...' : 'Téléverser fichier'}
                 </button>
               </div>
             </div>
           ) : null}
 
-          {documents.length === 0 ? (
-            <p className="text-sm text-slate-400">Aucun document enregistré pour cet étudiant.</p>
-          ) : (
-            <div className="data-table-wrap">
-              <div className="table-scroll">
-                <table className="table-base">
-                  <thead>
-                    <tr>
-                      <th>Nom</th>
-                      <th>Type</th>
-                      <th>Catégorie</th>
-                      <th>Date</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {documents.map((doc) => (
-                      <tr key={doc.id}>
-                        <td className="font-medium text-slate-900">{doc.name}</td>
-                        <td>{doc.mimeType}</td>
-                        <td>{doc.category ? <span className="status-chip status-chip--muted">{doc.category}</span> : '—'}</td>
-                        <td>{new Date(doc.createdAt).toLocaleDateString('fr-FR')}</td>
-                        <td>
-                          {canDeleteDocuments ? (
-                            <button
-                              type="button"
-                              className="btn-outline text-xs"
-                              onClick={() => void handleDeleteDocument(doc.id)}
-                            >
-                              Supprimer
-                            </button>
-                          ) : (
-                            <a className="btn-outline text-xs" href={`/api/documents/${doc.id}/file`} target="_blank" rel="noreferrer">
-                              Ouvrir
-                            </a>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+          {!hasGenerationTemplate ? (
+            <p className="text-sm text-slate-400">
+              Aucun modèle de document n&apos;est configuré. Ajoutez un modèle dans Paramètres → Types de documents.
+            </p>
+          ) : null}
         </section>
         )}
         </>
       ) : null}
+
+      <ModalShell
+        open={generateModalOpen}
+        title="Générer un document"
+        description="Sélectionnez le document à télécharger. Le fichier est généré et téléchargé immédiatement."
+        onClose={() => setGenerateModalOpen(false)}
+        size="sm"
+      >
+        <div className="space-y-2">
+          {generationOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-3 text-left transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => void generateAndDownloadDocument(option)}
+              disabled={!option.template || generatingDocumentTypeId !== null}
+            >
+              <span>
+                <span className="block text-sm font-semibold text-slate-900">{option.label}</span>
+                <span className="mt-0.5 block text-xs text-slate-500">
+                  {option.template ? option.template.name : 'Aucun modèle configuré'}
+                </span>
+              </span>
+              <Download size={15} className="text-slate-400" />
+            </button>
+          ))}
+          {generationOptions.length === 0 ? (
+            <p className="text-sm text-slate-400">Aucun type de document configuré.</p>
+          ) : null}
+        </div>
+      </ModalShell>
 
       <ModalShell
         open={obsModalOpen}

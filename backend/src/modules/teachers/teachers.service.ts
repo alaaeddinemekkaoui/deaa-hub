@@ -224,6 +224,7 @@ export class TeachersService {
           cin: this.normalizeOptionalValue(dto.cin) ?? null,
           email: this.normalizeOptionalValue(dto.email)?.toLowerCase() ?? null,
           phoneNumber: this.normalizeOptionalValue(dto.phoneNumber) ?? null,
+          linkedInUrl: this.normalizeOptionalValue(dto.linkedInUrl) ?? null,
           dateInscription: dto.dateInscription
             ? new Date(dto.dateInscription)
             : undefined,
@@ -325,6 +326,12 @@ export class TeachersService {
             ? {
                 phoneNumber:
                   this.normalizeOptionalValue(dto.phoneNumber) ?? null,
+              }
+            : {}),
+          ...(dto.linkedInUrl !== undefined
+            ? {
+                linkedInUrl:
+                  this.normalizeOptionalValue(dto.linkedInUrl) ?? null,
               }
             : {}),
           ...(dto.dateInscription !== undefined
